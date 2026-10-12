@@ -1,0 +1,44 @@
+VLEARNING STUDIO A16.10 - ONE SCREEN UI + RELIABLE APPLY
+=========================================================
+
+The screenshot showed that A16.9 was NOT actually running:
+- VLEARNING STUDIO still wrapped to two lines
+- hero banner remained very tall
+- product cards remained very tall
+
+A16.10 addresses BOTH issues:
+1) a much smaller one-screen dashboard
+2) a reliable apply script that stops the old server before rebuilding
+
+FINAL DESKTOP TARGET
+--------------------
+- top brand bar: 76px
+- VLEARNING STUDIO: one line
+- two creation cards: 122px high
+- recent projects begins immediately below
+- overall dashboard width: up to 1280px
+- no KHOA HOC HUB
+
+IMPORTANT INSTALL
+-----------------
+Extract this ZIP into:
+  C:\Users\Admin\elearning-studio
+
+Then run:
+  APPLY-A16.10-ONE-SCREEN.cmd
+
+That script:
+- verifies the new page.tsx is actually installed
+- kills the old process using port 3000
+- deletes old .next
+- rebuilds
+- starts the new server
+
+Then open:
+  http://localhost:3000/projects
+
+Press:
+  Ctrl + F5
+
+If you want to verify before/after:
+  VERIFY-A16.10.cmd

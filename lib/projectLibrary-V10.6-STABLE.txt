@@ -1,0 +1,725 @@
+import type {
+  ProjectDocument,
+} from "@/types/lesson";
+
+import {
+  deleteVideo,
+  getVideo,
+  saveVideo,
+} from "@/lib/videoDb";
+
+import {
+  copyCompletionSettingsForProject,
+  deleteCompletionSettingsForProject,
+} from "@/lib/completionSettings";
+
+export type ProjectLibraryEntry = {
+  project: ProjectDocument;
+  updatedAt: string;
+};
+
+export type DuplicateProjectResult = {
+  project: ProjectDocument;
+  missingVideoPages: string[];
+};
+
+const LIBRARY_STORAGE_KEY =
+  "vlearning-studio-project-library-v1";
+
+const ACTIVE_PROJECT_STORAGE_KEY =
+  "vlearning-studio-project-v4";
+
+/* =========================================================
+   ID
+========================================================= */
+
+function createId() {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID ===
+      "function"
+  ) {
+    return crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2)}`;
+}
+
+/* =========================================================
+   CLEAN RUNTIME URLS
+========================================================= */
+
+function cleanProject(
+  project: ProjectDocument
+): ProjectDocument {
+  return {
+    ...project,
+
+    pages:
+      project.pages.map(
+        (page) => ({
+          ...page,
+
+          videoUrl:
+            undefined,
+
+          quizzes:
+            page.quizzes.map(
+              (quiz) => ({
+                ...quiz,
+
+                options:
+                  [...quiz.options],
+              })
+            ),
+        })
+      ),
+  };
+}
+
+/* =========================================================
+   READ LIBRARY
+========================================================= */
+
+export function getProjectLibrary(): ProjectLibraryEntry[] {
+  if (
+    typeof window ===
+    "undefined"
+  ) {
+    return [];
+  }
+
+  try {
+    const raw =
+      window.localStorage.getItem(
+        LIBRARY_STORAGE_KEY
+      );
+
+    if (!raw) {
+      return [];
+    }
+
+    const parsed =
+      JSON.parse(raw);
+
+    if (
+      !Array.isArray(parsed)
+    ) {
+      return [];
+    }
+
+    return parsed.sort(
+      (
+        a:
+          ProjectLibraryEntry,
+        b:
+          ProjectLibraryEntry
+      ) =>
+        new Date(
+          b.updatedAt
+        ).getTime() -
+        new Date(
+          a.updatedAt
+        ).getTime()
+    );
+  } catch (
+    error
+  ) {
+    console.error(
+      "Không đọc được thư viện dự án:",
+      error
+    );
+
+    return [];
+  }
+}
+
+/* =========================================================
+   WRITE LIBRARY
+========================================================= */
+
+function writeLibrary(
+  entries:
+    ProjectLibraryEntry[]
+) {
+  if (
+    typeof window ===
+    "undefined"
+  ) {
+    return;
+  }
+
+  window.localStorage.setItem(
+    LIBRARY_STORAGE_KEY,
+    JSON.stringify(
+      entries
+    )
+  );
+}
+
+/* =========================================================
+   SAVE PROJECT
+========================================================= */
+
+export function saveProjectToLibrary(
+  project: ProjectDocument
+) {
+  const clean =
+    cleanProject(
+      project
+    );
+
+  const entries =
+    getProjectLibrary();
+
+  const existingIndex =
+    entries.findIndex(
+      (entry) =>
+        entry.project.id ===
+        clean.id
+    );
+
+  const entry:
+    ProjectLibraryEntry = {
+      project:
+        clean,
+
+      updatedAt:
+        new Date().toISOString(),
+    };
+
+  if (
+    existingIndex >= 0
+  ) {
+    entries[
+      existingIndex
+    ] =
+      entry;
+  } else {
+    entries.unshift(
+      entry
+    );
+  }
+
+  writeLibrary(
+    entries
+  );
+}
+
+/* =========================================================
+   SYNC CURRENT PROJECT
+========================================================= */
+
+export function syncCurrentProjectToLibrary() {
+  if (
+    typeof window ===
+    "undefined"
+  ) {
+    return;
+  }
+
+  try {
+    const raw =
+      window.localStorage.getItem(
+        ACTIVE_PROJECT_STORAGE_KEY
+      );
+
+    if (!raw) {
+      return;
+    }
+
+    const project:
+      ProjectDocument =
+        JSON.parse(raw);
+
+    if (
+      !project?.id ||
+      !Array.isArray(
+        project.pages
+      )
+    ) {
+      return;
+    }
+
+    saveProjectToLibrary(
+      project
+    );
+  } catch (
+    error
+  ) {
+    console.error(
+      "Không đồng bộ được dự án hiện tại:",
+      error
+    );
+  }
+}
+
+/* =========================================================
+   SET ACTIVE PROJECT
+========================================================= */
+
+export function setActiveProject(
+  project: ProjectDocument
+) {
+  if (
+    typeof window ===
+    "undefined"
+  ) {
+    return;
+  }
+
+  const clean =
+    cleanProject(
+      project
+    );
+
+  window.localStorage.setItem(
+    ACTIVE_PROJECT_STORAGE_KEY,
+    JSON.stringify(
+      clean
+    )
+  );
+
+  saveProjectToLibrary(
+    clean
+  );
+}
+
+/* =========================================================
+   CREATE NEW PROJECT
+========================================================= */
+
+export function createNewProject(
+  title: string
+): ProjectDocument {
+  const pageId =
+    createId();
+
+  const project:
+    ProjectDocument = {
+      id:
+        createId(),
+
+      title:
+        title.trim() ||
+        "Bài giảng mới",
+
+      selectedPageId:
+        pageId,
+
+      pages: [
+        {
+          id:
+            pageId,
+
+          title:
+            "Trang 1",
+
+          videoName:
+            "",
+
+          duration:
+            10,
+
+          quizzes:
+            [],
+        },
+      ],
+    };
+
+  setActiveProject(
+    project
+  );
+
+  return project;
+}
+
+/* =========================================================
+   RENAME PROJECT
+========================================================= */
+
+export function renameProjectInLibrary(
+  projectId: string,
+  newTitle: string
+) {
+  if (
+    typeof window ===
+    "undefined"
+  ) {
+    return false;
+  }
+
+  const cleanTitle =
+    newTitle.trim();
+
+  if (!cleanTitle) {
+    return false;
+  }
+
+  const entries =
+    getProjectLibrary();
+
+  const targetIndex =
+    entries.findIndex(
+      (entry) =>
+        entry.project.id ===
+        projectId
+    );
+
+  if (
+    targetIndex < 0
+  ) {
+    return false;
+  }
+
+  entries[
+    targetIndex
+  ] = {
+    ...entries[
+      targetIndex
+    ],
+
+    project: {
+      ...entries[
+        targetIndex
+      ].project,
+
+      title:
+        cleanTitle,
+    },
+
+    updatedAt:
+      new Date().toISOString(),
+  };
+
+  writeLibrary(
+    entries
+  );
+
+  /*
+   * Nếu project đang đổi tên cũng là
+   * project active, cập nhật luôn
+   * active project trong localStorage.
+   */
+  try {
+    const raw =
+      window.localStorage.getItem(
+        ACTIVE_PROJECT_STORAGE_KEY
+      );
+
+    if (raw) {
+      const activeProject:
+        ProjectDocument =
+          JSON.parse(raw);
+
+      if (
+        activeProject?.id ===
+        projectId
+      ) {
+        const updatedActiveProject:
+          ProjectDocument = {
+            ...activeProject,
+
+            title:
+              cleanTitle,
+          };
+
+        window.localStorage.setItem(
+          ACTIVE_PROJECT_STORAGE_KEY,
+          JSON.stringify(
+            updatedActiveProject
+          )
+        );
+      }
+    }
+  } catch (
+    error
+  ) {
+    console.error(
+      "Không cập nhật được tên project active:",
+      error
+    );
+  }
+
+  return true;
+}
+
+/* =========================================================
+   DUPLICATE PROJECT + VIDEOS + COMPLETION SETTINGS
+========================================================= */
+
+export async function duplicateProjectInLibrary(
+  sourceProject: ProjectDocument
+): Promise<DuplicateProjectResult> {
+  const projectId =
+    createId();
+
+  const pageIdMap =
+    new Map<
+      string,
+      string
+    >();
+
+  sourceProject.pages.forEach(
+    (page) => {
+      pageIdMap.set(
+        page.id,
+        createId()
+      );
+    }
+  );
+
+  const duplicatedPages =
+    sourceProject.pages.map(
+      (page) => {
+        const newPageId =
+          pageIdMap.get(
+            page.id
+          )!;
+
+        return {
+          ...page,
+
+          id:
+            newPageId,
+
+          videoUrl:
+            undefined,
+
+          quizzes:
+            page.quizzes.map(
+              (quiz) => ({
+                ...quiz,
+
+                id:
+                  createId(),
+
+                options:
+                  [...quiz.options],
+              })
+            ),
+        };
+      }
+    );
+
+  const duplicatedProject:
+    ProjectDocument = {
+      id:
+        projectId,
+
+      title:
+        `${sourceProject.title} - Bản sao`,
+
+      selectedPageId:
+        pageIdMap.get(
+          sourceProject.selectedPageId
+        ) ??
+        duplicatedPages[0]?.id ??
+        "",
+
+      pages:
+        duplicatedPages,
+    };
+
+  const missingVideoPages:
+    string[] =
+      [];
+
+  for (
+    const sourcePage of
+    sourceProject.pages
+  ) {
+    const newPageId =
+      pageIdMap.get(
+        sourcePage.id
+      );
+
+    if (!newPageId) {
+      continue;
+    }
+
+    try {
+      const video =
+        await getVideo(
+          sourcePage.id
+        );
+
+      if (video) {
+        await saveVideo(
+          newPageId,
+          video
+        );
+      } else if (
+        sourcePage.videoName
+      ) {
+        missingVideoPages.push(
+          sourcePage.title
+        );
+      }
+    } catch (
+      error
+    ) {
+      console.error(
+        `Không nhân bản được video của ${sourcePage.title}:`,
+        error
+      );
+
+      if (
+        sourcePage.videoName &&
+        !missingVideoPages.includes(
+          sourcePage.title
+        )
+      ) {
+        missingVideoPages.push(
+          sourcePage.title
+        );
+      }
+    }
+  }
+
+  copyCompletionSettingsForProject(
+    sourceProject.id,
+    duplicatedProject.id
+  );
+
+  saveProjectToLibrary(
+    duplicatedProject
+  );
+
+  return {
+    project:
+      duplicatedProject,
+
+    missingVideoPages,
+  };
+}
+
+/* =========================================================
+   ACTIVE PROJECT ID
+========================================================= */
+
+function getActiveProjectId():
+  | string
+  | null {
+  if (
+    typeof window ===
+    "undefined"
+  ) {
+    return null;
+  }
+
+  try {
+    const raw =
+      window.localStorage.getItem(
+        ACTIVE_PROJECT_STORAGE_KEY
+      );
+
+    if (!raw) {
+      return null;
+    }
+
+    const project =
+      JSON.parse(raw);
+
+    if (
+      typeof project?.id ===
+        "string" &&
+      project.id.trim()
+    ) {
+      return project.id;
+    }
+
+    return null;
+  } catch (
+    error
+  ) {
+    console.error(
+      "Không đọc được project đang active:",
+      error
+    );
+
+    return null;
+  }
+}
+
+/* =========================================================
+   DELETE PROJECT
+========================================================= */
+
+export function deleteProjectFromLibrary(
+  projectId: string
+) {
+  const entries =
+    getProjectLibrary();
+
+  const targetEntry =
+    entries.find(
+      (entry) =>
+        entry.project.id ===
+        projectId
+    );
+
+  const remainingEntries =
+    entries.filter(
+      (entry) =>
+        entry.project.id !==
+        projectId
+    );
+
+  writeLibrary(
+    remainingEntries
+  );
+
+  deleteCompletionSettingsForProject(
+    projectId
+  );
+
+  const activeProjectId =
+    getActiveProjectId();
+
+  if (
+    activeProjectId ===
+    projectId
+  ) {
+    window.localStorage.removeItem(
+      ACTIVE_PROJECT_STORAGE_KEY
+    );
+  }
+
+  if (targetEntry) {
+    targetEntry.project.pages.forEach(
+      (page) => {
+        void deleteVideo(
+          page.id
+        ).catch(
+          (error) => {
+            console.error(
+              `Không xóa được video của ${page.title}:`,
+              error
+            );
+          }
+        );
+      }
+    );
+  }
+}
+
+/* =========================================================
+   STATS
+========================================================= */
+
+export function getProjectQuizCount(
+  project: ProjectDocument
+) {
+  return project.pages.reduce(
+    (
+      total,
+      page
+    ) =>
+      total +
+      page.quizzes.length,
+    0
+  );
+}

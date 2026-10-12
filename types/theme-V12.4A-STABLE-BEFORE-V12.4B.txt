@@ -1,0 +1,67 @@
+export type ThemeMode =
+  | "dark"
+  | "light";
+
+export type ThemeFont =
+  | "system"
+  | "sans"
+  | "serif";
+
+export type ThemeButtonStyle =
+  | "rounded"
+  | "pill"
+  | "square";
+
+export type CertificateTemplateStyle =
+  | "classic"
+  | "formal"
+  | "school"
+  | "corporate";
+
+export type ProjectTheme = {
+  version: 1;
+  courseTitle: string;
+  mode: ThemeMode;
+  primaryColor: string;
+  accentColor: string;
+  backgroundColor: string;
+  surfaceColor: string;
+  textColor: string;
+  fontFamily: ThemeFont;
+  buttonStyle: ThemeButtonStyle;
+  playerRadius: number;
+  showProgress: boolean;
+  showPageNavigation: boolean;
+
+  /* V12.4A - Course Intro */
+  courseIntroEnabled: boolean;
+  courseIntroEyebrow: string;
+  courseIntroDescription: string;
+  courseIntroObjectives: string;
+  courseIntroButtonLabel: string;
+  courseIntroCoverDataUrl: string;
+
+  /* V12.3B / V12.3C - Certificate customization */
+  certificateTemplateStyle: CertificateTemplateStyle;
+  certificateKicker: string;
+  certificateTitle: string;
+  certificateIntro: string;
+  certificateCompletionText: string;
+  certificateIssuer: string;
+  certificateSignerName: string;
+  certificateSignerTitle: string;
+  certificateFooterText: string;
+
+  /*
+   * Empty color = inherit from the lesson theme.
+   */
+  certificatePrimaryColor: string;
+  certificateAccentColor: string;
+
+  /*
+   * Small persistent image data URLs.
+   * DesignModal limits upload size before saving.
+   */
+  certificateLogoDataUrl: string;
+  certificateSignatureDataUrl: string;
+};

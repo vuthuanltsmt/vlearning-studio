@@ -1,0 +1,37 @@
+VLEARNING STUDIO V1.1A16.6 - MODERN HOME UI
+================================================
+
+Changes applied to /projects:
+
+1. Removed "KHÓA HỌC HUB" completely.
+2. The creation area now has only:
+   - BÀI GIẢNG TƯƠNG TÁC
+   - TRÒ CHƠI TƯƠNG TÁC
+3. Both product cards are larger and responsive.
+4. Added three modern visual assets:
+   - public/vlearning-ui/hero-learning.png
+   - public/vlearning-ui/lesson-visual.png
+   - public/vlearning-ui/game-visual.png
+5. Added a richer hero banner with visual illustration.
+6. "BÀI GIẢNG TƯƠNG TÁC" keeps the existing create-project action.
+7. "TRÒ CHƠI TƯƠNG TÁC" now opens the existing Game Builder directly.
+8. Existing project library, authentication, RBAC, guide, SCORM and backup logic are not intentionally changed.
+
+INSTALL
+-------
+Extract this ZIP into:
+  C:\Users\Admin\elearning-studio
+
+Then run:
+  REBUILD-A16.6-MODERN-HOME.cmd
+
+Or manually:
+  Remove-Item .\.next -Recurse -Force -ErrorAction SilentlyContinue
+  npm.cmd run build
+  .\START-VLEARNING.cmd
+
+Open:
+  http://localhost:3000/projects
+
+Then press:
+  Ctrl + F5

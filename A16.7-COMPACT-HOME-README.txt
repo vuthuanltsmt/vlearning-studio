@@ -1,0 +1,33 @@
+VLEARNING STUDIO V1.1A16.7 - COMPACT HOME UI
+================================================
+
+Changes from A16.6:
+- Reduced overall content width from 1600px to 1360px.
+- Reduced top/bottom page padding.
+- VLEARNING STUDIO is forced to stay on ONE LINE.
+- Smaller hero height and illustration.
+- Smaller title/subtitle.
+- Two project cards remain:
+    BÀI GIẢNG TƯƠNG TÁC
+    TRÒ CHƠI TƯƠNG TÁC
+- Both cards are shorter and more compact.
+- Card illustrations are smaller.
+- Reduced gaps/margins so "Bài giảng mới nhất" becomes visible sooner.
+- No Khóa học HUB.
+- Existing actions are preserved.
+
+INSTALL
+-------
+Extract into:
+  C:\Users\Admin\elearning-studio
+
+Then run:
+  REBUILD-A16.7-COMPACT-HOME.cmd
+
+Open:
+  http://localhost:3000/projects
+
+Press:
+  Ctrl + F5
+
+No Prisma/database update is required.

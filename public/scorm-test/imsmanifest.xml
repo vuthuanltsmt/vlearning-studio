@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest
+  identifier="VLEARNING-62ee899b-5917-4194-9b18-4566c3ada847"
+  version="1.0"
+  xmlns="http://www.imsproject.org/xsd/imscp_rootv1p1p2"
+  xmlns:adlcp="http://www.adlnet.org/xsd/adlcp_rootv1p2"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="
+    http://www.imsproject.org/xsd/imscp_rootv1p1p2
+    imscp_rootv1p1p2.xsd
+    http://www.adlnet.org/xsd/adlcp_rootv1p2
+    adlcp_rootv1p2.xsd
+  "
+>
+  <metadata>
+    <schema>ADL SCORM</schema>
+    <schemaversion>1.2</schemaversion>
+  </metadata>
+
+  <organizations default="ORG-1">
+    <organization identifier="ORG-1">
+      <title>Bài giảng tương tác đầu tiên - Bản sao</title>
+
+      <item
+        identifier="ITEM-1"
+        identifierref="RES-1"
+      >
+        <title>Bài giảng tương tác đầu tiên - Bản sao</title>
+
+        <adlcp:masteryscore>60</adlcp:masteryscore>
+      </item>
+    </organization>
+  </organizations>
+
+  <resources>
+    <resource
+      identifier="RES-1"
+      type="webcontent"
+      adlcp:scormtype="sco"
+      href="index.html"
+    >
+      <file href="index.html" />
+      <file href="styles.css" />
+      <file href="player.js" />
+      <file href="course-data.js" />
+      <file href="media/page-1.mp4" />
+      <file href="media/page-2.mp4" />
+      <file href="media/page-3.mp4" />
+    </resource>
+  </resources>
+</manifest>

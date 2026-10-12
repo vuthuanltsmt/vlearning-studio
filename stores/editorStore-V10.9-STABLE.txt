@@ -1,0 +1,875 @@
+"use client";
+
+import { create } from "zustand";
+
+import type {
+  LessonPage,
+  ProjectDocument,
+  Quiz,
+} from "@/types/lesson";
+
+/* =========================================================
+   STORAGE
+========================================================= */
+
+const STORAGE_KEY =
+  "vlearning-studio-project-v4";
+
+/* =========================================================
+   TẠO ID AN TOÀN
+========================================================= */
+
+function createId() {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return crypto.randomUUID();
+  }
+
+  return `id-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 10)}`;
+}
+
+/* =========================================================
+   TẠO TRANG MỚI
+========================================================= */
+
+function createNewPage(
+  pageNumber: number
+): LessonPage {
+  return {
+    id: createId(),
+
+    title: `Trang ${pageNumber}`,
+
+    videoName: "",
+
+    videoUrl: undefined,
+
+    duration: 10,
+
+    quizzes: [],
+  };
+}
+
+/* =========================================================
+   TRANG ĐẦU TIÊN
+========================================================= */
+
+const firstPage: LessonPage = {
+  id: "page-1",
+
+  title: "Trang 1",
+
+  videoName: "",
+
+  videoUrl: undefined,
+
+  duration: 10,
+
+  quizzes: [],
+};
+
+/* =========================================================
+   PROJECT BAN ĐẦU
+========================================================= */
+
+const initialProject: ProjectDocument = {
+  id: "demo-project",
+
+  title:
+    "Bài giảng tương tác đầu tiên",
+
+  selectedPageId:
+    firstPage.id,
+
+  pages: [
+    firstPage,
+  ],
+};
+
+/* =========================================================
+   STORE TYPE
+========================================================= */
+
+type EditorStore = {
+  project: ProjectDocument;
+
+  saveStatus: string;
+
+  hydrated: boolean;
+
+  /* PROJECT */
+
+  hydrate: () => void;
+
+  saveProject: () => void;
+
+  /* PAGE */
+
+  selectPage: (
+    pageId: string
+  ) => void;
+
+  addPage: () => void;
+
+  renamePage: (
+    pageId: string,
+    title: string
+  ) => void;
+
+  duplicatePage: (
+    pageId: string
+  ) => void;
+
+  deletePage: (
+    pageId: string
+  ) => void;
+
+  /* VIDEO */
+
+  setPageVideo: (
+    pageId: string,
+    videoUrl: string,
+    videoName: string
+  ) => void;
+
+  setPageDuration: (
+    pageId: string,
+    duration: number
+  ) => void;
+
+  /* QUIZ */
+
+  addQuiz: (
+    pageId: string,
+    quiz: Quiz
+  ) => void;
+
+  updateQuiz: (
+    pageId: string,
+    quizId: string,
+    quiz: Quiz
+  ) => void;
+
+  duplicateQuiz: (
+    pageId: string,
+    quizId: string
+  ) => void;
+
+  deleteQuiz: (
+    pageId: string,
+    quizId: string
+  ) => void;
+};
+
+/* =========================================================
+   STORE
+========================================================= */
+
+export const useEditorStore =
+  create<EditorStore>(
+    (set, get) => ({
+      project:
+        initialProject,
+
+      saveStatus:
+        "Chưa lưu",
+
+      hydrated:
+        false,
+
+      /* =====================================================
+         LOAD PROJECT
+      ===================================================== */
+
+      hydrate: () => {
+        if (
+          get().hydrated
+        ) {
+          return;
+        }
+
+        try {
+          const saved =
+            localStorage.getItem(
+              STORAGE_KEY
+            );
+
+          if (!saved) {
+            set({
+              hydrated:
+                true,
+            });
+
+            return;
+          }
+
+          const data =
+            JSON.parse(
+              saved
+            ) as ProjectDocument;
+
+          if (
+            !data ||
+            !Array.isArray(
+              data.pages
+            ) ||
+            data.pages.length ===
+              0
+          ) {
+            set({
+              hydrated:
+                true,
+            });
+
+            return;
+          }
+
+          /*
+           * blob URL của video không tồn tại
+           * sau khi reload trình duyệt.
+           */
+          const pages =
+            data.pages.map(
+              (page) => ({
+                ...page,
+
+                videoUrl:
+                  undefined,
+              })
+            );
+
+          let selectedPageId =
+            data.selectedPageId;
+
+          const selectedExists =
+            pages.some(
+              (page) =>
+                page.id ===
+                selectedPageId
+            );
+
+          if (
+            !selectedExists
+          ) {
+            selectedPageId =
+              pages[0].id;
+          }
+
+          set({
+            project: {
+              ...data,
+
+              pages,
+
+              selectedPageId,
+            },
+
+            hydrated:
+              true,
+
+            saveStatus:
+              "Đã tải dự án",
+          });
+        } catch (
+          error
+        ) {
+          console.error(
+            "Lỗi tải dự án:",
+            error
+          );
+
+          set({
+            hydrated:
+              true,
+
+            saveStatus:
+              "Không đọc được dự án",
+          });
+        }
+      },
+
+      /* =====================================================
+         SAVE PROJECT
+      ===================================================== */
+
+      saveProject: () => {
+        const project =
+          get().project;
+
+        /*
+         * Không lưu videoUrl blob.
+         */
+        const pages =
+          project.pages.map(
+            (page) => ({
+              ...page,
+
+              videoUrl:
+                undefined,
+            })
+          );
+
+        const data:
+          ProjectDocument = {
+          ...project,
+
+          pages,
+        };
+
+        try {
+          localStorage.setItem(
+            STORAGE_KEY,
+
+            JSON.stringify(
+              data
+            )
+          );
+
+          set({
+            saveStatus:
+              `Đã lưu lúc ${new Date().toLocaleTimeString(
+                "vi-VN"
+              )}`,
+          });
+        } catch (
+          error
+        ) {
+          console.error(
+            "Lỗi lưu dự án:",
+            error
+          );
+
+          set({
+            saveStatus:
+              "Lưu thất bại",
+          });
+        }
+      },
+
+      /* =====================================================
+         CHỌN TRANG
+      ===================================================== */
+
+      selectPage: (
+        pageId
+      ) => {
+        set(
+          (state) => ({
+            project: {
+              ...state.project,
+
+              selectedPageId:
+                pageId,
+            },
+          })
+        );
+      },
+
+      /* =====================================================
+         THÊM TRANG
+      ===================================================== */
+
+      addPage: () => {
+        const state =
+          get();
+
+        const newPage =
+          createNewPage(
+            state.project.pages.length +
+              1
+          );
+
+        set({
+          project: {
+            ...state.project,
+
+            pages: [
+              ...state.project.pages,
+              newPage,
+            ],
+
+            selectedPageId:
+              newPage.id,
+          },
+
+          saveStatus:
+            "Có thay đổi chưa lưu",
+        });
+      },
+
+      /* =====================================================
+         ĐỔI TÊN TRANG
+      ===================================================== */
+
+      renamePage: (
+        pageId,
+        title
+      ) => {
+        set(
+          (state) => ({
+            project: {
+              ...state.project,
+
+              pages:
+                state.project.pages.map(
+                  (page) =>
+                    page.id ===
+                    pageId
+                      ? {
+                          ...page,
+
+                          title,
+                        }
+                      : page
+                ),
+            },
+
+            saveStatus:
+              "Có thay đổi chưa lưu",
+          })
+        );
+      },
+
+      /* =====================================================
+         NHÂN BẢN TRANG
+      ===================================================== */
+
+      duplicatePage: (
+        pageId
+      ) => {
+        const state =
+          get();
+
+        const source =
+          state.project.pages.find(
+            (page) =>
+              page.id ===
+              pageId
+          );
+
+        if (!source) {
+          return;
+        }
+
+        const copy:
+          LessonPage = {
+          ...source,
+
+          id:
+            createId(),
+
+          title:
+            `${source.title} - Bản sao`,
+
+          quizzes:
+            source.quizzes.map(
+              (quiz) => ({
+                ...quiz,
+
+                id:
+                  createId(),
+
+                options: [
+                  ...quiz.options,
+                ],
+              })
+            ),
+        };
+
+        set({
+          project: {
+            ...state.project,
+
+            pages: [
+              ...state.project.pages,
+              copy,
+            ],
+
+            selectedPageId:
+              copy.id,
+          },
+
+          saveStatus:
+            "Có thay đổi chưa lưu",
+        });
+      },
+
+      /* =====================================================
+         XÓA TRANG
+      ===================================================== */
+
+      deletePage: (
+        pageId
+      ) => {
+        const state =
+          get();
+
+        if (
+          state.project.pages.length <=
+          1
+        ) {
+          alert(
+            "Dự án phải có ít nhất 1 trang."
+          );
+
+          return;
+        }
+
+        const deletedIndex =
+          state.project.pages.findIndex(
+            (page) =>
+              page.id ===
+              pageId
+          );
+
+        const pages =
+          state.project.pages.filter(
+            (page) =>
+              page.id !==
+              pageId
+          );
+
+        let selectedPageId =
+          state.project.selectedPageId;
+
+        if (
+          selectedPageId ===
+          pageId
+        ) {
+          const nextIndex =
+            Math.min(
+              deletedIndex,
+              pages.length - 1
+            );
+
+          selectedPageId =
+            pages[
+              Math.max(
+                0,
+                nextIndex
+              )
+            ].id;
+        }
+
+        set({
+          project: {
+            ...state.project,
+
+            pages,
+
+            selectedPageId,
+          },
+
+          saveStatus:
+            "Có thay đổi chưa lưu",
+        });
+      },
+
+      /* =====================================================
+         VIDEO
+      ===================================================== */
+
+      setPageVideo: (
+        pageId,
+        videoUrl,
+        videoName
+      ) => {
+        set(
+          (state) => ({
+            project: {
+              ...state.project,
+
+              pages:
+                state.project.pages.map(
+                  (page) =>
+                    page.id ===
+                    pageId
+                      ? {
+                          ...page,
+
+                          videoUrl,
+
+                          videoName,
+                        }
+                      : page
+                ),
+            },
+
+            saveStatus:
+              "Có thay đổi chưa lưu",
+          })
+        );
+      },
+
+      setPageDuration: (
+        pageId,
+        duration
+      ) => {
+        set(
+          (state) => ({
+            project: {
+              ...state.project,
+
+              pages:
+                state.project.pages.map(
+                  (page) =>
+                    page.id ===
+                    pageId
+                      ? {
+                          ...page,
+
+                          duration,
+                        }
+                      : page
+                ),
+            },
+          })
+        );
+      },
+
+      /* =====================================================
+         THÊM QUIZ
+      ===================================================== */
+
+      addQuiz: (
+        pageId,
+        quiz
+      ) => {
+        set(
+          (state) => ({
+            project: {
+              ...state.project,
+
+              pages:
+                state.project.pages.map(
+                  (page) => {
+                    if (
+                      page.id !==
+                      pageId
+                    ) {
+                      return page;
+                    }
+
+                    const quizzes =
+                      [
+                        ...page.quizzes,
+                        quiz,
+                      ].sort(
+                        (a, b) =>
+                          a.time -
+                          b.time
+                      );
+
+                    return {
+                      ...page,
+
+                      quizzes,
+                    };
+                  }
+                ),
+            },
+
+            saveStatus:
+              "Có thay đổi chưa lưu",
+          })
+        );
+      },
+
+      /* =====================================================
+         UPDATE QUIZ
+      ===================================================== */
+
+      updateQuiz: (
+        pageId,
+        quizId,
+        quiz
+      ) => {
+        set(
+          (state) => ({
+            project: {
+              ...state.project,
+
+              pages:
+                state.project.pages.map(
+                  (page) => {
+                    if (
+                      page.id !==
+                      pageId
+                    ) {
+                      return page;
+                    }
+
+                    const quizzes =
+                      page.quizzes
+                        .map(
+                          (
+                            oldQuiz
+                          ) =>
+                            oldQuiz.id ===
+                            quizId
+                              ? quiz
+                              : oldQuiz
+                        )
+                        .sort(
+                          (a, b) =>
+                            a.time -
+                            b.time
+                        );
+
+                    return {
+                      ...page,
+
+                      quizzes,
+                    };
+                  }
+                ),
+            },
+
+            saveStatus:
+              "Có thay đổi chưa lưu",
+          })
+        );
+      },
+
+      /* =====================================================
+         NHÂN BẢN QUIZ
+      ===================================================== */
+
+      duplicateQuiz: (
+        pageId,
+        quizId
+      ) => {
+        const state =
+          get();
+
+        const page =
+          state.project.pages.find(
+            (item) =>
+              item.id ===
+              pageId
+          );
+
+        if (!page) {
+          return;
+        }
+
+        const source =
+          page.quizzes.find(
+            (quiz) =>
+              quiz.id ===
+              quizId
+          );
+
+        if (!source) {
+          return;
+        }
+
+        let newTime =
+          source.time + 0.5;
+
+        if (
+          newTime >
+          page.duration
+        ) {
+          newTime =
+            source.time;
+        }
+
+        const copy:
+          Quiz = {
+          ...source,
+
+          id:
+            createId(),
+
+          time:
+            newTime,
+
+          question:
+            `${source.question} - Bản sao`,
+
+          options: [
+            ...source.options,
+          ],
+        };
+
+        set({
+          project: {
+            ...state.project,
+
+            pages:
+              state.project.pages.map(
+                (item) => {
+                  if (
+                    item.id !==
+                    pageId
+                  ) {
+                    return item;
+                  }
+
+                  return {
+                    ...item,
+
+                    quizzes: [
+                      ...item.quizzes,
+                      copy,
+                    ].sort(
+                      (a, b) =>
+                        a.time -
+                        b.time
+                    ),
+                  };
+                }
+              ),
+          },
+
+          saveStatus:
+            "Có thay đổi chưa lưu",
+        });
+      },
+
+      /* =====================================================
+         XÓA QUIZ
+      ===================================================== */
+
+      deleteQuiz: (
+        pageId,
+        quizId
+      ) => {
+        set(
+          (state) => ({
+            project: {
+              ...state.project,
+
+              pages:
+                state.project.pages.map(
+                  (page) =>
+                    page.id ===
+                    pageId
+                      ? {
+                          ...page,
+
+                          quizzes:
+                            page.quizzes.filter(
+                              (
+                                quiz
+                              ) =>
+                                quiz.id !==
+                                quizId
+                            ),
+                        }
+                      : page
+                ),
+            },
+
+            saveStatus:
+              "Có thay đổi chưa lưu",
+          })
+        );
+      },
+    })
+  );

@@ -1,0 +1,32 @@
+VLEARNING STUDIO 1.0 - CÁCH ÁP DỤNG BẢN FINAL
+
+QUAN TRỌNG:
+Gói này là bản FINAL PATCH + công cụ chạy production cho project hiện tại.
+Nó không chứa node_modules và không thay thế toàn bộ project elearning-studio của bạn.
+
+1. Backup toàn bộ thư mục:
+   C:\Users\Admin\elearning-studio
+
+2. Giải nén toàn bộ nội dung gói FINAL vào:
+   C:\Users\Admin\elearning-studio
+   Chọn ghi đè khi Windows hỏi.
+
+3. Chạy:
+   CHECK-VLEARNING.cmd
+
+4. Nếu báo đạt, chạy:
+   BUILD-PRODUCTION.cmd
+
+5. Khi BUILD THÀNH CÔNG, từ nay sử dụng:
+   START-VLEARNING.cmd
+
+6. Chỉ dùng START-DEVELOPMENT.cmd khi tiếp tục sửa code.
+
+Trang chính:
+http://localhost:3000/projects
+
+Editor demo:
+http://localhost:3000/editor/demo
+
+Preview demo:
+http://localhost:3000/preview/demo

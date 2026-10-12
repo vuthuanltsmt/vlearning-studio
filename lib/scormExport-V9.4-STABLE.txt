@@ -1,0 +1,3386 @@
+import JSZip from "jszip";
+
+import {
+  getVideo,
+} from "@/lib/videoDb";
+
+import {
+  loadCompletionSettings,
+} from "@/lib/completionSettings";
+
+import {
+  useEditorStore,
+} from "@/stores/editorStore";
+
+import type {
+  LessonPage,
+  ProjectDocument,
+} from "@/types/lesson";
+
+/* =========================================================
+   EXPORT TYPES
+========================================================= */
+
+type ExportPage =
+  Omit<
+    LessonPage,
+    "videoUrl"
+  > & {
+    videoSrc: string | null;
+  };
+
+type ExportCourse = {
+  id: string;
+  title: string;
+
+  completion: {
+    passScorePercent: number;
+    minWatchPercent: number;
+    requireAllQuizzes: boolean;
+  };
+
+  pages: ExportPage[];
+};
+
+export type ScormExportResult = {
+  fileName: string;
+  missingVideoPages: string[];
+};
+
+/* =========================================================
+   HELPERS
+========================================================= */
+
+function safeFileName(
+  value: string
+) {
+  const cleaned =
+    value
+      .normalize("NFD")
+      .replace(
+        /[\u0300-\u036f]/g,
+        ""
+      )
+      .replace(
+        /đ/g,
+        "d"
+      )
+      .replace(
+        /Đ/g,
+        "D"
+      )
+      .replace(
+        /[^a-zA-Z0-9-_]+/g,
+        "-"
+      )
+      .replace(
+        /-+/g,
+        "-"
+      )
+      .replace(
+        /^-|-$/g,
+        ""
+      );
+
+  return (
+    cleaned ||
+    "elearning-course"
+  );
+}
+
+function xmlEscape(
+  value: string
+) {
+  return value
+    .replace(
+      /&/g,
+      "&amp;"
+    )
+    .replace(
+      /</g,
+      "&lt;"
+    )
+    .replace(
+      />/g,
+      "&gt;"
+    )
+    .replace(
+      /"/g,
+      "&quot;"
+    )
+    .replace(
+      /'/g,
+      "&apos;"
+    );
+}
+
+function getVideoExtension(
+  file: File
+) {
+  const nameMatch =
+    file.name.match(
+      /\.[a-zA-Z0-9]{1,8}$/
+    );
+
+  if (nameMatch) {
+    return nameMatch[0]
+      .toLowerCase();
+  }
+
+  switch (file.type) {
+    case "video/webm":
+      return ".webm";
+
+    case "video/ogg":
+      return ".ogv";
+
+    case "video/quicktime":
+      return ".mov";
+
+    default:
+      return ".mp4";
+  }
+}
+
+function makeCourseDataScript(
+  course: ExportCourse
+) {
+  /*
+   * Escape "<" để dữ liệu an toàn
+   * khi được JavaScript đọc.
+   */
+  const json =
+    JSON.stringify(
+      course
+    ).replace(
+      /</g,
+      "\\u003c"
+    );
+
+  return `window.COURSE_DATA = ${json};`;
+}
+
+/* =========================================================
+   MANIFEST
+========================================================= */
+
+function makeManifest(
+  course: ExportCourse,
+  files: string[]
+) {
+  const courseTitle =
+    xmlEscape(
+      course.title
+    );
+
+  const identifier =
+    `VLEARNING-${safeFileName(
+      course.id
+    )}`;
+
+  const fileEntries =
+    files
+      .map(
+        (file) =>
+          `      <file href="${xmlEscape(
+            file
+          )}" />`
+      )
+      .join("\n");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<manifest
+  identifier="${identifier}"
+  version="1.0"
+  xmlns="http://www.imsproject.org/xsd/imscp_rootv1p1p2"
+  xmlns:adlcp="http://www.adlnet.org/xsd/adlcp_rootv1p2"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="
+    http://www.imsproject.org/xsd/imscp_rootv1p1p2
+    imscp_rootv1p1p2.xsd
+    http://www.adlnet.org/xsd/adlcp_rootv1p2
+    adlcp_rootv1p2.xsd
+  "
+>
+  <metadata>
+    <schema>ADL SCORM</schema>
+    <schemaversion>1.2</schemaversion>
+  </metadata>
+
+  <organizations default="ORG-1">
+    <organization identifier="ORG-1">
+      <title>${courseTitle}</title>
+
+      <item
+        identifier="ITEM-1"
+        identifierref="RES-1"
+      >
+        <title>${courseTitle}</title>
+
+        <adlcp:masteryscore>${course.completion.passScorePercent}</adlcp:masteryscore>
+      </item>
+    </organization>
+  </organizations>
+
+  <resources>
+    <resource
+      identifier="RES-1"
+      type="webcontent"
+      adlcp:scormtype="sco"
+      href="index.html"
+    >
+${fileEntries}
+    </resource>
+  </resources>
+</manifest>
+`;
+}
+
+/* =========================================================
+   INDEX.HTML
+========================================================= */
+
+function makeIndexHtml() {
+  return `<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  />
+
+  <title>Bài giảng e-learning</title>
+
+  <link
+    rel="stylesheet"
+    href="styles.css"
+  />
+</head>
+
+<body>
+  <div id="app">
+    <div class="loading">
+      Đang tải bài giảng...
+    </div>
+  </div>
+
+  <script src="course-data.js"></script>
+  <script src="player.js"></script>
+</body>
+</html>
+`;
+}
+
+/* =========================================================
+   STYLES.CSS
+========================================================= */
+
+function makeStylesCss() {
+  return `
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+  min-height: 100%;
+  background: #061426;
+  color: white;
+  font-family:
+    Arial,
+    Helvetica,
+    sans-serif;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+#app {
+  width: 100%;
+  min-height: 100vh;
+}
+
+.loading {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.player {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.topbar {
+  min-height: 64px;
+  flex-shrink: 0;
+  padding: 0 24px;
+  background: #143766;
+  border-bottom: 1px solid #1e5eb5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.project-title {
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.preview-label {
+  margin-top: 3px;
+  color: #67e8f9;
+  font-size: 12px;
+}
+
+.top-stats {
+  display: flex;
+  gap: 10px;
+}
+
+.badge {
+  border-radius: 12px;
+  background: #0d2654;
+  padding: 10px 14px;
+  font-size: 14px;
+}
+
+.badge strong {
+  color: #67e8f9;
+}
+
+.main {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 20px;
+}
+
+.content {
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.page-info {
+  flex-shrink: 0;
+  margin-bottom: 12px;
+}
+
+.page-label {
+  color: #67e8f9;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.page-heading {
+  margin-top: 5px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.page-heading h1 {
+  margin: 0;
+  font-size: 30px;
+}
+
+.page-meta {
+  margin-top: 5px;
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.video-name {
+  max-width: 400px;
+  color: #94a3b8;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.video-shell {
+  position: relative;
+  min-height: 0;
+  flex: 1;
+  border: 1px solid #2563eb;
+  border-radius: 18px;
+  background: #000;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.video-shell video {
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+.no-video {
+  color: #cbd5e1;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.controls {
+  flex-shrink: 0;
+  margin-top: 12px;
+  padding: 12px 16px;
+  border: 1px solid #1d4ed8;
+  border-radius: 14px;
+  background: #0d2850;
+}
+
+.controls-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.play-button {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #06b6d4;
+  color: #04111f;
+  font-size: 21px;
+  font-weight: 900;
+}
+
+.time {
+  width: 145px;
+  flex-shrink: 0;
+  font-family: monospace;
+  font-size: 15px;
+}
+
+.seek {
+  min-width: 0;
+  flex: 1;
+}
+
+.navigation {
+  flex-shrink: 0;
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns:
+    minmax(170px, 1fr)
+    minmax(280px, 2fr)
+    minmax(170px, 1fr);
+  gap: 16px;
+  align-items: center;
+}
+
+.nav-button {
+  border: 1px solid #2563eb;
+  border-radius: 12px;
+  background: #082357;
+  color: white;
+  padding: 12px 18px;
+  font-weight: 800;
+}
+
+.nav-button.next {
+  border: 0;
+  background:
+    linear-gradient(
+      90deg,
+      #06b6d4,
+      #9333ea
+    );
+}
+
+.progress-info {
+  text-align: center;
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.progress-info strong {
+  color: #67e8f9;
+}
+
+.progress-notice {
+  margin-top: 5px;
+  color: #fde047;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.completed {
+  margin-top: 5px;
+  color: #86efac;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.quiz-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  padding: 20px;
+  background: rgba(2, 6, 23, 0.96);
+  overflow-y: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.quiz-card {
+  width: 100%;
+  max-width: 760px;
+  border: 1px solid #2563eb;
+  border-radius: 20px;
+  background: #15376b;
+  padding: 24px;
+}
+
+.quiz-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.quiz-label {
+  color: #67e8f9;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.quiz-points {
+  border-radius: 8px;
+  background: #3b0764;
+  color: #d8b4fe;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.quiz-card h2 {
+  margin: 14px 0 0;
+  font-size: 25px;
+}
+
+.options {
+  margin-top: 22px;
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.option {
+  min-height: 76px;
+  border: 2px solid #2563eb;
+  border-radius: 12px;
+  background: #082357;
+  color: white;
+  padding: 15px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  font-weight: 700;
+}
+
+.option-letter {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.option.correct {
+  border-color: #4ade80;
+  background: #14532d;
+}
+
+.option.wrong {
+  border-color: #f87171;
+  background: #7f1d1d;
+}
+
+.option.dim {
+  opacity: 0.55;
+}
+
+.feedback {
+  margin-top: 20px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.22);
+  padding: 16px;
+}
+
+.feedback-title {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.feedback-title.correct {
+  color: #86efac;
+}
+
+.feedback-title.wrong {
+  color: #fca5a5;
+}
+
+.feedback p {
+  color: #e2e8f0;
+}
+
+.primary-button {
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  background: #0891b2;
+  color: white;
+  padding: 13px;
+  font-weight: 800;
+}
+
+.skip-button {
+  width: 100%;
+  margin-top: 12px;
+  border: 1px solid #3b82f6;
+  border-radius: 12px;
+  background: #082357;
+  color: white;
+  padding: 12px;
+  font-weight: 800;
+}
+
+.finish-page {
+  min-height: 100vh;
+  padding: 28px;
+  background: #061426;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.finish-card {
+  width: 100%;
+  max-width: 760px;
+  border: 1px solid #2563eb;
+  border-radius: 24px;
+  background: #123665;
+  padding: 34px;
+  text-align: center;
+}
+
+.finish-status {
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+}
+
+.finish-status.pass {
+  color: #86efac;
+}
+
+.finish-status.fail {
+  color: #fca5a5;
+}
+
+.finish-card h1 {
+  margin: 10px 0 0;
+  font-size: 36px;
+}
+
+.result-grid {
+  margin-top: 28px;
+  display: grid;
+  grid-template-columns:
+    repeat(3, 1fr);
+  gap: 14px;
+}
+
+.result-box {
+  border-radius: 16px;
+  background: #082357;
+  padding: 20px;
+}
+
+.result-label {
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.result-value {
+  margin-top: 8px;
+  color: #67e8f9;
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.conditions {
+  margin-top: 20px;
+  border-radius: 16px;
+  background: rgba(8, 35, 87, 0.75);
+  padding: 18px;
+  text-align: left;
+}
+
+.condition-row {
+  padding: 7px 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  color: #cbd5e1;
+}
+
+.restart {
+  margin-top: 22px;
+  border: 0;
+  border-radius: 12px;
+  background: #2563eb;
+  color: white;
+  padding: 13px 24px;
+  font-weight: 800;
+}
+
+@media (max-width: 760px) {
+  .page-heading {
+    display: block;
+  }
+
+  .video-name {
+    margin-top: 8px;
+  }
+
+  .options {
+    grid-template-columns: 1fr;
+  }
+
+  .navigation {
+    grid-template-columns: 1fr;
+  }
+
+  .result-grid {
+    grid-template-columns: 1fr;
+  }
+}
+`;
+}
+
+/* =========================================================
+   PLAYER.JS
+========================================================= */
+
+function makePlayerJs() {
+  return String.raw`
+(function () {
+  "use strict";
+
+  var course =
+    window.COURSE_DATA;
+
+  if (
+    !course ||
+    !Array.isArray(course.pages)
+  ) {
+    document.getElementById(
+      "app"
+    ).innerHTML =
+      '<div class="loading">Không đọc được dữ liệu bài giảng.</div>';
+
+    return;
+  }
+
+  /* =====================================================
+     SCORM 1.2 API
+  ===================================================== */
+
+  function findScormApi(win) {
+    var attempts = 0;
+
+    while (
+      win &&
+      attempts < 500
+    ) {
+      try {
+        if (win.API) {
+          return win.API;
+        }
+
+        if (
+          win.parent &&
+          win.parent !== win
+        ) {
+          win = win.parent;
+        } else {
+          break;
+        }
+      } catch (error) {
+        break;
+      }
+
+      attempts++;
+    }
+
+    try {
+      if (
+        window.opener &&
+        window.opener.API
+      ) {
+        return window.opener.API;
+      }
+    } catch (error) {}
+
+    return null;
+  }
+
+  var scormApi =
+    findScormApi(window);
+
+  var scormInitialized =
+    false;
+
+  function scormInitialize() {
+    if (
+      !scormApi ||
+      scormInitialized
+    ) {
+      return;
+    }
+
+    try {
+      var result =
+        scormApi.LMSInitialize("");
+
+      scormInitialized =
+        result === true ||
+        result === "true";
+
+      if (
+        scormInitialized
+      ) {
+        var status =
+          scormApi.LMSGetValue(
+            "cmi.core.lesson_status"
+          );
+
+        if (
+          !status ||
+          status ===
+            "not attempted"
+        ) {
+          scormApi.LMSSetValue(
+            "cmi.core.lesson_status",
+            "incomplete"
+          );
+        }
+
+        scormApi.LMSCommit("");
+      }
+    } catch (error) {
+      console.warn(
+        "SCORM initialize failed",
+        error
+      );
+    }
+  }
+
+  function scormReport(
+    percentage,
+    passed
+  ) {
+    if (
+      !scormApi ||
+      !scormInitialized
+    ) {
+      return;
+    }
+
+    try {
+      scormApi.LMSSetValue(
+        "cmi.core.score.min",
+        "0"
+      );
+
+      scormApi.LMSSetValue(
+        "cmi.core.score.max",
+        "100"
+      );
+
+      scormApi.LMSSetValue(
+        "cmi.core.score.raw",
+        String(percentage)
+      );
+
+      scormApi.LMSSetValue(
+        "cmi.core.lesson_status",
+        passed
+          ? "passed"
+          : "failed"
+      );
+
+      scormApi.LMSCommit("");
+    } catch (error) {
+      console.warn(
+        "SCORM report failed",
+        error
+      );
+    }
+  }
+
+  function scormFinish() {
+    if (
+      !scormApi ||
+      !scormInitialized
+    ) {
+      return;
+    }
+
+    try {
+      scormApi.LMSFinish("");
+    } catch (error) {}
+  }
+
+  scormInitialize();
+
+  window.addEventListener(
+    "beforeunload",
+    scormFinish
+  );
+
+  /* =====================================================
+     STATE
+  ===================================================== */
+
+  var state = {
+    pageIndex: 0,
+
+    currentTime: 0,
+
+    duration: 0,
+
+    playing: false,
+
+    started: false,
+
+    activeQuiz: null,
+
+    selectedAnswer: null,
+
+    quizResult: null,
+
+    answeredQuizIds:
+      new Set(),
+
+    skippedQuizIds:
+      new Set(),
+
+    correctQuizIds:
+      new Set(),
+
+    completedPageIds:
+      new Set(),
+
+    watched:
+      {},
+
+    lastPlaybackTime:
+      null,
+
+    score: 0,
+
+    completionNotice: "",
+
+    finished: false
+  };
+
+  var app =
+    document.getElementById(
+      "app"
+    );
+
+  /* =====================================================
+     HELPERS
+  ===================================================== */
+
+  function currentPage() {
+    return course.pages[
+      state.pageIndex
+    ];
+  }
+
+  function formatTime(
+    seconds
+  ) {
+    if (
+      !Number.isFinite(
+        seconds
+      )
+    ) {
+      return "0:00";
+    }
+
+    var minutes =
+      Math.floor(
+        seconds / 60
+      );
+
+    var secs =
+      Math.floor(
+        seconds % 60
+      );
+
+    return (
+      minutes +
+      ":" +
+      String(secs).padStart(
+        2,
+        "0"
+      )
+    );
+  }
+
+  function totalQuestions() {
+    return course.pages.reduce(
+      function (
+        total,
+        page
+      ) {
+        return (
+          total +
+          page.quizzes.length
+        );
+      },
+      0
+    );
+  }
+
+  function totalPossibleScore() {
+    return course.pages.reduce(
+      function (
+        total,
+        page
+      ) {
+        return (
+          total +
+          page.quizzes.reduce(
+            function (
+              pageTotal,
+              quiz
+            ) {
+              return (
+                pageTotal +
+                quiz.points
+              );
+            },
+            0
+          )
+        );
+      },
+      0
+    );
+  }
+
+  function handledQuiz(
+    quizId
+  ) {
+    return (
+      state.answeredQuizIds.has(
+        quizId
+      ) ||
+      state.skippedQuizIds.has(
+        quizId
+      )
+    );
+  }
+
+  function completedQuizCount(
+    page
+  ) {
+    return page.quizzes.filter(
+      function (quiz) {
+        return state
+          .answeredQuizIds
+          .has(
+            quiz.id
+          );
+      }
+    ).length;
+  }
+
+  function getWatchSet(
+    pageId
+  ) {
+    if (
+      !state.watched[
+        pageId
+      ]
+    ) {
+      state.watched[
+        pageId
+      ] =
+        new Set();
+    }
+
+    return state.watched[
+      pageId
+    ];
+  }
+
+  function watchPercent(
+    pageId,
+    duration
+  ) {
+    if (
+      !Number.isFinite(
+        duration
+      ) ||
+      duration <= 0
+    ) {
+      return 0;
+    }
+
+    var total =
+      Math.max(
+        1,
+        Math.ceil(
+          duration
+        )
+      );
+
+    var watched =
+      getWatchSet(
+        pageId
+      );
+
+    return Math.min(
+      100,
+      Math.round(
+        watched.size /
+          total *
+          100
+      )
+    );
+  }
+
+  function recordWatch(
+    pageId,
+    time,
+    duration
+  ) {
+    var previous =
+      state.lastPlaybackTime;
+
+    if (
+      previous === null
+    ) {
+      state.lastPlaybackTime =
+        time;
+
+      return;
+    }
+
+    var delta =
+      time -
+      previous;
+
+    if (
+      delta > 0 &&
+      delta <= 2.5
+    ) {
+      var watched =
+        getWatchSet(
+          pageId
+        );
+
+      var total =
+        Math.max(
+          1,
+          Math.ceil(
+            duration
+          )
+        );
+
+      var start =
+        Math.max(
+          0,
+          Math.floor(
+            previous
+          )
+        );
+
+      var end =
+        Math.min(
+          total - 1,
+          Math.floor(
+            time
+          )
+        );
+
+      for (
+        var second = start;
+        second <= end;
+        second++
+      ) {
+        watched.add(
+          second
+        );
+      }
+    }
+
+    state.lastPlaybackTime =
+      time;
+  }
+
+  function firstUnwatchedSecond(
+    pageId,
+    duration
+  ) {
+    var watched =
+      getWatchSet(
+        pageId
+      );
+
+    var total =
+      Math.max(
+        1,
+        Math.ceil(
+          duration
+        )
+      );
+
+    for (
+      var second = 0;
+      second < total;
+      second++
+    ) {
+      if (
+        !watched.has(
+          second
+        )
+      ) {
+        return second;
+      }
+    }
+
+    return 0;
+  }
+
+  function sortedQuizzes(
+    page
+  ) {
+    return page.quizzes
+      .slice()
+      .sort(
+        function (
+          a,
+          b
+        ) {
+          return (
+            a.time -
+            b.time
+          );
+        }
+      );
+  }
+
+  /* =====================================================
+     PAGE COMPLETION
+  ===================================================== */
+
+  function completeCurrentPage() {
+    var page =
+      currentPage();
+
+    if (!page) {
+      return;
+    }
+
+    state
+      .completedPageIds
+      .add(
+        page.id
+      );
+
+    state.completionNotice =
+      "";
+
+    render();
+  }
+
+  /* =====================================================
+     QUIZ
+  ===================================================== */
+
+  function showQuiz(
+    quiz
+  ) {
+    var video =
+      document.getElementById(
+        "course-video"
+      );
+
+    if (video) {
+      video.pause();
+    }
+
+    state.playing =
+      false;
+
+    state.lastPlaybackTime =
+      null;
+
+    state.activeQuiz =
+      quiz;
+
+    state.selectedAnswer =
+      null;
+
+    state.quizResult =
+      null;
+
+    render();
+  }
+
+  function answerQuiz(
+    index
+  ) {
+    var quiz =
+      state.activeQuiz;
+
+    if (
+      !quiz ||
+      state.quizResult
+    ) {
+      return;
+    }
+
+    state.selectedAnswer =
+      index;
+
+    var correct =
+      index ===
+      quiz.correctIndex;
+
+    if (correct) {
+      state.quizResult =
+        "correct";
+
+      if (
+        !state.correctQuizIds.has(
+          quiz.id
+        )
+      ) {
+        state.correctQuizIds.add(
+          quiz.id
+        );
+
+        state.score +=
+          quiz.points;
+      }
+    } else {
+      state.quizResult =
+        "wrong";
+    }
+
+    render();
+  }
+
+  function continueAfterQuiz() {
+    var quiz =
+      state.activeQuiz;
+
+    if (!quiz) {
+      return;
+    }
+
+    state
+      .answeredQuizIds
+      .add(
+        quiz.id
+      );
+
+    state.activeQuiz =
+      null;
+
+    state.selectedAnswer =
+      null;
+
+    state.quizResult =
+      null;
+
+    render();
+
+    var page =
+      currentPage();
+
+    if (
+      page &&
+      page.videoSrc
+    ) {
+      var video =
+        document.getElementById(
+          "course-video"
+        );
+
+      if (video) {
+        state.started =
+          true;
+
+        state.lastPlaybackTime =
+          video.currentTime;
+
+        video.play()
+          .catch(
+            function () {}
+          );
+      }
+    } else {
+      handleNoVideoPage();
+    }
+  }
+
+  function skipQuiz() {
+    var quiz =
+      state.activeQuiz;
+
+    if (
+      !quiz ||
+      course.completion
+        .requireAllQuizzes
+    ) {
+      return;
+    }
+
+    state
+      .skippedQuizIds
+      .add(
+        quiz.id
+      );
+
+    state.activeQuiz =
+      null;
+
+    state.selectedAnswer =
+      null;
+
+    state.quizResult =
+      null;
+
+    render();
+
+    var page =
+      currentPage();
+
+    if (
+      page &&
+      page.videoSrc
+    ) {
+      var video =
+        document.getElementById(
+          "course-video"
+        );
+
+      if (video) {
+        state.started =
+          true;
+
+        state.lastPlaybackTime =
+          video.currentTime;
+
+        video.play()
+          .catch(
+            function () {}
+          );
+      }
+    } else {
+      handleNoVideoPage();
+    }
+  }
+
+  /* =====================================================
+     VIDEO
+  ===================================================== */
+
+  function bindVideoEvents() {
+    var page =
+      currentPage();
+
+    var video =
+      document.getElementById(
+        "course-video"
+      );
+
+    if (
+      !page ||
+      !video
+    ) {
+      return;
+    }
+
+    /* ===================================================
+       UPDATE COMPLETION UI WITHOUT RENDERING VIDEO AGAIN
+    =================================================== */
+
+    function updateCompletionStateUi() {
+      var completed =
+        state.completedPageIds
+          .has(
+            page.id
+          );
+
+      var status =
+        document.querySelector(
+          ".progress-info .progress-notice, .progress-info .completed"
+        );
+
+      if (status) {
+        if (completed) {
+          status.className =
+            "completed";
+
+          status.textContent =
+            "✓ Trang đã hoàn thành";
+        } else if (
+          state.completionNotice
+        ) {
+          status.className =
+            "progress-notice";
+
+          status.textContent =
+            state.completionNotice;
+        } else {
+          status.className =
+            "progress-notice";
+
+          status.textContent =
+            "Yêu cầu: xem ≥ " +
+            course.completion
+              .minWatchPercent +
+            "%" +
+            (
+              course.completion
+                .requireAllQuizzes
+                ? " và hoàn thành tất cả câu hỏi"
+                : ""
+            );
+        }
+      }
+
+      var nextButton =
+        document.getElementById(
+          "next"
+        );
+
+      if (nextButton) {
+        nextButton.disabled =
+          !completed ||
+          Boolean(
+            state.activeQuiz
+          );
+      }
+    }
+
+    /* ===================================================
+       CHECK WHETHER ALL REQUIRED QUIZZES ARE DONE
+    =================================================== */
+
+    function requiredQuizzesDone() {
+      if (
+        !course.completion
+          .requireAllQuizzes
+      ) {
+        return true;
+      }
+
+      return page.quizzes.every(
+        function (quiz) {
+          return state
+            .answeredQuizIds
+            .has(
+              quiz.id
+            );
+        }
+      );
+    }
+
+    /* ===================================================
+       COMPLETE PAGE WITHOUT CALLING render()
+    =================================================== */
+
+    function checkPageCompletion() {
+      /*
+       * Đã hoàn thành rồi.
+       */
+      if (
+        state.completedPageIds.has(
+          page.id
+        )
+      ) {
+        updateCompletionStateUi();
+
+        return true;
+      }
+
+      /*
+       * Quiz bắt buộc nhưng chưa làm hết.
+       */
+      if (
+        !requiredQuizzesDone()
+      ) {
+        updateCompletionStateUi();
+
+        return false;
+      }
+
+      var totalDuration =
+        video.duration;
+
+      if (
+        !Number.isFinite(
+          totalDuration
+        ) ||
+        totalDuration <= 0
+      ) {
+        totalDuration =
+          state.duration ||
+          page.duration;
+      }
+
+      var percent =
+        watchPercent(
+          page.id,
+          totalDuration
+        );
+
+      /*
+       * Chưa xem đủ tỷ lệ yêu cầu.
+       */
+      if (
+        percent <
+        course.completion
+          .minWatchPercent
+      ) {
+        updateCompletionStateUi();
+
+        return false;
+      }
+
+      /*
+       * Đạt toàn bộ điều kiện.
+       *
+       * QUAN TRỌNG:
+       * Không gọi completeCurrentPage()
+       * vì function đó render lại player,
+       * có thể làm video bị gián đoạn.
+       */
+      state
+        .completedPageIds
+        .add(
+          page.id
+        );
+
+      state.completionNotice =
+        "";
+
+      updateCompletionStateUi();
+
+      return true;
+    }
+
+    /* ===================================================
+       METADATA
+    =================================================== */
+
+    video.addEventListener(
+      "loadedmetadata",
+      function () {
+        state.duration =
+          video.duration;
+
+        /*
+         * render() có thể tạo lại thẻ video
+         * sau khi quiz xuất hiện.
+         *
+         * Khôi phục lại đúng vị trí trước đó.
+         */
+        if (
+          state.currentTime > 0 &&
+          state.currentTime <
+            video.duration
+        ) {
+          video.currentTime =
+            Math.min(
+              state.currentTime,
+              Math.max(
+                0,
+                video.duration -
+                  0.05
+              )
+            );
+        }
+
+        updateControls();
+
+        /*
+         * Hỗ trợ cả cấu hình
+         * minWatchPercent = 0.
+         */
+        checkPageCompletion();
+      }
+    );
+
+    /* ===================================================
+       PLAY
+    =================================================== */
+
+    video.addEventListener(
+      "play",
+      function () {
+        state.started =
+          true;
+
+        state.playing =
+          true;
+
+        state.lastPlaybackTime =
+          video.currentTime;
+
+        updateControls();
+      }
+    );
+
+    /* ===================================================
+       PAUSE
+    =================================================== */
+
+    video.addEventListener(
+      "pause",
+      function () {
+        state.playing =
+          false;
+
+        state.lastPlaybackTime =
+          null;
+
+        updateControls();
+      }
+    );
+
+    /* ===================================================
+       TIME UPDATE
+    =================================================== */
+
+    video.addEventListener(
+      "timeupdate",
+      function () {
+        state.currentTime =
+          video.currentTime;
+
+        /*
+         * Chỉ ghi nhận thời gian xem thật
+         * khi video đang phát.
+         */
+        if (
+          state.started &&
+          !video.paused
+        ) {
+          recordWatch(
+            page.id,
+            video.currentTime,
+            video.duration
+          );
+        }
+
+        updateControls();
+
+        /*
+         * Đây là thay đổi chính của V9.4:
+         *
+         * mỗi lần thời gian xem tăng,
+         * kiểm tra ngay điều kiện hoàn thành.
+         *
+         * Ví dụ yêu cầu 70%:
+         * vừa đạt 70% thì Trang tiếp theo
+         * được mở ngay.
+         */
+        checkPageCompletion();
+
+        /*
+         * Chưa Play hoặc đang hiện quiz
+         * thì không tìm quiz mới.
+         */
+        if (
+          !state.started ||
+          state.activeQuiz
+        ) {
+          return;
+        }
+
+        var due =
+          sortedQuizzes(
+            page
+          ).find(
+            function (quiz) {
+              return (
+                !handledQuiz(
+                  quiz.id
+                ) &&
+                quiz.time <=
+                  video.currentTime
+              );
+            }
+          );
+
+        if (due) {
+          showQuiz(
+            due
+          );
+        }
+      }
+    );
+
+    /* ===================================================
+       VIDEO ENDED
+    =================================================== */
+
+    video.addEventListener(
+      "ended",
+      function () {
+        state.playing =
+          false;
+
+        /*
+         * Ghi nhận nốt đoạn cuối.
+         */
+        recordWatch(
+          page.id,
+          video.duration,
+          video.duration
+        );
+
+        state.lastPlaybackTime =
+          null;
+
+        /*
+         * Nếu quiz là bắt buộc thì
+         * không được bỏ sót quiz.
+         */
+        if (
+          course.completion
+            .requireAllQuizzes
+        ) {
+          var unanswered =
+            sortedQuizzes(
+              page
+            ).find(
+              function (
+                quiz
+              ) {
+                return !state
+                  .answeredQuizIds
+                  .has(
+                    quiz.id
+                  );
+              }
+            );
+
+          if (
+            unanswered
+          ) {
+            video.currentTime =
+              unanswered.time;
+
+            state.currentTime =
+              unanswered.time;
+
+            showQuiz(
+              unanswered
+            );
+
+            return;
+          }
+        }
+
+        var percent =
+          watchPercent(
+            page.id,
+            video.duration
+          );
+
+        /*
+         * Chạy đến cuối nhưng vẫn chưa đủ
+         * tỷ lệ xem thật, ví dụ do tua.
+         */
+        if (
+          percent <
+          course.completion
+            .minWatchPercent
+        ) {
+          var missing =
+            firstUnwatchedSecond(
+              page.id,
+              video.duration
+            );
+
+          state.completionNotice =
+            "Bạn mới xem " +
+            percent +
+            "% video. Cần tối thiểu " +
+            course.completion
+              .minWatchPercent +
+            "% để hoàn thành trang.";
+
+          video.currentTime =
+            missing;
+
+          state.currentTime =
+            missing;
+
+          updateControls();
+
+          updateCompletionStateUi();
+
+          return;
+        }
+
+        /*
+         * Nếu đủ điều kiện thì chỉ cập nhật
+         * state/UI, không render lại video.
+         */
+        checkPageCompletion();
+      }
+    );
+
+    /*
+     * Đồng bộ trạng thái ngay lần đầu.
+     */
+    updateCompletionStateUi();
+  }
+  function togglePlay() {
+    var video =
+      document.getElementById(
+        "course-video"
+      );
+
+    if (
+      !video ||
+      state.activeQuiz
+    ) {
+      return;
+    }
+
+    state.started =
+      true;
+
+    state.completionNotice =
+      "";
+
+    if (
+      video.paused
+    ) {
+      state.lastPlaybackTime =
+        video.currentTime;
+
+      video.play()
+        .catch(
+          function () {}
+        );
+    } else {
+      video.pause();
+    }
+  }
+
+  function seekVideo(
+    value
+  ) {
+    var page =
+      currentPage();
+
+    var video =
+      document.getElementById(
+        "course-video"
+      );
+
+    if (
+      !page ||
+      !video ||
+      state.activeQuiz
+    ) {
+      return;
+    }
+
+    var requested =
+      Number(value);
+
+    state.started =
+      true;
+
+    state.lastPlaybackTime =
+      null;
+
+    if (
+      course.completion
+        .requireAllQuizzes &&
+      requested >
+        state.currentTime
+    ) {
+      var blocking =
+        sortedQuizzes(
+          page
+        ).find(
+          function (
+            quiz
+          ) {
+            return (
+              !handledQuiz(
+                quiz.id
+              ) &&
+              quiz.time >
+                state.currentTime &&
+              quiz.time <=
+                requested
+            );
+          }
+        );
+
+      if (
+        blocking
+      ) {
+        video.currentTime =
+          blocking.time;
+
+        state.currentTime =
+          blocking.time;
+
+        showQuiz(
+          blocking
+        );
+
+        return;
+      }
+    }
+
+    video.currentTime =
+      requested;
+
+    state.currentTime =
+      requested;
+
+    updateControls();
+  }
+
+  /* =====================================================
+     NO VIDEO PAGE
+  ===================================================== */
+
+  function handleNoVideoPage() {
+    var page =
+      currentPage();
+
+    if (!page) {
+      return;
+    }
+
+    if (
+      page.quizzes.length ===
+      0
+    ) {
+      completeCurrentPage();
+
+      return;
+    }
+
+    if (
+      !course.completion
+        .requireAllQuizzes
+    ) {
+      completeCurrentPage();
+
+      return;
+    }
+
+    var next =
+      page.quizzes.find(
+        function (
+          quiz
+        ) {
+          return !state
+            .answeredQuizIds
+            .has(
+              quiz.id
+            );
+        }
+      );
+
+    if (next) {
+      showQuiz(
+        next
+      );
+
+      return;
+    }
+
+    completeCurrentPage();
+  }
+
+  /* =====================================================
+     NAVIGATION
+  ===================================================== */
+
+  function previousPage() {
+    if (
+      state.pageIndex <= 0 ||
+      state.activeQuiz
+    ) {
+      return;
+    }
+
+    state.pageIndex--;
+
+    resetPageState();
+
+    render();
+  }
+
+  function nextPage() {
+    var page =
+      currentPage();
+
+    if (
+      !page ||
+      !state
+        .completedPageIds
+        .has(
+          page.id
+        ) ||
+      state.activeQuiz
+    ) {
+      return;
+    }
+
+    if (
+      state.pageIndex <
+      course.pages.length -
+        1
+    ) {
+      state.pageIndex++;
+
+      resetPageState();
+
+      render();
+
+      return;
+    }
+
+    finishCourse();
+  }
+
+  function resetPageState() {
+    state.currentTime =
+      0;
+
+    state.duration =
+      0;
+
+    state.playing =
+      false;
+
+    state.started =
+      false;
+
+    state.activeQuiz =
+      null;
+
+    state.selectedAnswer =
+      null;
+
+    state.quizResult =
+      null;
+
+    state.lastPlaybackTime =
+      null;
+
+    state.completionNotice =
+      "";
+  }
+
+  /* =====================================================
+     FINISH
+  ===================================================== */
+
+  function finishCourse() {
+    state.finished =
+      true;
+
+    var possible =
+      totalPossibleScore();
+
+    var percentage =
+      possible > 0
+        ? Math.round(
+            state.score /
+              possible *
+              100
+          )
+        : 100;
+
+    var passed =
+      percentage >=
+      course.completion
+        .passScorePercent;
+
+    scormReport(
+      percentage,
+      passed
+    );
+
+    render();
+  }
+
+  function restartCourse() {
+    state.pageIndex =
+      0;
+
+    state.currentTime =
+      0;
+
+    state.duration =
+      0;
+
+    state.playing =
+      false;
+
+    state.started =
+      false;
+
+    state.activeQuiz =
+      null;
+
+    state.selectedAnswer =
+      null;
+
+    state.quizResult =
+      null;
+
+    state.answeredQuizIds =
+      new Set();
+
+    state.skippedQuizIds =
+      new Set();
+
+    state.correctQuizIds =
+      new Set();
+
+    state.completedPageIds =
+      new Set();
+
+    state.watched =
+      {};
+
+    state.lastPlaybackTime =
+      null;
+
+    state.score =
+      0;
+
+    state.completionNotice =
+      "";
+
+    state.finished =
+      false;
+
+    try {
+      if (
+        scormApi &&
+        scormInitialized
+      ) {
+        scormApi.LMSSetValue(
+          "cmi.core.lesson_status",
+          "incomplete"
+        );
+
+        scormApi.LMSSetValue(
+          "cmi.core.score.raw",
+          "0"
+        );
+
+        scormApi.LMSCommit("");
+      }
+    } catch (error) {}
+
+    render();
+  }
+
+  /* =====================================================
+     UPDATE SMALL UI PARTS
+  ===================================================== */
+
+  function updateControls() {
+    var page =
+      currentPage();
+
+    if (!page) {
+      return;
+    }
+
+    var play =
+      document.getElementById(
+        "play-button"
+      );
+
+    if (play) {
+      play.textContent =
+        state.playing
+          ? "❚❚"
+          : "▶";
+    }
+
+    var time =
+      document.getElementById(
+        "time-display"
+      );
+
+    if (time) {
+      time.textContent =
+        formatTime(
+          state.currentTime
+        ) +
+        " / " +
+        formatTime(
+          state.duration
+        );
+    }
+
+    var seek =
+      document.getElementById(
+        "seek"
+      );
+
+    if (seek) {
+      seek.max =
+        String(
+          state.duration > 0
+            ? state.duration
+            : 1
+        );
+
+      seek.value =
+        String(
+          Math.min(
+            state.currentTime,
+            state.duration > 0
+              ? state.duration
+              : 1
+          )
+        );
+    }
+
+    var watch =
+      document.getElementById(
+        "watch-percent"
+      );
+
+    if (watch) {
+      watch.textContent =
+        String(
+          watchPercent(
+            page.id,
+            state.duration ||
+              page.duration
+          )
+        ) +
+        "%";
+    }
+  }
+
+  /* =====================================================
+     RENDER QUIZ
+  ===================================================== */
+
+  function renderQuiz() {
+    var quiz =
+      state.activeQuiz;
+
+    if (!quiz) {
+      return "";
+    }
+
+    var options =
+      quiz.options
+        .map(
+          function (
+            option,
+            index
+          ) {
+            var classes =
+              "option";
+
+            if (
+              state.quizResult
+            ) {
+              if (
+                index ===
+                quiz.correctIndex
+              ) {
+                classes +=
+                  " correct";
+              } else if (
+                index ===
+                state.selectedAnswer
+              ) {
+                classes +=
+                  " wrong";
+              } else {
+                classes +=
+                  " dim";
+              }
+            }
+
+            return (
+              '<button class="' +
+              classes +
+              '" data-answer="' +
+              index +
+              '"' +
+              (
+                state.quizResult
+                  ? " disabled"
+                  : ""
+              ) +
+              ">" +
+              '<span class="option-letter">' +
+              String.fromCharCode(
+                65 + index
+              ) +
+              "</span>" +
+              "<span>" +
+              escapeHtml(
+                option
+              ) +
+              "</span>" +
+              "</button>"
+            );
+          }
+        )
+        .join("");
+
+    var feedback =
+      "";
+
+    if (
+      state.quizResult
+    ) {
+      var correct =
+        state.quizResult ===
+        "correct";
+
+      feedback =
+        '<div class="feedback">' +
+        '<div class="feedback-title ' +
+        (
+          correct
+            ? "correct"
+            : "wrong"
+        ) +
+        '">' +
+        (
+          correct
+            ? "Chính xác! +" +
+              quiz.points +
+              " điểm"
+            : "Chưa chính xác"
+        ) +
+        "</div>" +
+        "<p>" +
+        escapeHtml(
+          correct
+            ? quiz.feedbackCorrect
+            : quiz.feedbackWrong
+        ) +
+        "</p>" +
+        '<button class="primary-button" id="continue-quiz">Tiếp tục</button>' +
+        "</div>";
+    }
+
+    var skip =
+      "";
+
+    if (
+      !course.completion
+        .requireAllQuizzes &&
+      !state.quizResult
+    ) {
+      skip =
+        '<button class="skip-button" id="skip-quiz">Bỏ qua câu hỏi</button>';
+    }
+
+    return (
+      '<div class="quiz-overlay">' +
+      '<div class="quiz-card">' +
+      '<div class="quiz-top">' +
+      '<div class="quiz-label">CÂU HỎI TƯƠNG TÁC</div>' +
+      '<div class="quiz-points">' +
+      quiz.points +
+      " điểm</div>" +
+      "</div>" +
+      "<h2>" +
+      escapeHtml(
+        quiz.question
+      ) +
+      "</h2>" +
+      '<div class="options">' +
+      options +
+      "</div>" +
+      feedback +
+      skip +
+      "</div>" +
+      "</div>"
+    );
+  }
+
+  /* =====================================================
+     HTML ESCAPE
+  ===================================================== */
+
+  function escapeHtml(
+    value
+  ) {
+    return String(
+      value == null
+        ? ""
+        : value
+    )
+      .replace(
+        /&/g,
+        "&amp;"
+      )
+      .replace(
+        /</g,
+        "&lt;"
+      )
+      .replace(
+        />/g,
+        "&gt;"
+      )
+      .replace(
+        /"/g,
+        "&quot;"
+      )
+      .replace(
+        /'/g,
+        "&#039;"
+      );
+  }
+
+  /* =====================================================
+     RENDER FINISH
+  ===================================================== */
+
+  function renderFinish() {
+    var possible =
+      totalPossibleScore();
+
+    var percentage =
+      possible > 0
+        ? Math.round(
+            state.score /
+              possible *
+              100
+          )
+        : 100;
+
+    var passed =
+      percentage >=
+      course.completion
+        .passScorePercent;
+
+    app.innerHTML =
+      '<div class="finish-page">' +
+      '<div class="finish-card">' +
+
+      '<div class="finish-status ' +
+      (
+        passed
+          ? "pass"
+          : "fail"
+      ) +
+      '">' +
+      (
+        passed
+          ? "ĐẠT"
+          : "CHƯA ĐẠT"
+      ) +
+      "</div>" +
+
+      "<h1>HOÀN THÀNH BÀI HỌC</h1>" +
+
+      "<p>" +
+      escapeHtml(
+        course.title
+      ) +
+      "</p>" +
+
+      '<div class="result-grid">' +
+
+      '<div class="result-box">' +
+      '<div class="result-label">Tổng điểm</div>' +
+      '<div class="result-value">' +
+      state.score +
+      " / " +
+      possible +
+      "</div>" +
+      "</div>" +
+
+      '<div class="result-box">' +
+      '<div class="result-label">Trả lời đúng</div>' +
+      '<div class="result-value">' +
+      state.correctQuizIds.size +
+      " / " +
+      totalQuestions() +
+      "</div>" +
+      "</div>" +
+
+      '<div class="result-box">' +
+      '<div class="result-label">Kết quả</div>' +
+      '<div class="result-value">' +
+      percentage +
+      "%</div>" +
+      "</div>" +
+
+      "</div>" +
+
+      '<div class="conditions">' +
+      "<strong>Điều kiện hoàn thành</strong>" +
+
+      '<div class="condition-row">' +
+      "<span>Điểm tối thiểu</span>" +
+      "<strong>" +
+      course.completion
+        .passScorePercent +
+      "%</strong>" +
+      "</div>" +
+
+      '<div class="condition-row">' +
+      "<span>Xem tối thiểu mỗi video</span>" +
+      "<strong>" +
+      course.completion
+        .minWatchPercent +
+      "%</strong>" +
+      "</div>" +
+
+      '<div class="condition-row">' +
+      "<span>Hoàn thành tất cả câu hỏi</span>" +
+      "<strong>" +
+      (
+        course.completion
+          .requireAllQuizzes
+          ? "Bắt buộc"
+          : "Không bắt buộc"
+      ) +
+      "</strong>" +
+      "</div>" +
+
+      "</div>" +
+
+      '<button class="restart" id="restart">Học lại</button>' +
+
+      "</div>" +
+      "</div>";
+
+    document
+      .getElementById(
+        "restart"
+      )
+      .addEventListener(
+        "click",
+        restartCourse
+      );
+  }
+
+  /* =====================================================
+     RENDER MAIN
+  ===================================================== */
+
+  function render() {
+    if (
+      state.finished
+    ) {
+      renderFinish();
+
+      return;
+    }
+
+    var page =
+      currentPage();
+
+    if (!page) {
+      app.innerHTML =
+        '<div class="loading">Không có nội dung bài giảng.</div>';
+
+      return;
+    }
+
+    var completed =
+      state.completedPageIds
+        .has(
+          page.id
+        );
+
+    var watch =
+      watchPercent(
+        page.id,
+        state.duration ||
+          page.duration
+      );
+
+    var videoHtml =
+      page.videoSrc
+        ? (
+            '<video id="course-video" preload="metadata" src="' +
+            escapeHtml(
+              page.videoSrc
+            ) +
+            '"></video>'
+          )
+        : (
+            '<div class="no-video">Trang này chưa có video</div>'
+          );
+
+    var notice =
+      state.completionNotice
+        ? (
+            '<div class="progress-notice">' +
+            escapeHtml(
+              state.completionNotice
+            ) +
+            "</div>"
+          )
+        : completed
+          ? (
+              '<div class="completed">✓ Trang đã hoàn thành</div>'
+            )
+          : (
+              '<div class="progress-notice">' +
+              "Yêu cầu: xem ≥ " +
+              course.completion
+                .minWatchPercent +
+              "%" +
+              (
+                course.completion
+                  .requireAllQuizzes
+                  ? " và hoàn thành tất cả câu hỏi"
+                  : ""
+              ) +
+              "</div>"
+            );
+
+    app.innerHTML =
+      '<div class="player">' +
+
+      '<header class="topbar">' +
+
+      "<div>" +
+      '<div class="project-title">' +
+      escapeHtml(
+        course.title
+      ) +
+      "</div>" +
+      '<div class="preview-label">SCORM 1.2</div>' +
+      "</div>" +
+
+      '<div class="top-stats">' +
+      '<div class="badge">Điểm <strong>' +
+      state.score +
+      " / " +
+      totalPossibleScore() +
+      "</strong></div>" +
+      '<div class="badge">Trang <strong>' +
+      (
+        state.pageIndex +
+        1
+      ) +
+      " / " +
+      course.pages.length +
+      "</strong></div>" +
+      "</div>" +
+
+      "</header>" +
+
+      '<main class="main">' +
+      '<div class="content">' +
+
+      '<div class="page-info">' +
+      '<div class="page-label">TRANG ' +
+      (
+        state.pageIndex +
+        1
+      ) +
+      "</div>" +
+
+      '<div class="page-heading">' +
+      "<div>" +
+      "<h1>" +
+      escapeHtml(
+        page.title
+      ) +
+      "</h1>" +
+      '<div class="page-meta">' +
+      page.quizzes.length +
+      " câu hỏi tương tác</div>" +
+      "</div>" +
+
+      '<div class="video-name">' +
+      escapeHtml(
+        page.videoName ||
+        ""
+      ) +
+      "</div>" +
+      "</div>" +
+
+      "</div>" +
+
+      '<section class="video-shell">' +
+      videoHtml +
+      renderQuiz() +
+      "</section>" +
+
+      '<section class="controls">' +
+      '<div class="controls-row">' +
+
+      '<button id="play-button" class="play-button"' +
+      (
+        !page.videoSrc ||
+        state.activeQuiz
+          ? " disabled"
+          : ""
+      ) +
+      ">" +
+      (
+        state.playing
+          ? "❚❚"
+          : "▶"
+      ) +
+      "</button>" +
+
+      '<div class="time" id="time-display">' +
+      formatTime(
+        state.currentTime
+      ) +
+      " / " +
+      formatTime(
+        state.duration ||
+        page.duration
+      ) +
+      "</div>" +
+
+      '<input id="seek" class="seek" type="range" min="0" step="0.01" max="' +
+      (
+        state.duration > 0
+          ? state.duration
+          : page.duration ||
+            1
+      ) +
+      '" value="' +
+      state.currentTime +
+      '"' +
+      (
+        !page.videoSrc ||
+        state.activeQuiz
+          ? " disabled"
+          : ""
+      ) +
+      " />" +
+
+      "</div>" +
+      "</section>" +
+
+      '<section class="navigation">' +
+
+      '<button id="previous" class="nav-button"' +
+      (
+        state.pageIndex ===
+          0 ||
+        state.activeQuiz
+          ? " disabled"
+          : ""
+      ) +
+      ">‹ Trang trước</button>" +
+
+      '<div class="progress-info">' +
+      "Câu hỏi <strong>" +
+      completedQuizCount(
+        page
+      ) +
+      " / " +
+      page.quizzes.length +
+      "</strong> • Đã xem <strong id=\"watch-percent\">" +
+      watch +
+      "%</strong>" +
+      notice +
+      "</div>" +
+
+      '<button id="next" class="nav-button next"' +
+      (
+        !completed ||
+        state.activeQuiz
+          ? " disabled"
+          : ""
+      ) +
+      ">" +
+      (
+        state.pageIndex ===
+        course.pages.length -
+          1
+          ? "Hoàn thành ›"
+          : "Trang tiếp theo ›"
+      ) +
+      "</button>" +
+
+      "</section>" +
+
+      "</div>" +
+      "</main>" +
+
+      "</div>";
+
+    var play =
+      document.getElementById(
+        "play-button"
+      );
+
+    if (play) {
+      play.addEventListener(
+        "click",
+        togglePlay
+      );
+    }
+
+    var seek =
+      document.getElementById(
+        "seek"
+      );
+
+    if (seek) {
+      seek.addEventListener(
+        "input",
+        function (
+          event
+        ) {
+          seekVideo(
+            event.target.value
+          );
+        }
+      );
+    }
+
+    var previous =
+      document.getElementById(
+        "previous"
+      );
+
+    if (previous) {
+      previous.addEventListener(
+        "click",
+        previousPage
+      );
+    }
+
+    var next =
+      document.getElementById(
+        "next"
+      );
+
+    if (next) {
+      next.addEventListener(
+        "click",
+        nextPage
+      );
+    }
+
+    document
+      .querySelectorAll(
+        "[data-answer]"
+      )
+      .forEach(
+        function (
+          element
+        ) {
+          element.addEventListener(
+            "click",
+            function () {
+              answerQuiz(
+                Number(
+                  element.getAttribute(
+                    "data-answer"
+                  )
+                )
+              );
+            }
+          );
+        }
+      );
+
+    var continueButton =
+      document.getElementById(
+        "continue-quiz"
+      );
+
+    if (
+      continueButton
+    ) {
+      continueButton.addEventListener(
+        "click",
+        continueAfterQuiz
+      );
+    }
+
+    var skipButton =
+      document.getElementById(
+        "skip-quiz"
+      );
+
+    if (skipButton) {
+      skipButton.addEventListener(
+        "click",
+        skipQuiz
+      );
+    }
+
+    if (
+      page.videoSrc
+    ) {
+      bindVideoEvents();
+    } else {
+      window.setTimeout(
+        handleNoVideoPage,
+        0
+      );
+    }
+  }
+
+  render();
+})();
+`;
+}
+
+/* =========================================================
+   BUILD EXPORT COURSE
+========================================================= */
+
+async function buildExportCourse(
+  project: ProjectDocument,
+  zip: JSZip
+) {
+  const completion =
+    loadCompletionSettings();
+
+  const pages:
+    ExportPage[] =
+      [];
+
+  const missingVideoPages:
+    string[] =
+      [];
+
+  const mediaFiles:
+    string[] =
+      [];
+
+  for (
+    let index = 0;
+    index <
+    project.pages.length;
+    index++
+  ) {
+    const page =
+      project.pages[
+        index
+      ];
+
+    const videoFile =
+      await getVideo(
+        page.id
+      );
+
+    let videoSrc:
+      string | null =
+      null;
+
+    if (videoFile) {
+      const extension =
+        getVideoExtension(
+          videoFile
+        );
+
+      const mediaPath =
+        `media/page-${
+          index + 1
+        }${extension}`;
+
+      /*
+       * Video không nén lại.
+       *
+       * Video vốn đã là dữ liệu nén;
+       * STORE giúp export nhanh hơn
+       * và đỡ tốn RAM/CPU.
+       */
+      zip.file(
+        mediaPath,
+        videoFile,
+        {
+          binary: true,
+          compression:
+            "STORE",
+        }
+      );
+
+      videoSrc =
+        mediaPath;
+
+      mediaFiles.push(
+        mediaPath
+      );
+    } else if (
+      page.videoName
+    ) {
+      /*
+       * Metadata nói rằng trang từng
+       * có video nhưng IndexedDB hiện
+       * không còn file.
+       */
+      missingVideoPages.push(
+        page.title
+      );
+    }
+
+    pages.push({
+      id:
+        page.id,
+
+      title:
+        page.title,
+
+      videoName:
+        page.videoName,
+
+      duration:
+        page.duration,
+
+      quizzes:
+        page.quizzes.map(
+          (quiz) => ({
+            ...quiz,
+
+            options:
+              [...quiz.options],
+          })
+        ),
+
+      videoSrc,
+    });
+  }
+
+  const course:
+    ExportCourse = {
+      id:
+        project.id,
+
+      title:
+        project.title,
+
+      completion: {
+        passScorePercent:
+          completion.passScorePercent,
+
+        minWatchPercent:
+          completion.minWatchPercent,
+
+        requireAllQuizzes:
+          completion.requireAllQuizzes,
+      },
+
+      pages,
+    };
+
+  return {
+    course,
+    missingVideoPages,
+    mediaFiles,
+  };
+}
+
+/* =========================================================
+   PUBLIC EXPORT FUNCTION
+========================================================= */
+
+export async function exportCurrentProjectAsScorm(): Promise<ScormExportResult> {
+  const project =
+    useEditorStore.getState()
+      .project;
+
+  if (
+    !project ||
+    project.pages.length ===
+      0
+  ) {
+    throw new Error(
+      "Dự án chưa có nội dung để xuất."
+    );
+  }
+
+  const zip =
+    new JSZip();
+
+  const {
+    course,
+    missingVideoPages,
+    mediaFiles,
+  } =
+    await buildExportCourse(
+      project,
+      zip
+    );
+
+  const indexHtml =
+    makeIndexHtml();
+
+  const stylesCss =
+    makeStylesCss();
+
+  const playerJs =
+    makePlayerJs();
+
+  const courseDataJs =
+    makeCourseDataScript(
+      course
+    );
+
+  zip.file(
+    "index.html",
+    indexHtml
+  );
+
+  zip.file(
+    "styles.css",
+    stylesCss
+  );
+
+  zip.file(
+    "player.js",
+    playerJs
+  );
+
+  zip.file(
+    "course-data.js",
+    courseDataJs
+  );
+
+  const resourceFiles = [
+    "index.html",
+    "styles.css",
+    "player.js",
+    "course-data.js",
+    ...mediaFiles,
+  ];
+
+  zip.file(
+    "imsmanifest.xml",
+    makeManifest(
+      course,
+      resourceFiles
+    )
+  );
+
+  const blob =
+    await zip.generateAsync({
+      type:
+        "blob",
+
+      compression:
+        "DEFLATE",
+
+      compressionOptions: {
+        level:
+          6,
+      },
+    });
+
+  const fileName =
+    `${safeFileName(
+      project.title
+    )}-SCORM12.zip`;
+
+  const url =
+    URL.createObjectURL(
+      blob
+    );
+
+  const anchor =
+    document.createElement(
+      "a"
+    );
+
+  anchor.href =
+    url;
+
+  anchor.download =
+    fileName;
+
+  document.body.appendChild(
+    anchor
+  );
+
+  anchor.click();
+
+  anchor.remove();
+
+  window.setTimeout(
+    () => {
+      URL.revokeObjectURL(
+        url
+      );
+    },
+    1000
+  );
+
+  return {
+    fileName,
+    missingVideoPages,
+  };
+}

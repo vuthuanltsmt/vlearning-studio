@@ -1,0 +1,1280 @@
+"use client";
+
+import {
+  Clock3,
+  Copy,
+  FileQuestion,
+  FolderOpen,
+  ImageOff,
+  ImagePlus,
+  Layers3,
+  Loader2,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react";
+
+import {
+  ChangeEvent,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
+import {
+  createNewProject,
+  deleteProjectFromLibrary,
+  duplicateProjectInLibrary,
+  getProjectLibrary,
+  getProjectQuizCount,
+  renameProjectInLibrary,
+  saveProjectToLibrary,
+  setActiveProject,
+  syncCurrentProjectToLibrary,
+} from "@/lib/projectLibrary";
+
+import {
+  deleteProjectThumbnail,
+  getProjectThumbnail,
+  saveProjectThumbnail,
+} from "@/lib/projectThumbnailDb";
+
+import type {
+  ProjectLibraryEntry,
+} from "@/lib/projectLibrary";
+
+/* =========================================================
+   TYPES
+========================================================= */
+
+type SortMode =
+  | "updated-desc"
+  | "updated-asc"
+  | "title-asc"
+  | "title-desc";
+
+/* =========================================================
+   DATE
+========================================================= */
+
+function formatUpdatedAt(
+  value: string
+) {
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return "";
+  }
+
+  return date.toLocaleString(
+    "vi-VN"
+  );
+}
+
+/* =========================================================
+   SEARCH NORMALIZER
+========================================================= */
+
+function normalizeText(
+  value: string
+) {
+  return value
+    .normalize("NFD")
+    .replace(
+      /[\u0300-\u036f]/g,
+      ""
+    )
+    .replace(
+      /đ/g,
+      "d"
+    )
+    .replace(
+      /Đ/g,
+      "D"
+    )
+    .toLowerCase()
+    .trim();
+}
+
+/* =========================================================
+   BLOB -> DATA URL
+========================================================= */
+
+function blobToDataUrl(
+  blob: Blob
+): Promise<string> {
+  return new Promise(
+    (
+      resolve,
+      reject
+    ) => {
+      const reader =
+        new FileReader();
+
+      reader.onload =
+        () => {
+          if (
+            typeof reader.result ===
+            "string"
+          ) {
+            resolve(
+              reader.result
+            );
+          } else {
+            reject(
+              new Error(
+                "Không đọc được ảnh."
+              )
+            );
+          }
+        };
+
+      reader.onerror =
+        () => {
+          reject(
+            reader.error ??
+              new Error(
+                "Không đọc được ảnh."
+              )
+          );
+        };
+
+      reader.readAsDataURL(
+        blob
+      );
+    }
+  );
+}
+
+/* =========================================================
+   PAGE
+========================================================= */
+
+export default function ProjectsPage() {
+  const [
+    projects,
+    setProjects,
+  ] =
+    useState<
+      ProjectLibraryEntry[]
+    >([]);
+
+  const [
+    searchQuery,
+    setSearchQuery,
+  ] =
+    useState("");
+
+  const [
+    sortMode,
+    setSortMode,
+  ] =
+    useState<SortMode>(
+      "updated-desc"
+    );
+
+  const [
+    duplicatingId,
+    setDuplicatingId,
+  ] =
+    useState<string | null>(
+      null
+    );
+
+  const [
+    thumbnailBusyId,
+    setThumbnailBusyId,
+  ] =
+    useState<string | null>(
+      null
+    );
+
+  const [
+    thumbnails,
+    setThumbnails,
+  ] =
+    useState<
+      Record<
+        string,
+        string
+      >
+    >({});
+
+  /* =====================================================
+     FILTER + SORT
+  ===================================================== */
+
+  const visibleProjects =
+    useMemo(() => {
+      const keyword =
+        normalizeText(
+          searchQuery
+        );
+
+      const filtered =
+        keyword
+          ? projects.filter(
+              (entry) =>
+                normalizeText(
+                  entry.project.title
+                ).includes(
+                  keyword
+                )
+            )
+          : [...projects];
+
+      return filtered.sort(
+        (a, b) => {
+          switch (
+            sortMode
+          ) {
+            case "updated-asc":
+              return (
+                new Date(
+                  a.updatedAt
+                ).getTime() -
+                new Date(
+                  b.updatedAt
+                ).getTime()
+              );
+
+            case "title-asc":
+              return a.project.title.localeCompare(
+                b.project.title,
+                "vi"
+              );
+
+            case "title-desc":
+              return b.project.title.localeCompare(
+                a.project.title,
+                "vi"
+              );
+
+            case "updated-desc":
+            default:
+              return (
+                new Date(
+                  b.updatedAt
+                ).getTime() -
+                new Date(
+                  a.updatedAt
+                ).getTime()
+              );
+          }
+        }
+      );
+    }, [
+      projects,
+      searchQuery,
+      sortMode,
+    ]);
+
+  /* =====================================================
+     REFRESH
+  ===================================================== */
+
+  function refreshProjects() {
+    setProjects(
+      getProjectLibrary()
+    );
+  }
+
+  /* =====================================================
+     LOAD PROJECTS
+  ===================================================== */
+
+  useEffect(() => {
+    syncCurrentProjectToLibrary();
+
+    refreshProjects();
+  }, []);
+
+  /* =====================================================
+     LOAD THUMBNAILS
+  ===================================================== */
+
+  useEffect(() => {
+    let cancelled =
+      false;
+
+    async function loadThumbnails() {
+      const result: Record<
+        string,
+        string
+      > = {};
+
+      for (
+        const entry of
+        projects
+      ) {
+        try {
+          const blob =
+            await getProjectThumbnail(
+              entry.project.id
+            );
+
+          if (
+            cancelled
+          ) {
+            return;
+          }
+
+          if (blob) {
+            result[
+              entry.project.id
+            ] =
+              await blobToDataUrl(
+                blob
+              );
+          }
+        } catch (
+          error
+        ) {
+          console.error(
+            `Không tải được thumbnail của ${entry.project.title}:`,
+            error
+          );
+        }
+      }
+
+      if (
+        !cancelled
+      ) {
+        setThumbnails(
+          result
+        );
+      }
+    }
+
+    void loadThumbnails();
+
+    return () => {
+      cancelled =
+        true;
+    };
+  }, [
+    projects,
+  ]);
+
+  /* =====================================================
+     OPEN
+  ===================================================== */
+
+  function handleOpen(
+    entry:
+      ProjectLibraryEntry
+  ) {
+    setActiveProject(
+      entry.project
+    );
+
+    window.location.href =
+      "/editor/demo";
+  }
+
+  /* =====================================================
+     CREATE
+  ===================================================== */
+
+  function handleCreate() {
+    const title =
+      window.prompt(
+        "Tên bài giảng mới:",
+        "Bài giảng mới"
+      );
+
+    if (
+      title === null
+    ) {
+      return;
+    }
+
+    const cleanTitle =
+      title.trim();
+
+    if (!cleanTitle) {
+      alert(
+        "Tên bài giảng không được để trống."
+      );
+
+      return;
+    }
+
+    createNewProject(
+      cleanTitle
+    );
+
+    window.location.href =
+      "/editor/demo";
+  }
+
+  /* =====================================================
+     RENAME
+  ===================================================== */
+
+  function handleRename(
+    entry:
+      ProjectLibraryEntry
+  ) {
+    const newTitle =
+      window.prompt(
+        "Nhập tên mới cho bài giảng:",
+        entry.project.title
+      );
+
+    if (
+      newTitle === null
+    ) {
+      return;
+    }
+
+    const cleanTitle =
+      newTitle.trim();
+
+    if (!cleanTitle) {
+      alert(
+        "Tên bài giảng không được để trống."
+      );
+
+      return;
+    }
+
+    if (
+      cleanTitle ===
+      entry.project.title
+    ) {
+      return;
+    }
+
+    const renamed =
+      renameProjectInLibrary(
+        entry.project.id,
+        cleanTitle
+      );
+
+    if (!renamed) {
+      alert(
+        "Không thể đổi tên dự án."
+      );
+
+      return;
+    }
+
+    refreshProjects();
+  }
+
+  /* =====================================================
+     DUPLICATE
+  ===================================================== */
+
+  async function handleDuplicate(
+    entry:
+      ProjectLibraryEntry
+  ) {
+    if (
+      duplicatingId
+    ) {
+      return;
+    }
+
+    const confirmed =
+      window.confirm(
+        `Nhân bản dự án "${entry.project.title}"?\n\nTrang, câu hỏi, video, điều kiện hoàn thành và ảnh đại diện sẽ được sao chép.`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDuplicatingId(
+      entry.project.id
+    );
+
+    try {
+      const result =
+        await duplicateProjectInLibrary(
+          entry.project
+        );
+
+      refreshProjects();
+
+      if (
+        result.missingVideoPages.length >
+        0
+      ) {
+        alert(
+          [
+            "Đã nhân bản dự án.",
+            "",
+            `Tên mới: ${result.project.title}`,
+            "",
+            "Tuy nhiên không tìm thấy video của:",
+            "",
+            ...result.missingVideoPages.map(
+              (title) =>
+                `• ${title}`
+            ),
+          ].join("\n")
+        );
+
+        return;
+      }
+
+      alert(
+        [
+          "Nhân bản dự án thành công!",
+          "",
+          `Tên mới: ${result.project.title}`,
+        ].join("\n")
+      );
+    } catch (
+      error
+    ) {
+      console.error(
+        "Nhân bản dự án thất bại:",
+        error
+      );
+
+      alert(
+        error instanceof Error
+          ? `Không thể nhân bản dự án:\n${error.message}`
+          : "Không thể nhân bản dự án."
+      );
+    } finally {
+      setDuplicatingId(
+        null
+      );
+    }
+  }
+
+  /* =====================================================
+     DELETE PROJECT
+  ===================================================== */
+
+  function handleDelete(
+    entry:
+      ProjectLibraryEntry
+  ) {
+    const confirmed =
+      window.confirm(
+        [
+          `Bạn có chắc muốn xóa dự án "${entry.project.title}"?`,
+          "",
+          "Thao tác này sẽ xóa:",
+          "• Dự án",
+          "• Video",
+          "• Điều kiện hoàn thành",
+          "• Ảnh đại diện",
+          "",
+          "Không thể hoàn tác.",
+        ].join("\n")
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    deleteProjectFromLibrary(
+      entry.project.id
+    );
+
+    refreshProjects();
+  }
+
+  /* =====================================================
+     UPLOAD THUMBNAIL
+  ===================================================== */
+
+  async function handleThumbnailChange(
+    entry:
+      ProjectLibraryEntry,
+    event:
+      ChangeEvent<HTMLInputElement>
+  ) {
+    const input =
+      event.currentTarget;
+
+    const file =
+      input.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    if (
+      !file.type.startsWith(
+        "image/"
+      )
+    ) {
+      alert(
+        "Vui lòng chọn file ảnh."
+      );
+
+      input.value =
+        "";
+
+      return;
+    }
+
+    /*
+     * Giới hạn 5 MB.
+     */
+    if (
+      file.size >
+      5 * 1024 * 1024
+    ) {
+      alert(
+        "Ảnh đại diện tối đa 5 MB."
+      );
+
+      input.value =
+        "";
+
+      return;
+    }
+
+    setThumbnailBusyId(
+      entry.project.id
+    );
+
+    try {
+      await saveProjectThumbnail(
+        entry.project.id,
+        file
+      );
+
+      const dataUrl =
+        await blobToDataUrl(
+          file
+        );
+
+      setThumbnails(
+        (current) => ({
+          ...current,
+
+          [entry.project.id]:
+            dataUrl,
+        })
+      );
+
+      /*
+       * Cập nhật thời gian project.
+       */
+      saveProjectToLibrary(
+        entry.project
+      );
+
+      refreshProjects();
+    } catch (
+      error
+    ) {
+      console.error(
+        "Không lưu được ảnh đại diện:",
+        error
+      );
+
+      alert(
+        "Không thể lưu ảnh đại diện."
+      );
+    } finally {
+      input.value =
+        "";
+
+      setThumbnailBusyId(
+        null
+      );
+    }
+  }
+
+  /* =====================================================
+     DELETE THUMBNAIL
+  ===================================================== */
+
+  async function handleDeleteThumbnail(
+    entry:
+      ProjectLibraryEntry
+  ) {
+    const confirmed =
+      window.confirm(
+        `Xóa ảnh đại diện của "${entry.project.title}"?`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setThumbnailBusyId(
+      entry.project.id
+    );
+
+    try {
+      await deleteProjectThumbnail(
+        entry.project.id
+      );
+
+      setThumbnails(
+        (current) => {
+          const next = {
+            ...current,
+          };
+
+          delete next[
+            entry.project.id
+          ];
+
+          return next;
+        }
+      );
+
+      saveProjectToLibrary(
+        entry.project
+      );
+
+      refreshProjects();
+    } catch (
+      error
+    ) {
+      console.error(
+        "Không xóa được ảnh đại diện:",
+        error
+      );
+
+      alert(
+        "Không thể xóa ảnh đại diện."
+      );
+    } finally {
+      setThumbnailBusyId(
+        null
+      );
+    }
+  }
+
+  /* =====================================================
+     UI
+  ===================================================== */
+
+  return (
+    <main className="min-h-screen bg-[#061426] px-6 py-8 text-white">
+
+      <div className="mx-auto w-full max-w-7xl">
+
+        {/* HEADER */}
+
+        <div className="flex flex-wrap items-center justify-between gap-4">
+
+          <div>
+
+            <div className="text-sm font-bold uppercase tracking-[0.2em] text-cyan-300">
+              VLearning Studio
+            </div>
+
+            <h1 className="mt-2 text-4xl font-black">
+              Dự án của tôi
+            </h1>
+
+            <p className="mt-2 text-slate-400">
+              Quản lý các bài giảng e-learning đã tạo.
+            </p>
+
+          </div>
+
+          <button
+            type="button"
+            onClick={
+              handleCreate
+            }
+            disabled={
+              duplicatingId !==
+                null ||
+              thumbnailBusyId !==
+                null
+            }
+            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-600 px-6 py-3 font-bold transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Plus
+              size={20}
+            />
+
+            Tạo bài giảng mới
+          </button>
+
+        </div>
+
+        {/* SEARCH + SORT */}
+
+        {projects.length >
+          0 && (
+
+          <div className="mt-8 flex flex-wrap items-center justify-between gap-4">
+
+            <div className="relative w-full max-w-xl">
+
+              <Search
+                size={19}
+                className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+              />
+
+              <input
+                type="text"
+                value={
+                  searchQuery
+                }
+                onChange={(
+                  event
+                ) =>
+                  setSearchQuery(
+                    event.target.value
+                  )
+                }
+                placeholder="Tìm kiếm bài giảng..."
+                className="w-full rounded-xl border border-blue-800 bg-[#102b52] py-3.5 pl-12 pr-12 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-500"
+              />
+
+              {searchQuery && (
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSearchQuery(
+                      ""
+                    )
+                  }
+                  title="Xóa tìm kiếm"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-400 transition hover:bg-blue-900 hover:text-white"
+                >
+                  <X
+                    size={17}
+                  />
+                </button>
+
+              )}
+
+            </div>
+
+            <div className="flex items-center gap-3">
+
+              <select
+                value={
+                  sortMode
+                }
+                onChange={(
+                  event
+                ) =>
+                  setSortMode(
+                    event.target.value as SortMode
+                  )
+                }
+                className="rounded-xl border border-blue-800 bg-[#102b52] px-4 py-3.5 text-sm font-semibold text-white outline-none focus:border-cyan-500"
+              >
+                <option value="updated-desc">
+                  Mới cập nhật
+                </option>
+
+                <option value="updated-asc">
+                  Cũ nhất
+                </option>
+
+                <option value="title-asc">
+                  Tên A → Z
+                </option>
+
+                <option value="title-desc">
+                  Tên Z → A
+                </option>
+              </select>
+
+              <div className="whitespace-nowrap text-sm text-slate-400">
+
+                {searchQuery
+                  ? `${visibleProjects.length} / ${projects.length} dự án`
+                  : `${projects.length} dự án`}
+
+              </div>
+
+            </div>
+
+          </div>
+
+        )}
+
+        {/* EMPTY */}
+
+        {projects.length ===
+        0 ? (
+
+          <div className="mt-12 rounded-3xl border border-dashed border-blue-700 bg-[#102b52] p-12 text-center">
+
+            <FolderOpen
+              size={52}
+              className="mx-auto text-cyan-300"
+            />
+
+            <h2 className="mt-5 text-2xl font-black">
+              Chưa có dự án
+            </h2>
+
+            <p className="mt-2 text-slate-400">
+              Hãy tạo bài giảng đầu tiên của bạn.
+            </p>
+
+          </div>
+
+        ) : visibleProjects.length ===
+          0 ? (
+
+          <div className="mt-8 rounded-3xl border border-dashed border-blue-800 bg-[#102b52] p-12 text-center">
+
+            <Search
+              size={46}
+              className="mx-auto text-cyan-300"
+            />
+
+            <h2 className="mt-5 text-2xl font-black">
+              Không tìm thấy bài giảng
+            </h2>
+
+            <p className="mt-2 text-slate-400">
+              Không có dự án phù hợp với “{searchQuery}”.
+            </p>
+
+          </div>
+
+        ) : (
+
+          /* PROJECT GRID */
+
+          <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+
+            {visibleProjects.map(
+              (entry) => {
+                const project =
+                  entry.project;
+
+                const quizCount =
+                  getProjectQuizCount(
+                    project
+                  );
+
+                const thumbnail =
+                  thumbnails[
+                    project.id
+                  ];
+
+                const isDuplicating =
+                  duplicatingId ===
+                  project.id;
+
+                const isThumbnailBusy =
+                  thumbnailBusyId ===
+                  project.id;
+
+                const busy =
+                  duplicatingId !==
+                    null ||
+                  thumbnailBusyId !==
+                    null;
+
+                return (
+                  <article
+                    key={
+                      project.id
+                    }
+                    className="overflow-hidden rounded-2xl border border-blue-800 bg-[#123665] shadow-xl"
+                  >
+
+                    {/* THUMBNAIL */}
+
+                    <div className="group relative h-44 overflow-hidden bg-gradient-to-br from-blue-900 via-indigo-900 to-purple-900">
+
+                      {thumbnail ? (
+
+                        <img
+                          src={
+                            thumbnail
+                          }
+                          alt={`Ảnh đại diện ${project.title}`}
+                          className="h-full w-full object-cover"
+                        />
+
+                      ) : (
+
+                        <div className="flex h-full flex-col items-center justify-center px-6 text-center">
+
+                          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/10 text-cyan-300 backdrop-blur">
+
+                            <FolderOpen
+                              size={31}
+                            />
+
+                          </div>
+
+                          <div className="mt-3 line-clamp-2 text-sm font-bold text-white/80">
+                            {project.title}
+                          </div>
+
+                        </div>
+
+                      )}
+
+                      {/* IMAGE ACTIONS */}
+
+                      <div className="absolute inset-x-0 bottom-0 flex items-center justify-end gap-2 bg-gradient-to-t from-black/80 to-transparent p-3 pt-10">
+
+                        <input
+                          id={`thumbnail-${project.id}`}
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp,image/gif"
+                          className="hidden"
+                          disabled={
+                            busy
+                          }
+                          onChange={(
+                            event
+                          ) =>
+                            void handleThumbnailChange(
+                              entry,
+                              event
+                            )
+                          }
+                        />
+
+                        <label
+                          htmlFor={`thumbnail-${project.id}`}
+                          className={`flex cursor-pointer items-center gap-1.5 rounded-lg bg-black/60 px-3 py-2 text-xs font-bold text-white backdrop-blur transition hover:bg-black/80 ${
+                            busy
+                              ? "pointer-events-none opacity-50"
+                              : ""
+                          }`}
+                        >
+
+                          {isThumbnailBusy ? (
+                            <Loader2
+                              size={14}
+                              className="animate-spin"
+                            />
+                          ) : (
+                            <ImagePlus
+                              size={14}
+                            />
+                          )}
+
+                          {thumbnail
+                            ? "Đổi ảnh"
+                            : "Thêm ảnh"}
+
+                        </label>
+
+                        {thumbnail && (
+
+                          <button
+                            type="button"
+                            title="Xóa ảnh đại diện"
+                            disabled={
+                              busy
+                            }
+                            onClick={() =>
+                              void handleDeleteThumbnail(
+                                entry
+                              )
+                            }
+                            className="flex items-center justify-center rounded-lg bg-red-950/80 p-2 text-red-200 backdrop-blur transition hover:bg-red-900 disabled:opacity-50"
+                          >
+                            <ImageOff
+                              size={15}
+                            />
+                          </button>
+
+                        )}
+
+                      </div>
+
+                    </div>
+
+                    {/* HEADER */}
+
+                    <div className="border-b border-blue-800 bg-[#173f73] p-5">
+
+                      <div className="text-xs font-bold uppercase tracking-wider text-cyan-300">
+                        Bài giảng
+                      </div>
+
+                      <h2 className="mt-2 line-clamp-2 min-h-[56px] text-xl font-black">
+                        {project.title}
+                      </h2>
+
+                    </div>
+
+                    {/* CONTENT */}
+
+                    <div className="p-5">
+
+                      <div className="grid grid-cols-2 gap-3">
+
+                        <div className="rounded-xl bg-blue-950/50 p-3">
+
+                          <div className="flex items-center gap-2 text-xs text-slate-400">
+                            <Layers3
+                              size={14}
+                            />
+
+                            Số trang
+                          </div>
+
+                          <div className="mt-2 text-xl font-black text-cyan-300">
+                            {project.pages.length}
+                          </div>
+
+                        </div>
+
+                        <div className="rounded-xl bg-blue-950/50 p-3">
+
+                          <div className="flex items-center gap-2 text-xs text-slate-400">
+                            <FileQuestion
+                              size={14}
+                            />
+
+                            Câu hỏi
+                          </div>
+
+                          <div className="mt-2 text-xl font-black text-purple-300">
+                            {quizCount}
+                          </div>
+
+                        </div>
+
+                      </div>
+
+                      <div className="mt-4 flex items-center gap-2 text-xs text-slate-400">
+
+                        <Clock3
+                          size={14}
+                        />
+
+                        Cập nhật:{" "}
+
+                        {formatUpdatedAt(
+                          entry.updatedAt
+                        )}
+
+                      </div>
+
+                      {/* ACTIONS */}
+
+                      <div className="mt-5 grid grid-cols-2 gap-2">
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleOpen(
+                              entry
+                            )
+                          }
+                          disabled={
+                            busy
+                          }
+                          className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 font-bold transition hover:bg-blue-500 disabled:opacity-50"
+                        >
+                          <FolderOpen
+                            size={18}
+                          />
+
+                          Mở dự án
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void handleDuplicate(
+                              entry
+                            )
+                          }
+                          disabled={
+                            busy
+                          }
+                          className="flex items-center justify-center gap-2 rounded-xl bg-purple-700 px-4 py-3 font-bold transition hover:bg-purple-600 disabled:opacity-50"
+                        >
+
+                          {isDuplicating ? (
+                            <Loader2
+                              size={18}
+                              className="animate-spin"
+                            />
+                          ) : (
+                            <Copy
+                              size={18}
+                            />
+                          )}
+
+                          {isDuplicating
+                            ? "Đang sao..."
+                            : "Nhân bản"}
+
+                        </button>
+
+                      </div>
+
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleRename(
+                              entry
+                            )
+                          }
+                          disabled={
+                            busy
+                          }
+                          className="flex items-center justify-center gap-2 rounded-xl border border-cyan-800 bg-cyan-950/40 px-4 py-2.5 text-sm font-bold text-cyan-200 transition hover:bg-cyan-900 disabled:opacity-50"
+                        >
+                          <Pencil
+                            size={16}
+                          />
+
+                          Đổi tên
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleDelete(
+                              entry
+                            )
+                          }
+                          disabled={
+                            busy
+                          }
+                          className="flex items-center justify-center gap-2 rounded-xl border border-red-800 bg-red-950/50 px-4 py-2.5 text-sm font-bold text-red-300 transition hover:bg-red-900 disabled:opacity-50"
+                        >
+                          <Trash2
+                            size={16}
+                          />
+
+                          Xóa dự án
+                        </button>
+
+                      </div>
+
+                    </div>
+
+                  </article>
+                );
+              }
+            )}
+
+          </div>
+
+        )}
+
+      </div>
+
+    </main>
+  );
+}

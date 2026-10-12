@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  />
+
+  <title>SCORM 1.2 LMS Test</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: #071426;
+      color: white;
+      font-family: Arial, sans-serif;
+    }
+
+    .layout {
+      height: 100vh;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 420px;
+    }
+
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: black;
+    }
+
+    .panel {
+      overflow-y: auto;
+      border-left: 1px solid #2558a6;
+      background: #102b52;
+      padding: 18px;
+    }
+
+    h2 {
+      margin-top: 0;
+    }
+
+    .status {
+      margin-bottom: 16px;
+      border-radius: 12px;
+      background: #071d3c;
+      padding: 14px;
+    }
+
+    .row {
+      margin-top: 8px;
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      font-size: 14px;
+    }
+
+    .value {
+      color: #67e8f9;
+      font-weight: bold;
+    }
+
+    #log {
+      margin-top: 16px;
+      min-height: 300px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      border-radius: 12px;
+      background: #020817;
+      padding: 12px;
+      color: #cbd5e1;
+      font-family: Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    button {
+      width: 100%;
+      margin-top: 12px;
+      border: 0;
+      border-radius: 10px;
+      background: #2563eb;
+      color: white;
+      padding: 11px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="layout">
+
+    <iframe
+      src="/scorm-test/index.html"
+      title="SCORM Course"
+    ></iframe>
+
+    <aside class="panel">
+
+      <h2>SCORM 1.2 LMS TEST</h2>
+
+      <div class="status">
+
+        <div class="row">
+          <span>Initialize</span>
+          <span
+            id="initialized"
+            class="value"
+          >
+            Chưa
+          </span>
+        </div>
+
+        <div class="row">
+          <span>lesson_status</span>
+          <span
+            id="lesson-status"
+            class="value"
+          >
+            not attempted
+          </span>
+        </div>
+
+        <div class="row">
+          <span>score.raw</span>
+          <span
+            id="score-raw"
+            class="value"
+          >
+            -
+          </span>
+        </div>
+
+        <div class="row">
+          <span>score.min</span>
+          <span
+            id="score-min"
+            class="value"
+          >
+            -
+          </span>
+        </div>
+
+        <div class="row">
+          <span>score.max</span>
+          <span
+            id="score-max"
+            class="value"
+          >
+            -
+          </span>
+        </div>
+
+        <div class="row">
+          <span>Commit</span>
+          <span
+            id="commit-count"
+            class="value"
+          >
+            0
+          </span>
+        </div>
+
+        <div class="row">
+          <span>Finish</span>
+          <span
+            id="finish-status"
+            class="value"
+          >
+            Chưa
+          </span>
+        </div>
+
+      </div>
+
+      <button
+        type="button"
+        onclick="clearLog()"
+      >
+        Xóa log
+      </button>
+
+      <div id="log"></div>
+
+    </aside>
+
+  </div>
+
+  <script>
+    const values = {
+      "cmi.core.lesson_status":
+        "not attempted",
+
+      "cmi.core.score.raw":
+        "",
+
+      "cmi.core.score.min":
+        "",
+
+      "cmi.core.score.max":
+        "",
+    };
+
+    let initialized =
+      false;
+
+    let commitCount =
+      0;
+
+    function addLog(message) {
+      const log =
+        document.getElementById(
+          "log"
+        );
+
+      const time =
+        new Date()
+          .toLocaleTimeString();
+
+      log.textContent +=
+        `[${time}] ${message}\n`;
+
+      log.scrollTop =
+        log.scrollHeight;
+    }
+
+    function refreshUi() {
+      document.getElementById(
+        "initialized"
+      ).textContent =
+        initialized
+          ? "OK"
+          : "Chưa";
+
+      document.getElementById(
+        "lesson-status"
+      ).textContent =
+        values[
+          "cmi.core.lesson_status"
+        ] || "-";
+
+      document.getElementById(
+        "score-raw"
+      ).textContent =
+        values[
+          "cmi.core.score.raw"
+        ] || "-";
+
+      document.getElementById(
+        "score-min"
+      ).textContent =
+        values[
+          "cmi.core.score.min"
+        ] || "-";
+
+      document.getElementById(
+        "score-max"
+      ).textContent =
+        values[
+          "cmi.core.score.max"
+        ] || "-";
+
+      document.getElementById(
+        "commit-count"
+      ).textContent =
+        String(
+          commitCount
+        );
+    }
+
+    function clearLog() {
+      document.getElementById(
+        "log"
+      ).textContent =
+        "";
+    }
+
+    /*
+     * SCORM 1.2 API
+     *
+     * Player trong iframe sẽ tìm
+     * window.parent.API.
+     */
+    window.API = {
+      LMSInitialize: function (
+        parameter
+      ) {
+        initialized =
+          true;
+
+        addLog(
+          `LMSInitialize("${parameter}")`
+        );
+
+        refreshUi();
+
+        return "true";
+      },
+
+      LMSFinish: function (
+        parameter
+      ) {
+        addLog(
+          `LMSFinish("${parameter}")`
+        );
+
+        document.getElementById(
+          "finish-status"
+        ).textContent =
+          "OK";
+
+        return "true";
+      },
+
+      LMSGetValue: function (
+        element
+      ) {
+        const value =
+          values[element] ??
+          "";
+
+        addLog(
+          `LMSGetValue("${element}") → "${value}"`
+        );
+
+        return value;
+      },
+
+      LMSSetValue: function (
+        element,
+        value
+      ) {
+        values[element] =
+          String(value);
+
+        addLog(
+          `LMSSetValue("${element}", "${value}")`
+        );
+
+        refreshUi();
+
+        return "true";
+      },
+
+      LMSCommit: function (
+        parameter
+      ) {
+        commitCount++;
+
+        addLog(
+          `LMSCommit("${parameter}")`
+        );
+
+        refreshUi();
+
+        return "true";
+      },
+
+      LMSGetLastError:
+        function () {
+          return "0";
+        },
+
+      LMSGetErrorString:
+        function () {
+          return "No error";
+        },
+
+      LMSGetDiagnostic:
+        function () {
+          return "";
+        },
+    };
+
+    refreshUi();
+
+    addLog(
+      "LMS giả lập đã sẵn sàng."
+    );
+  </script>
+
+</body>
+</html>

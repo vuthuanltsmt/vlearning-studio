@@ -1,0 +1,22 @@
+﻿"use client";
+
+export default function PreviewPage() {
+  return (
+    <main style={{
+      minHeight: "100vh",
+      background: "#061426",
+      color: "white",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center"
+    }}>
+      <div style={{ textAlign: "center" }}>
+        <h1>XEM TRƯỚC BÀI GIẢNG</h1>
+        <p>Route Preview đã hoạt động.</p>
+        <a href="/editor/demo" style={{ color: "#38bdf8" }}>
+          Quay lại thiết kế
+        </a>
+      </div>
+    </main>
+  );
+}

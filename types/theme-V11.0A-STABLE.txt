@@ -1,0 +1,29 @@
+export type ThemeMode =
+  | "dark"
+  | "light";
+
+export type ThemeFont =
+  | "system"
+  | "sans"
+  | "serif";
+
+export type ThemeButtonStyle =
+  | "rounded"
+  | "pill"
+  | "square";
+
+export type ProjectTheme = {
+  version: 1;
+  courseTitle: string;
+  mode: ThemeMode;
+  primaryColor: string;
+  accentColor: string;
+  backgroundColor: string;
+  surfaceColor: string;
+  textColor: string;
+  fontFamily: ThemeFont;
+  buttonStyle: ThemeButtonStyle;
+  playerRadius: number;
+  showProgress: boolean;
+  showPageNavigation: boolean;
+};

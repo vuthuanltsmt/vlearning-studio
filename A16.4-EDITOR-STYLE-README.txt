@@ -1,0 +1,34 @@
+VLEARNING V1.1A16.4 - EDITOR STYLE REPAIR
+=============================================
+
+Symptom fixed:
+- /projects is styled normally
+- /editor/demo opens as plain browser HTML
+- buttons, text, panels lose Tailwind styling
+- browser shows default Times New Roman / default buttons
+
+What this package does:
+1. Explicitly imports app/globals.css in app/editor/demo/layout.tsx
+2. Keeps the A16 server-side ADMIN/TEACHER editor guard
+3. Includes a clean repair script that:
+   - stops the server listening on port 3000
+   - removes the old .next build
+   - rebuilds Next.js
+   - verifies CSS files were generated
+   - starts VLearning again
+
+Install:
+Extract into:
+  C:\Users\Admin\elearning-studio
+
+Then run:
+  REPAIR-A16.4-EDITOR-STYLE.cmd
+
+After the script finishes, open:
+  http://localhost:3000/editor/demo
+
+Press:
+  Ctrl + F5
+
+If the build fails, do not keep changing files.
+Send the FIRST build error shown in the command window.

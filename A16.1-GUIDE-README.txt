@@ -1,0 +1,53 @@
+VLEARNING STUDIO V1.1A16.1 - DETAILED GUIDE CENTER
+======================================================
+
+This cumulative package keeps A16 RBAC/server authentication and upgrades
+the "Hướng dẫn" menu into a full in-app help center.
+
+NEW GUIDE FEATURES
+------------------
+- Detailed searchable Help Center
+- Category filters
+- 12 practical guides
+- Click "Mở hướng dẫn" to open a full article
+- Step-by-step instructions
+- Checklist for every guide
+- Troubleshooting blocks
+- Buttons that jump to the related VLearning function
+- Copy guide text
+- Download guide as TXT
+- Local "ĐÃ MỞ" reading progress
+
+GUIDES INCLUDED
+---------------
+1. Khởi động VLearning Studio
+2. Tạo tài khoản và đăng nhập Server
+3. Phân quyền Admin / Giáo viên / Học viên
+4. Tạo và quản lý Project
+5. Editor: Trang, video và tiến trình bài học
+6. Tạo 7 dạng câu hỏi tương tác
+7. Game Builder và gắn Game vào bài giảng
+8. AI Kịch bản chi tiết
+9. Preview và điều kiện hoàn thành
+10. Xuất SCORM 1.2 và kiểm tra LMS
+11. Backup và Restore Project
+12. Xử lý lỗi thường gặp
+
+INSTALL
+-------
+Extract over:
+  C:\Users\Admin\elearning-studio
+
+Then:
+  npm.cmd run build
+
+Start:
+  START-VLEARNING.cmd
+
+Open:
+  http://localhost:3000/projects
+
+NOTE
+----
+If upgrading from A16 and the A16 database is already set up, this guide-only
+upgrade does not require another prisma db push.

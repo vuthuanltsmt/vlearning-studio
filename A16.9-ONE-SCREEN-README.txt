@@ -1,0 +1,41 @@
+VLEARNING STUDIO V1.1A16.9 - ONE SCREEN OVERVIEW
+=================================================
+
+This version is intentionally much smaller than A16.8.
+
+Desktop/laptop target:
+- See the VLearning brand bar
+- See both creation cards
+- See the "Bài giảng mới nhất" section
+within the same screen much more easily.
+
+Changes:
+- Main dashboard max width: 1080px
+- Hero reduced to approximately 92px
+- Hero text reduced; VLEARNING STUDIO stays on one line
+- Hero image reduced to 72px
+- Create section reduced heavily
+- Both product cards are only about 140px high on desktop
+- Removed large descriptions and bottom chip rows from cards
+- Kept only essential visual information
+- Recent Projects moved directly below the cards
+- No Khóa học HUB
+- Existing click actions remain:
+    Bài giảng tương tác -> create project
+    Trò chơi tương tác -> Game Builder
+
+INSTALL
+-------
+Extract into:
+  C:\Users\Admin\elearning-studio
+
+Then run:
+  REBUILD-A16.9-ONE-SCREEN.cmd
+
+Open:
+  http://localhost:3000/projects
+
+Press:
+  Ctrl + F5
+
+No Prisma/database setup is required.

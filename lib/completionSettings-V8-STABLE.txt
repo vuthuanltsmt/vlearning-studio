@@ -1,0 +1,124 @@
+export type CompletionSettings = {
+  passScorePercent: number;
+  minWatchPercent: number;
+  requireAllQuizzes: boolean;
+};
+
+export const DEFAULT_COMPLETION_SETTINGS: CompletionSettings = {
+  passScorePercent: 80,
+  minWatchPercent: 90,
+  requireAllQuizzes: true,
+};
+
+const STORAGE_KEY =
+  "vlearning-studio-completion-settings-v1";
+
+function clampPercent(
+  value: number
+) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.min(
+    100,
+    Math.max(
+      0,
+      Math.round(value)
+    )
+  );
+}
+
+export function sanitizeCompletionSettings(
+  input?: Partial<CompletionSettings> | null
+): CompletionSettings {
+  return {
+    passScorePercent:
+      clampPercent(
+        input?.passScorePercent ??
+          DEFAULT_COMPLETION_SETTINGS.passScorePercent
+      ),
+
+    minWatchPercent:
+      clampPercent(
+        input?.minWatchPercent ??
+          DEFAULT_COMPLETION_SETTINGS.minWatchPercent
+      ),
+
+    requireAllQuizzes:
+      typeof input?.requireAllQuizzes === "boolean"
+        ? input.requireAllQuizzes
+        : DEFAULT_COMPLETION_SETTINGS.requireAllQuizzes,
+  };
+}
+
+export function loadCompletionSettings(): CompletionSettings {
+  if (
+    typeof window === "undefined"
+  ) {
+    return DEFAULT_COMPLETION_SETTINGS;
+  }
+
+  try {
+    const raw =
+      window.localStorage.getItem(
+        STORAGE_KEY
+      );
+
+    if (!raw) {
+      return DEFAULT_COMPLETION_SETTINGS;
+    }
+
+    const parsed =
+      JSON.parse(raw);
+
+    return sanitizeCompletionSettings(
+      parsed
+    );
+  } catch (
+    error
+  ) {
+    console.error(
+      "Không đọc được điều kiện hoàn thành:",
+      error
+    );
+
+    return DEFAULT_COMPLETION_SETTINGS;
+  }
+}
+
+export function saveCompletionSettings(
+  settings: CompletionSettings
+) {
+  if (
+    typeof window === "undefined"
+  ) {
+    return;
+  }
+
+  const safeSettings =
+    sanitizeCompletionSettings(
+      settings
+    );
+
+  window.localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify(
+      safeSettings
+    )
+  );
+
+  /*
+   * Báo cho các component khác
+   * trong cùng tab biết settings đã đổi.
+   */
+  window.dispatchEvent(
+    new CustomEvent(
+      "vlearning-completion-settings-changed",
+      {
+        detail:
+          safeSettings,
+      }
+    )
+  );
+}

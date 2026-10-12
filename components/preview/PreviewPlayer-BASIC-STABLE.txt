@@ -1,0 +1,640 @@
+"use client";
+
+import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  Pause,
+  Play,
+} from "lucide-react";
+
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+import {
+  useEditorStore,
+} from "@/stores/editorStore";
+
+import {
+  getVideo,
+} from "@/lib/videoDb";
+
+import {
+  formatTime,
+} from "@/types/lesson";
+
+export function PreviewPlayer() {
+  const {
+    project,
+    hydrated,
+    hydrate,
+  } = useEditorStore();
+
+  const [
+    pageIndex,
+    setPageIndex,
+  ] = useState(0);
+
+  const page =
+    project.pages[pageIndex];
+
+  const videoRef =
+    useRef<HTMLVideoElement>(
+      null
+    );
+
+  const [
+    videoUrl,
+    setVideoUrl,
+  ] =
+    useState<string | null>(
+      null
+    );
+
+  const [
+    loadingVideo,
+    setLoadingVideo,
+  ] =
+    useState(false);
+
+  const [
+    currentTime,
+    setCurrentTime,
+  ] =
+    useState(0);
+
+  const [
+    duration,
+    setDuration,
+  ] =
+    useState(0);
+
+  const [
+    isPlaying,
+    setIsPlaying,
+  ] =
+    useState(false);
+
+  /* ==============================
+     LOAD PROJECT
+  ============================== */
+
+  useEffect(() => {
+    hydrate();
+  }, [hydrate]);
+
+  /* ==============================
+     PAGE INDEX SAFETY
+  ============================== */
+
+  useEffect(() => {
+    if (
+      project.pages.length ===
+      0
+    ) {
+      return;
+    }
+
+    if (
+      pageIndex >=
+      project.pages.length
+    ) {
+      setPageIndex(0);
+    }
+  }, [
+    pageIndex,
+    project.pages.length,
+  ]);
+
+  /* ==============================
+     LOAD VIDEO FROM INDEXEDDB
+  ============================== */
+
+  useEffect(() => {
+    if (
+      !hydrated ||
+      !page
+    ) {
+      return;
+    }
+
+    let cancelled =
+      false;
+
+    let objectUrl:
+      string | null =
+      null;
+
+    async function loadVideo() {
+      setLoadingVideo(
+        true
+      );
+
+      setVideoUrl(
+        null
+      );
+
+      try {
+        const file =
+          await getVideo(
+            page.id
+          );
+
+        if (
+          cancelled ||
+          !file
+        ) {
+          return;
+        }
+
+        objectUrl =
+          URL.createObjectURL(
+            file
+          );
+
+        setVideoUrl(
+          objectUrl
+        );
+      } catch (
+        error
+      ) {
+        console.error(
+          "Không tải được video Preview:",
+          error
+        );
+      } finally {
+        if (!cancelled) {
+          setLoadingVideo(
+            false
+          );
+        }
+      }
+    }
+
+    void loadVideo();
+
+    return () => {
+      cancelled =
+        true;
+
+      if (objectUrl) {
+        URL.revokeObjectURL(
+          objectUrl
+        );
+      }
+    };
+  }, [
+    hydrated,
+    page?.id,
+  ]);
+
+  /* ==============================
+     RESET PLAYER
+  ============================== */
+
+  useEffect(() => {
+    videoRef.current?.pause();
+
+    setCurrentTime(0);
+
+    setDuration(
+      page?.duration ?? 0
+    );
+
+    setIsPlaying(false);
+  }, [
+    page?.id,
+  ]);
+
+  /* ==============================
+     PLAY / PAUSE
+  ============================== */
+
+  function togglePlay() {
+    const video =
+      videoRef.current;
+
+    if (!video) {
+      return;
+    }
+
+    if (video.paused) {
+      void video.play();
+    } else {
+      video.pause();
+    }
+  }
+
+  /* ==============================
+     SEEK
+  ============================== */
+
+  function handleSeek(
+    time: number
+  ) {
+    const video =
+      videoRef.current;
+
+    if (!video) {
+      return;
+    }
+
+    video.currentTime =
+      time;
+
+    setCurrentTime(
+      time
+    );
+  }
+
+  /* ==============================
+     PAGE NAVIGATION
+  ============================== */
+
+  function previousPage() {
+    if (
+      pageIndex <= 0
+    ) {
+      return;
+    }
+
+    setPageIndex(
+      (old) =>
+        old - 1
+    );
+  }
+
+  function nextPage() {
+    if (
+      pageIndex >=
+      project.pages.length -
+        1
+    ) {
+      return;
+    }
+
+    setPageIndex(
+      (old) =>
+        old + 1
+    );
+  }
+
+  function backToEditor() {
+    window.location.href =
+      "/editor/demo";
+  }
+
+  /* ==============================
+     LOADING
+  ============================== */
+
+  if (!hydrated) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#061426] text-white">
+        <div className="text-xl font-bold">
+          Đang tải bài giảng...
+        </div>
+      </main>
+    );
+  }
+
+  /* ==============================
+     EMPTY PROJECT
+  ============================== */
+
+  if (!page) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#061426] text-white">
+        Không có trang bài giảng.
+      </main>
+    );
+  }
+
+  /* ==============================
+     UI
+  ============================== */
+
+  return (
+    <div className="flex h-screen flex-col overflow-hidden bg-[#061426] text-white">
+
+      {/* TOPBAR */}
+
+      <header className="shrink-0 border-b border-blue-800 bg-[#143766]">
+
+        <div className="flex h-16 items-center justify-between gap-4 px-6">
+
+          <div className="flex min-w-0 items-center gap-4">
+
+            <button
+              type="button"
+              onClick={
+                backToEditor
+              }
+              className="rounded-lg p-2 text-slate-300 transition hover:bg-blue-900 hover:text-white"
+              title="Quay lại thiết kế"
+            >
+              <ArrowLeft
+                size={22}
+              />
+            </button>
+
+            <div className="min-w-0">
+
+              <div className="truncate font-bold">
+                {project.title}
+              </div>
+
+              <div className="text-xs text-cyan-300">
+                Chế độ xem trước
+              </div>
+
+            </div>
+
+          </div>
+
+          <div className="rounded-xl bg-blue-950 px-4 py-2 text-sm">
+
+            Trang{" "}
+
+            <strong className="text-cyan-300">
+              {pageIndex + 1}
+            </strong>
+
+            {" / "}
+
+            {project.pages.length}
+
+          </div>
+
+        </div>
+
+      </header>
+
+      {/* MAIN */}
+
+      <main className="flex min-h-0 flex-1 flex-col px-5 py-4">
+
+        <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col">
+
+          {/* PAGE INFO */}
+
+          <div className="mb-3 shrink-0">
+
+            <div className="text-xs font-bold uppercase tracking-wider text-cyan-300">
+              Trang {pageIndex + 1}
+            </div>
+
+            <div className="mt-1 flex items-end justify-between gap-4">
+
+              <div>
+
+                <h1 className="text-2xl font-black">
+                  {page.title}
+                </h1>
+
+                <div className="mt-1 text-sm text-slate-400">
+
+                  {page.quizzes.length} câu hỏi tương tác
+
+                </div>
+
+              </div>
+
+              <div className="hidden max-w-[360px] truncate text-sm text-slate-400 md:block">
+                {page.videoName}
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* VIDEO */}
+
+          <section className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-2xl border border-blue-700 bg-black shadow-2xl">
+
+            {loadingVideo ? (
+
+              <div className="flex h-full w-full items-center justify-center text-slate-400">
+                Đang tải video...
+              </div>
+
+            ) : videoUrl ? (
+
+              <video
+                key={
+                  page.id
+                }
+                ref={
+                  videoRef
+                }
+                src={
+                  videoUrl
+                }
+                preload="metadata"
+                className="h-full max-h-full w-full bg-black object-contain"
+                onLoadedMetadata={(
+                  event
+                ) => {
+                  setDuration(
+                    event.currentTarget
+                      .duration
+                  );
+                }}
+                onTimeUpdate={(
+                  event
+                ) => {
+                  setCurrentTime(
+                    event.currentTarget
+                      .currentTime
+                  );
+                }}
+                onPlay={() =>
+                  setIsPlaying(
+                    true
+                  )
+                }
+                onPause={() =>
+                  setIsPlaying(
+                    false
+                  )
+                }
+              />
+
+            ) : (
+
+              <div className="flex h-full w-full flex-col items-center justify-center text-center">
+
+                <div className="text-xl font-bold">
+                  Trang này chưa có video
+                </div>
+
+                <div className="mt-2 text-sm text-slate-400">
+                  Quay lại chế độ thiết kế để thêm video.
+                </div>
+
+              </div>
+
+            )}
+
+          </section>
+
+          {/* PLAYER */}
+
+          <section className="mt-3 shrink-0 rounded-xl border border-blue-800 bg-[#0d2850] px-4 py-3">
+
+            <div className="flex items-center gap-4">
+
+              <button
+                type="button"
+                onClick={
+                  togglePlay
+                }
+                disabled={
+                  !videoUrl
+                }
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cyan-500 text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+
+                {isPlaying ? (
+
+                  <Pause
+                    size={20}
+                    fill="currentColor"
+                  />
+
+                ) : (
+
+                  <Play
+                    size={20}
+                    fill="currentColor"
+                  />
+
+                )}
+
+              </button>
+
+              <div className="w-32 shrink-0 font-mono text-sm">
+
+                {formatTime(
+                  currentTime
+                )}
+
+                {" / "}
+
+                {formatTime(
+                  duration
+                )}
+
+              </div>
+
+              <input
+                type="range"
+                min={0}
+                max={
+                  duration > 0
+                    ? duration
+                    : 1
+                }
+                step={0.01}
+                value={
+                  Math.min(
+                    currentTime,
+                    duration > 0
+                      ? duration
+                      : 1
+                  )
+                }
+                disabled={
+                  !videoUrl
+                }
+                onChange={(
+                  event
+                ) =>
+                  handleSeek(
+                    Number(
+                      event.target
+                        .value
+                    )
+                  )
+                }
+                className="min-w-0 flex-1 cursor-pointer"
+              />
+
+            </div>
+
+          </section>
+
+          {/* PAGE NAVIGATION */}
+
+          <section className="mt-3 shrink-0">
+
+            <div className="flex items-center justify-between gap-4">
+
+              <button
+                type="button"
+                onClick={
+                  previousPage
+                }
+                disabled={
+                  pageIndex === 0
+                }
+                className="flex items-center gap-2 rounded-xl border border-blue-600 bg-blue-950 px-5 py-2.5 font-bold transition hover:bg-blue-900 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+
+                <ChevronLeft
+                  size={18}
+                />
+
+                Trang trước
+
+              </button>
+
+              <div className="text-sm text-slate-400">
+
+                Trang{" "}
+
+                <strong className="text-white">
+                  {pageIndex + 1}
+                </strong>
+
+                {" / "}
+
+                {project.pages.length}
+
+              </div>
+
+              <button
+                type="button"
+                onClick={
+                  nextPage
+                }
+                disabled={
+                  pageIndex ===
+                  project.pages.length -
+                    1
+                }
+                className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-600 px-5 py-2.5 font-bold transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+
+                Trang tiếp theo
+
+                <ChevronRight
+                  size={18}
+                />
+
+              </button>
+
+            </div>
+
+          </section>
+
+        </div>
+
+      </main>
+
+    </div>
+  );
+}

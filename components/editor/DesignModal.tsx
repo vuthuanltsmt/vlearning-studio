@@ -1,0 +1,2782 @@
+"use client";
+
+import {
+  Award,
+  BookOpen,
+  Check,
+  CopyPlus,
+  Flag,
+  ImagePlus,
+  Palette,
+  RotateCcw,
+  Trash2,
+  X,
+} from "lucide-react";
+
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
+import {
+  createDefaultProjectTheme,
+  loadProjectThemeForProject,
+  resetProjectThemeForProject,
+  saveProjectThemeForProject,
+} from "@/lib/projectTheme";
+
+import {
+  applyBuiltInCertificateTemplate,
+  applyCertificateTemplateData,
+  BUILT_IN_CERTIFICATE_TEMPLATES,
+  deleteSavedCertificateTemplate,
+  listSavedCertificateTemplates,
+  saveCertificateTemplate,
+} from "@/lib/certificateTemplates";
+
+import type {
+  SavedCertificateTemplate,
+} from "@/lib/certificateTemplates";
+
+import type {
+  ProjectTheme,
+  ThemeButtonStyle,
+  ThemeFont,
+  ThemeMode,
+} from "@/types/theme";
+
+type Props = {
+  open: boolean;
+  projectId: string;
+  projectTitle: string;
+  onClose: () => void;
+};
+
+const HEX_COLOR =
+  /^#[0-9a-fA-F]{6}$/;
+
+/* =========================================================
+   HELPERS
+========================================================= */
+
+function getFontFamily(
+  font: ThemeFont
+) {
+  switch (font) {
+    case "serif":
+      return "Georgia, 'Times New Roman', serif";
+
+    case "sans":
+      return "Arial, Helvetica, sans-serif";
+
+    case "system":
+    default:
+      return "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+  }
+}
+
+function getButtonRadius(
+  style: ThemeButtonStyle
+) {
+  switch (style) {
+    case "pill":
+      return 999;
+
+    case "square":
+      return 4;
+
+    case "rounded":
+    default:
+      return 12;
+  }
+}
+
+function safeColor(
+  value: string,
+  fallback: string
+) {
+  return HEX_COLOR.test(value)
+    ? value
+    : fallback;
+}
+
+/* =========================================================
+   COMPONENT
+========================================================= */
+
+export function DesignModal({
+  open,
+  projectId,
+  projectTitle,
+  onClose,
+}: Props) {
+  const [
+    draft,
+    setDraft,
+  ] =
+    useState<ProjectTheme>(
+      createDefaultProjectTheme(
+        projectTitle
+      )
+    );
+
+  const [
+    savedMessage,
+    setSavedMessage,
+  ] =
+    useState("");
+
+  const [
+    previewMode,
+    setPreviewMode,
+  ] =
+    useState<
+      "player" |
+      "intro" |
+      "outro" |
+      "certificate"
+    >(
+      "player"
+    );
+
+  const [
+    customCertificateTemplates,
+    setCustomCertificateTemplates,
+  ] =
+    useState<
+      SavedCertificateTemplate[]
+    >([]);
+
+  const [
+    newCertificateTemplateName,
+    setNewCertificateTemplateName,
+  ] =
+    useState("");
+
+  /* =====================================================
+     LOAD
+  ===================================================== */
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    setDraft(
+      loadProjectThemeForProject(
+        projectId,
+        projectTitle
+      )
+    );
+
+    setSavedMessage("");
+    setPreviewMode(
+      "player"
+    );
+
+    setCustomCertificateTemplates(
+      listSavedCertificateTemplates()
+    );
+
+    setNewCertificateTemplateName(
+      ""
+    );
+  }, [
+    open,
+    projectId,
+    projectTitle,
+  ]);
+
+  /* =====================================================
+     ESC
+  ===================================================== */
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    function handleKeyDown(
+      event: KeyboardEvent
+    ) {
+      if (
+        event.key ===
+        "Escape"
+      ) {
+        onClose();
+      }
+    }
+
+    window.addEventListener(
+      "keydown",
+      handleKeyDown
+    );
+
+    return () => {
+      window.removeEventListener(
+        "keydown",
+        handleKeyDown
+      );
+    };
+  }, [
+    open,
+    onClose,
+  ]);
+
+  /* =====================================================
+     PREVIEW STYLE
+  ===================================================== */
+
+  const previewStyle =
+    useMemo(
+      () => ({
+        fontFamily:
+          getFontFamily(
+            draft.fontFamily
+          ),
+        backgroundColor:
+          safeColor(
+            draft.backgroundColor,
+            "#07182c"
+          ),
+        color:
+          safeColor(
+            draft.textColor,
+            "#ffffff"
+          ),
+      }),
+      [
+        draft.backgroundColor,
+        draft.fontFamily,
+        draft.textColor,
+      ]
+    );
+
+  const surfaceColor =
+    safeColor(
+      draft.surfaceColor,
+      "#102b52"
+    );
+
+  const primaryColor =
+    safeColor(
+      draft.primaryColor,
+      "#2563eb"
+    );
+
+  const accentColor =
+    safeColor(
+      draft.accentColor,
+      "#8b5cf6"
+    );
+
+  const certificatePrimaryColor =
+    safeColor(
+      draft.certificatePrimaryColor ||
+        draft.primaryColor,
+      "#2563eb"
+    );
+
+  const certificateAccentColor =
+    safeColor(
+      draft.certificateAccentColor ||
+        draft.accentColor,
+      "#8b5cf6"
+    );
+
+  const certificatePreviewBackground =
+    draft.certificateTemplateStyle ===
+      "formal"
+      ? "#fffbeb"
+      : draft.certificateTemplateStyle ===
+          "school"
+        ? "#f0fdf4"
+        : "#ffffff";
+
+  const certificatePreviewCorporate =
+    draft.certificateTemplateStyle ===
+    "corporate";
+
+  /* =====================================================
+     ACTIONS
+  ===================================================== */
+
+  function updateDraft<K extends keyof ProjectTheme>(
+    key: K,
+    value: ProjectTheme[K]
+  ) {
+    setDraft(
+      (current) => ({
+        ...current,
+        [key]: value,
+      })
+    );
+
+    setSavedMessage("");
+  }
+
+  function applyBuiltInTemplate(
+    style:
+      ProjectTheme[
+        "certificateTemplateStyle"
+      ]
+  ) {
+    setDraft(
+      (current) =>
+        applyBuiltInCertificateTemplate(
+          current,
+          style
+        )
+    );
+
+    setPreviewMode(
+      "certificate"
+    );
+
+    setSavedMessage("");
+  }
+
+  function saveCurrentCertificateTemplate() {
+    try {
+      const next =
+        saveCertificateTemplate(
+          newCertificateTemplateName,
+          draft
+        );
+
+      setCustomCertificateTemplates(
+        next
+      );
+
+      setNewCertificateTemplateName(
+        ""
+      );
+
+      setSavedMessage(
+        "Đã lưu mẫu chứng nhận cá nhân"
+      );
+    } catch (error) {
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : "Không lưu được mẫu chứng nhận."
+      );
+    }
+  }
+
+  function applySavedCertificateTemplate(
+    template:
+      SavedCertificateTemplate
+  ) {
+    setDraft(
+      (current) =>
+        applyCertificateTemplateData(
+          current,
+          template.data
+        )
+    );
+
+    setPreviewMode(
+      "certificate"
+    );
+
+    setSavedMessage("");
+  }
+
+  function removeSavedCertificateTemplate(
+    template:
+      SavedCertificateTemplate
+  ) {
+    if (
+      !window.confirm(
+        `Xóa mẫu "${template.name}"?`
+      )
+    ) {
+      return;
+    }
+
+    setCustomCertificateTemplates(
+      deleteSavedCertificateTemplate(
+        template.id
+      )
+    );
+  }
+
+  function readCourseIntroImage(
+    file:
+      File |
+      undefined
+  ) {
+    if (!file) {
+      return;
+    }
+
+    if (
+      !file.type.startsWith(
+        "image/"
+      )
+    ) {
+      window.alert(
+        "Ảnh bìa phải là tệp ảnh."
+      );
+
+      return;
+    }
+
+    const maxBytes =
+      700 *
+      1024;
+
+    if (
+      file.size >
+      maxBytes
+    ) {
+      window.alert(
+        "Ảnh bìa quá lớn. Vui lòng dùng ảnh nhỏ hơn 700 KB."
+      );
+
+      return;
+    }
+
+    const reader =
+      new FileReader();
+
+    reader.onload =
+      () => {
+        const result =
+          typeof reader.result ===
+            "string"
+            ? reader.result
+            : "";
+
+        updateDraft(
+          "courseIntroCoverDataUrl",
+          result
+        );
+      };
+
+    reader.onerror =
+      () => {
+        window.alert(
+          "Không đọc được ảnh bìa."
+        );
+      };
+
+    reader.readAsDataURL(
+      file
+    );
+  }
+
+  function readCertificateImage(
+    file: File | undefined,
+    key:
+      | "certificateLogoDataUrl"
+      | "certificateSignatureDataUrl",
+    label: string,
+    maxBytes: number
+  ) {
+    if (!file) {
+      return;
+    }
+
+    if (
+      !file.type.startsWith(
+        "image/"
+      )
+    ) {
+      window.alert(
+        `${label} phải là tệp ảnh.`
+      );
+
+      return;
+    }
+
+    if (
+      file.size >
+      maxBytes
+    ) {
+      window.alert(
+        `${label} quá lớn. Vui lòng dùng ảnh nhỏ hơn ${Math.round(
+          maxBytes /
+            1024
+        )} KB.`
+      );
+
+      return;
+    }
+
+    const reader =
+      new FileReader();
+
+    reader.onload =
+      () => {
+        const result =
+          typeof reader.result ===
+            "string"
+            ? reader.result
+            : "";
+
+        updateDraft(
+          key,
+          result
+        );
+      };
+
+    reader.onerror =
+      () => {
+        window.alert(
+          `Không đọc được ${label.toLowerCase()}.`
+        );
+      };
+
+    reader.readAsDataURL(
+      file
+    );
+  }
+
+  function handleSave() {
+    try {
+      const saved =
+        saveProjectThemeForProject(
+          projectId,
+          draft,
+          projectTitle
+        );
+
+      setDraft(saved);
+      setSavedMessage(
+        "Đã lưu thiết kế"
+      );
+    } catch (
+      error
+    ) {
+      console.error(
+        "Không lưu được thiết kế:",
+        error
+      );
+
+      window.alert(
+        "Không lưu được thiết kế. Nếu bạn vừa tải logo/chữ ký, hãy dùng ảnh có dung lượng nhỏ hơn."
+      );
+    }
+  }
+
+  function handleReset() {
+    const confirmed =
+      window.confirm(
+        "Đưa thiết kế của dự án này về mặc định?"
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const defaults =
+      resetProjectThemeForProject(
+        projectId,
+        projectTitle
+      );
+
+    setDraft(defaults);
+    setSavedMessage(
+      "Đã khôi phục thiết kế mặc định"
+    );
+  }
+
+  if (!open) {
+    return null;
+  }
+
+  /* =====================================================
+     UI
+  ===================================================== */
+
+  return (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/75 p-5 backdrop-blur-sm">
+
+      <div className="flex max-h-[90vh] w-full max-w-7xl flex-col overflow-hidden rounded-3xl border border-blue-800 bg-[#0b213f] text-white shadow-2xl">
+
+        {/* HEADER */}
+
+        <div className="flex items-center justify-between gap-4 border-b border-blue-800 bg-[#123665] px-6 py-5">
+
+          <div className="flex items-center gap-3">
+
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-950 text-cyan-300">
+              <Palette
+                size={22}
+              />
+            </div>
+
+            <div>
+              <h2 className="text-xl font-black">
+                Thiết kế bài giảng
+              </h2>
+
+              <p className="mt-1 text-xs text-slate-400">
+                Thiết lập giao diện riêng cho từng dự án
+              </p>
+            </div>
+
+          </div>
+
+          <button
+            type="button"
+            onClick={
+              onClose
+            }
+            className="rounded-xl p-2 text-slate-300 transition hover:bg-blue-900 hover:text-white"
+            title="Đóng"
+          >
+            <X
+              size={21}
+            />
+          </button>
+
+        </div>
+
+        {/* CONTENT */}
+
+        <div className="grid min-h-0 flex-1 overflow-hidden lg:grid-cols-[420px_1fr]">
+
+          {/* SETTINGS */}
+
+          <div className="min-h-0 overflow-y-auto border-b border-blue-800 p-6 lg:border-b-0 lg:border-r">
+
+            <div className="space-y-6">
+
+              <label className="block">
+                <span className="text-sm font-bold text-slate-200">
+                  Tiêu đề hiển thị
+                </span>
+
+                <input
+                  type="text"
+                  value={
+                    draft.courseTitle
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    updateDraft(
+                      "courseTitle",
+                      event.target.value
+                    )
+                  }
+                  placeholder={
+                    projectTitle
+                  }
+                  className="mt-2 w-full rounded-xl border border-blue-700 bg-blue-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-500"
+                />
+              </label>
+
+              <div>
+                <div className="text-sm font-bold text-slate-200">
+                  Chế độ giao diện
+                </div>
+
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  {([
+                    [
+                      "dark",
+                      "Tối",
+                    ],
+                    [
+                      "light",
+                      "Sáng",
+                    ],
+                  ] as Array<[
+                    ThemeMode,
+                    string,
+                  ]>).map(([
+                    value,
+                    label,
+                  ]) => (
+                    <button
+                      key={
+                        value
+                      }
+                      type="button"
+                      onClick={() =>
+                        updateDraft(
+                          "mode",
+                          value
+                        )
+                      }
+                      className={`rounded-xl border px-4 py-3 text-sm font-bold transition ${
+                        draft.mode ===
+                        value
+                          ? "border-cyan-400 bg-cyan-950 text-cyan-200"
+                          : "border-blue-800 bg-blue-950/40 text-slate-300 hover:bg-blue-900"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-sm font-bold text-slate-200">
+                  Hiển thị trong Preview
+                </div>
+
+                <div className="mt-3 space-y-3">
+                  <label className="flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-blue-700 bg-blue-950/60 px-4 py-3">
+                    <div>
+                      <div className="text-sm font-bold text-white">
+                        Thanh tiến độ
+                      </div>
+                      <div className="mt-1 text-xs text-slate-400">
+                        Hiển thị tiến độ học trong Player
+                      </div>
+                    </div>
+
+                    <input
+                      type="checkbox"
+                      checked={draft.showProgress}
+                      onChange={(event) =>
+                        updateDraft(
+                          "showProgress",
+                          event.target.checked
+                        )
+                      }
+                      className="h-5 w-5 accent-cyan-500"
+                    />
+                  </label>
+
+                  <label className="flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-blue-700 bg-blue-950/60 px-4 py-3">
+                    <div>
+                      <div className="text-sm font-bold text-white">
+                        Điều hướng trang
+                      </div>
+                      <div className="mt-1 text-xs text-slate-400">
+                        Hiển thị nút Trang trước / Trang tiếp theo
+                      </div>
+                    </div>
+
+                    <input
+                      type="checkbox"
+                      checked={draft.showPageNavigation}
+                      onChange={(event) =>
+                        updateDraft(
+                          "showPageNavigation",
+                          event.target.checked
+                        )
+                      }
+                      className="h-5 w-5 accent-cyan-500"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <div className="text-sm font-bold text-slate-200">
+                  Màu sắc
+                </div>
+
+                <div className="mt-3 grid grid-cols-2 gap-3">
+
+                  {([
+                    [
+                      "primaryColor",
+                      "Màu chính",
+                    ],
+                    [
+                      "accentColor",
+                      "Màu nhấn",
+                    ],
+                    [
+                      "backgroundColor",
+                      "Màu nền",
+                    ],
+                    [
+                      "surfaceColor",
+                      "Màu khối",
+                    ],
+                    [
+                      "textColor",
+                      "Màu chữ",
+                    ],
+                  ] as Array<[
+                    | "primaryColor"
+                    | "accentColor"
+                    | "backgroundColor"
+                    | "surfaceColor"
+                    | "textColor",
+                    string,
+                  ]>).map(([
+                    key,
+                    label,
+                  ]) => (
+                    <label
+                      key={
+                        key
+                      }
+                      className="rounded-xl border border-blue-800 bg-blue-950/40 p-3"
+                    >
+                      <span className="text-xs font-bold text-slate-300">
+                        {label}
+                      </span>
+
+                      <div className="mt-2 flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={
+                            safeColor(
+                              draft[key],
+                              "#2563eb"
+                            )
+                          }
+                          onChange={(
+                            event
+                          ) =>
+                            updateDraft(
+                              key,
+                              event.target.value
+                            )
+                          }
+                          className="h-10 w-12 cursor-pointer rounded-lg border-0 bg-transparent p-0"
+                        />
+
+                        <input
+                          type="text"
+                          value={
+                            draft[key]
+                          }
+                          onChange={(
+                            event
+                          ) =>
+                            updateDraft(
+                              key,
+                              event.target.value
+                            )
+                          }
+                          className="min-w-0 flex-1 rounded-lg border border-blue-800 bg-[#07182c] px-2 py-2 font-mono text-xs text-slate-200 outline-none focus:border-cyan-500"
+                        />
+                      </div>
+                    </label>
+                  ))}
+
+                </div>
+              </div>
+
+              <label className="block">
+                <span className="text-sm font-bold text-slate-200">
+                  Font chữ
+                </span>
+
+                <select
+                  value={
+                    draft.fontFamily
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    updateDraft(
+                      "fontFamily",
+                      event.target.value as ThemeFont
+                    )
+                  }
+                  className="mt-2 w-full rounded-xl border border-blue-800 bg-blue-950/70 px-4 py-3 text-white outline-none focus:border-cyan-500"
+                >
+                  <option value="system">
+                    System UI
+                  </option>
+                  <option value="sans">
+                    Sans Serif
+                  </option>
+                  <option value="serif">
+                    Serif
+                  </option>
+                </select>
+              </label>
+
+              <div>
+                <div className="text-sm font-bold text-slate-200">
+                  Kiểu nút
+                </div>
+
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  {([
+                    [
+                      "rounded",
+                      "Bo góc",
+                    ],
+                    [
+                      "pill",
+                      "Viên thuốc",
+                    ],
+                    [
+                      "square",
+                      "Vuông",
+                    ],
+                  ] as Array<[
+                    ThemeButtonStyle,
+                    string,
+                  ]>).map(([
+                    value,
+                    label,
+                  ]) => (
+                    <button
+                      key={
+                        value
+                      }
+                      type="button"
+                      onClick={() =>
+                        updateDraft(
+                          "buttonStyle",
+                          value
+                        )
+                      }
+                      className={`border px-3 py-2.5 text-xs font-bold transition ${
+                        value ===
+                        "pill"
+                          ? "rounded-full"
+                          : value ===
+                            "square"
+                            ? "rounded"
+                            : "rounded-xl"
+                      } ${
+                        draft.buttonStyle ===
+                        value
+                          ? "border-cyan-400 bg-cyan-950 text-cyan-200"
+                          : "border-blue-800 bg-blue-950/40 text-slate-300 hover:bg-blue-900"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <label className="block">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-sm font-bold text-slate-200">
+                    Bo góc Player
+                  </span>
+
+                  <span className="text-xs text-cyan-300">
+                    {draft.playerRadius}px
+                  </span>
+                </div>
+
+                <input
+                  type="range"
+                  min="0"
+                  max="32"
+                  step="2"
+                  value={
+                    draft.playerRadius
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    updateDraft(
+                      "playerRadius",
+                      Number(
+                        event.target.value
+                      )
+                    )
+                  }
+                  className="mt-3 w-full"
+                />
+              </label>
+
+
+              {/* V12.4A COURSE INTRO */}
+
+              <div className="border-t border-blue-800 pt-6">
+
+                <div className="flex items-start justify-between gap-4">
+
+                  <div>
+                    <div className="flex items-center gap-2">
+
+                      <BookOpen
+                        size={19}
+                        className="text-cyan-300"
+                      />
+
+                      <div className="text-sm font-black text-white">
+                        Trang mở đầu khóa học
+                      </div>
+
+                    </div>
+
+                    <div className="mt-1 text-xs text-slate-400">
+                      Hiển thị trước Player trong Preview và SCORM.
+                    </div>
+                  </div>
+
+                  <input
+                    type="checkbox"
+                    checked={
+                      draft.courseIntroEnabled
+                    }
+                    onChange={(
+                      event
+                    ) =>
+                      updateDraft(
+                        "courseIntroEnabled",
+                        event.target.checked
+                      )
+                    }
+                    className="mt-1 h-5 w-5 accent-cyan-500"
+                  />
+
+                </div>
+
+                <div
+                  className={`mt-4 space-y-4 ${
+                    draft.courseIntroEnabled
+                      ? ""
+                      : "pointer-events-none opacity-45"
+                  }`}
+                >
+
+                  <label className="block">
+                    <span className="text-xs font-bold text-slate-300">
+                      Dòng giới thiệu
+                    </span>
+
+                    <input
+                      type="text"
+                      value={
+                        draft.courseIntroEyebrow
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        updateDraft(
+                          "courseIntroEyebrow",
+                          event.target.value
+                        )
+                      }
+                      placeholder="BÀI HỌC TƯƠNG TÁC"
+                      className="mt-2 w-full rounded-xl border border-blue-800 bg-blue-950/70 px-3 py-2.5 text-sm outline-none focus:border-cyan-500"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="text-xs font-bold text-slate-300">
+                      Mô tả bài học
+                    </span>
+
+                    <textarea
+                      value={
+                        draft.courseIntroDescription
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        updateDraft(
+                          "courseIntroDescription",
+                          event.target.value
+                        )
+                      }
+                      rows={4}
+                      placeholder="Mô tả ngắn gọn nội dung và giá trị của bài học."
+                      className="mt-2 w-full resize-y rounded-xl border border-blue-800 bg-blue-950/70 px-3 py-2.5 text-sm leading-6 outline-none focus:border-cyan-500"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="text-xs font-bold text-slate-300">
+                      Mục tiêu học tập
+                    </span>
+
+                    <textarea
+                      value={
+                        draft.courseIntroObjectives
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        updateDraft(
+                          "courseIntroObjectives",
+                          event.target.value
+                        )
+                      }
+                      rows={5}
+                      placeholder={"Mỗi mục tiêu một dòng\\nVí dụ: Nắm vững kiến thức trọng tâm"}
+                      className="mt-2 w-full resize-y rounded-xl border border-blue-800 bg-blue-950/70 px-3 py-2.5 text-sm leading-6 outline-none focus:border-cyan-500"
+                    />
+
+                    <div className="mt-1 text-[10px] text-slate-500">
+                      Mỗi dòng sẽ trở thành một mục tiêu riêng.
+                    </div>
+                  </label>
+
+                  <label className="block">
+                    <span className="text-xs font-bold text-slate-300">
+                      Nhãn nút bắt đầu
+                    </span>
+
+                    <input
+                      type="text"
+                      value={
+                        draft.courseIntroButtonLabel
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        updateDraft(
+                          "courseIntroButtonLabel",
+                          event.target.value
+                        )
+                      }
+                      placeholder="Bắt đầu học"
+                      className="mt-2 w-full rounded-xl border border-blue-800 bg-blue-950/70 px-3 py-2.5 text-sm outline-none focus:border-cyan-500"
+                    />
+                  </label>
+
+                  <div className="rounded-xl border border-blue-800 bg-blue-950/40 p-3">
+
+                    <div className="text-xs font-bold text-slate-300">
+                      Ảnh bìa khóa học
+                    </div>
+
+                    <div className="mt-2 flex min-h-28 items-center justify-center overflow-hidden rounded-xl border border-dashed border-blue-700 bg-black/15">
+
+                      {draft.courseIntroCoverDataUrl ? (
+                        <img
+                          src={
+                            draft.courseIntroCoverDataUrl
+                          }
+                          alt="Ảnh bìa khóa học"
+                          className="h-32 w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex flex-col items-center gap-2 py-6 text-slate-500">
+                          <ImagePlus
+                            size={26}
+                          />
+                          <span className="text-[10px]">
+                            Chưa có ảnh bìa
+                          </span>
+                        </div>
+                      )}
+
+                    </div>
+
+                    <div className="mt-2 flex gap-2">
+
+                      <label className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg border border-blue-700 px-3 py-2 text-xs font-bold hover:bg-blue-900">
+                        <ImagePlus
+                          size={14}
+                        />
+                        Chọn ảnh bìa
+
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          className="hidden"
+                          onChange={(
+                            event
+                          ) => {
+                            readCourseIntroImage(
+                              event.target.files?.[0]
+                            );
+
+                            event.currentTarget.value =
+                              "";
+                          }}
+                        />
+                      </label>
+
+                      {draft.courseIntroCoverDataUrl && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateDraft(
+                              "courseIntroCoverDataUrl",
+                              ""
+                            )
+                          }
+                          className="rounded-lg border border-red-800 px-3 py-2 text-red-300 hover:bg-red-950/40"
+                          title="Xóa ảnh bìa"
+                        >
+                          <Trash2
+                            size={14}
+                          />
+                        </button>
+                      )}
+
+                    </div>
+
+                    <div className="mt-2 text-[10px] text-slate-500">
+                      PNG/JPG/WebP, tối đa 700 KB. Nên dùng ảnh ngang 16:9.
+                    </div>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+
+              {/* V12.4B COURSE OUTRO */}
+
+              <div className="border-t border-blue-800 pt-6">
+
+                <div className="flex items-start justify-between gap-4">
+
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Flag
+                        size={19}
+                        className="text-violet-300"
+                      />
+                      <div className="text-sm font-black text-white">
+                        Trang kết thúc khóa học
+                      </div>
+                    </div>
+
+                    <div className="mt-1 text-xs text-slate-400">
+                      Hiển thị sau Dashboard kết quả trong Preview và SCORM.
+                    </div>
+                  </div>
+
+                  <input
+                    type="checkbox"
+                    checked={
+                      draft.courseOutroEnabled
+                    }
+                    onChange={(
+                      event
+                    ) =>
+                      updateDraft(
+                        "courseOutroEnabled",
+                        event.target.checked
+                      )
+                    }
+                    className="mt-1 h-5 w-5 accent-violet-500"
+                  />
+
+                </div>
+
+                <div
+                  className={`mt-4 space-y-4 ${
+                    draft.courseOutroEnabled
+                      ? ""
+                      : "pointer-events-none opacity-45"
+                  }`}
+                >
+
+                  <label className="block">
+                    <span className="text-xs font-bold text-slate-300">
+                      Dòng giới thiệu
+                    </span>
+                    <input
+                      type="text"
+                      value={
+                        draft.courseOutroEyebrow
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        updateDraft(
+                          "courseOutroEyebrow",
+                          event.target.value
+                        )
+                      }
+                      className="mt-2 w-full rounded-xl border border-blue-800 bg-blue-950/70 px-3 py-2.5 text-sm outline-none focus:border-violet-500"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="text-xs font-bold text-green-300">
+                      Tiêu đề khi ĐẠT
+                    </span>
+                    <input
+                      type="text"
+                      value={
+                        draft.courseOutroPassTitle
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        updateDraft(
+                          "courseOutroPassTitle",
+                          event.target.value
+                        )
+                      }
+                      className="mt-2 w-full rounded-xl border border-green-900 bg-green-950/25 px-3 py-2.5 text-sm outline-none focus:border-green-500"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="text-xs font-bold text-red-300">
+                      Tiêu đề khi CHƯA ĐẠT
+                    </span>
+                    <input
+                      type="text"
+                      value={
+                        draft.courseOutroFailTitle
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        updateDraft(
+                          "courseOutroFailTitle",
+                          event.target.value
+                        )
+                      }
+                      className="mt-2 w-full rounded-xl border border-red-900 bg-red-950/20 px-3 py-2.5 text-sm outline-none focus:border-red-500"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="text-xs font-bold text-green-300">
+                      Thông điệp khi ĐẠT
+                    </span>
+                    <textarea
+                      value={
+                        draft.courseOutroPassMessage
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        updateDraft(
+                          "courseOutroPassMessage",
+                          event.target.value
+                        )
+                      }
+                      rows={4}
+                      className="mt-2 w-full resize-y rounded-xl border border-green-900 bg-green-950/25 px-3 py-2.5 text-sm leading-6 outline-none focus:border-green-500"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="text-xs font-bold text-red-300">
+                      Thông điệp khi CHƯA ĐẠT
+                    </span>
+                    <textarea
+                      value={
+                        draft.courseOutroFailMessage
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        updateDraft(
+                          "courseOutroFailMessage",
+                          event.target.value
+                        )
+                      }
+                      rows={4}
+                      className="mt-2 w-full resize-y rounded-xl border border-red-900 bg-red-950/20 px-3 py-2.5 text-sm leading-6 outline-none focus:border-red-500"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="text-xs font-bold text-slate-300">
+                      Nhãn nút trên Dashboard
+                    </span>
+                    <input
+                      type="text"
+                      value={
+                        draft.courseOutroButtonLabel
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        updateDraft(
+                          "courseOutroButtonLabel",
+                          event.target.value
+                        )
+                      }
+                      placeholder="Xem trang kết thúc"
+                      className="mt-2 w-full rounded-xl border border-blue-800 bg-blue-950/70 px-3 py-2.5 text-sm outline-none focus:border-violet-500"
+                    />
+                  </label>
+
+                </div>
+
+              </div>
+
+              {/* V12.3B CERTIFICATE DESIGN */}
+
+              <div className="border-t border-blue-800 pt-6">
+
+                <div className="flex items-center gap-2">
+                  <Award
+                    size={19}
+                    className="text-amber-300"
+                  />
+
+                  <div>
+                    <div className="text-sm font-black text-white">
+                      Chứng nhận hoàn thành
+                    </div>
+
+                    <div className="mt-1 text-xs text-slate-400">
+                      Tùy chỉnh mẫu chứng nhận cho Preview và SCORM.
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-4">
+
+                  {/* V12.3C TEMPLATE LIBRARY */}
+
+                  <div className="rounded-2xl border border-blue-800 bg-blue-950/35 p-4">
+
+                    <div className="flex items-center gap-2">
+                      <CopyPlus
+                        size={16}
+                        className="text-cyan-300"
+                      />
+
+                      <div className="text-xs font-black uppercase tracking-[0.12em] text-cyan-200">
+                        Thư viện mẫu
+                      </div>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      {BUILT_IN_CERTIFICATE_TEMPLATES.map(
+                        (template) => {
+                          const active =
+                            draft.certificateTemplateStyle ===
+                            template.id;
+
+                          return (
+                            <button
+                              key={
+                                template.id
+                              }
+                              type="button"
+                              onClick={() =>
+                                applyBuiltInTemplate(
+                                  template.id
+                                )
+                              }
+                              className={`rounded-xl border p-3 text-left transition ${
+                                active
+                                  ? "border-cyan-400 bg-cyan-950/60"
+                                  : "border-blue-800 bg-[#07182c]/60 hover:border-blue-600"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className="h-3 w-3 rounded-full"
+                                  style={{
+                                    backgroundColor:
+                                      template.primaryColor,
+                                    boxShadow:
+                                      `0 0 0 3px ${template.accentColor}55`,
+                                  }}
+                                />
+
+                                <span className="text-xs font-black text-white">
+                                  {template.name}
+                                </span>
+                              </div>
+
+                              <div className="mt-2 text-[10px] leading-4 text-slate-400">
+                                {template.description}
+                              </div>
+                            </button>
+                          );
+                        }
+                      )}
+                    </div>
+
+                    <div className="mt-4 border-t border-blue-800 pt-4">
+                      <div className="text-xs font-black text-slate-200">
+                        Mẫu cá nhân
+                      </div>
+
+                      <div className="mt-2 flex gap-2">
+                        <input
+                          type="text"
+                          value={
+                            newCertificateTemplateName
+                          }
+                          onChange={(
+                            event
+                          ) =>
+                            setNewCertificateTemplateName(
+                              event.target.value
+                            )
+                          }
+                          placeholder="Ví dụ: Trường An Hiệp"
+                          className="min-w-0 flex-1 rounded-xl border border-blue-800 bg-[#07182c] px-3 py-2 text-xs outline-none focus:border-cyan-500"
+                        />
+
+                        <button
+                          type="button"
+                          onClick={
+                            saveCurrentCertificateTemplate
+                          }
+                          className="rounded-xl bg-cyan-700 px-3 py-2 text-xs font-black text-white hover:bg-cyan-600"
+                        >
+                          Lưu mẫu
+                        </button>
+                      </div>
+
+                      {customCertificateTemplates.length >
+                      0 ? (
+                        <div className="mt-3 space-y-2">
+                          {customCertificateTemplates.map(
+                            (template) => (
+                              <div
+                                key={
+                                  template.id
+                                }
+                                className="flex items-center gap-2 rounded-xl border border-blue-800 bg-[#07182c]/65 p-2"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    applySavedCertificateTemplate(
+                                      template
+                                    )
+                                  }
+                                  className="min-w-0 flex-1 text-left"
+                                >
+                                  <div className="truncate text-xs font-bold text-white">
+                                    {template.name}
+                                  </div>
+
+                                  <div className="mt-0.5 text-[10px] text-slate-500">
+                                    Nhấn để áp dụng
+                                  </div>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    removeSavedCertificateTemplate(
+                                      template
+                                    )
+                                  }
+                                  className="rounded-lg border border-red-900 p-2 text-red-300 hover:bg-red-950/40"
+                                  title="Xóa mẫu"
+                                >
+                                  <Trash2
+                                    size={13}
+                                  />
+                                </button>
+                              </div>
+                            )
+                          )}
+                        </div>
+                      ) : (
+                        <div className="mt-2 text-[10px] text-slate-500">
+                          Chưa có mẫu cá nhân. Tùy chỉnh chứng nhận rồi bấm “Lưu mẫu”.
+                        </div>
+                      )}
+                    </div>
+
+                  </div>
+
+                  <label className="block">
+                    <span className="text-xs font-bold text-slate-300">
+                      Dòng tiêu đề nhỏ
+                    </span>
+
+                    <input
+                      type="text"
+                      value={
+                        draft.certificateKicker
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        updateDraft(
+                          "certificateKicker",
+                          event.target.value
+                        )
+                      }
+                      className="mt-2 w-full rounded-xl border border-blue-800 bg-blue-950/70 px-3 py-2.5 text-sm outline-none focus:border-cyan-500"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="text-xs font-bold text-slate-300">
+                      Tiêu đề chứng nhận
+                    </span>
+
+                    <input
+                      type="text"
+                      value={
+                        draft.certificateTitle
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        updateDraft(
+                          "certificateTitle",
+                          event.target.value
+                        )
+                      }
+                      className="mt-2 w-full rounded-xl border border-blue-800 bg-blue-950/70 px-3 py-2.5 text-sm outline-none focus:border-cyan-500"
+                    />
+                  </label>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="text-xs font-bold text-slate-300">
+                        Lời xác nhận
+                      </span>
+
+                      <input
+                        type="text"
+                        value={
+                          draft.certificateIntro
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          updateDraft(
+                            "certificateIntro",
+                            event.target.value
+                          )
+                        }
+                        className="mt-2 w-full rounded-xl border border-blue-800 bg-blue-950/70 px-3 py-2.5 text-sm outline-none focus:border-cyan-500"
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="text-xs font-bold text-slate-300">
+                        Dòng hoàn thành
+                      </span>
+
+                      <input
+                        type="text"
+                        value={
+                          draft.certificateCompletionText
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          updateDraft(
+                            "certificateCompletionText",
+                            event.target.value
+                          )
+                        }
+                        className="mt-2 w-full rounded-xl border border-blue-800 bg-blue-950/70 px-3 py-2.5 text-sm outline-none focus:border-cyan-500"
+                      />
+                    </label>
+                  </div>
+
+                  <label className="block">
+                    <span className="text-xs font-bold text-slate-300">
+                      Đơn vị cấp chứng nhận
+                    </span>
+
+                    <input
+                      type="text"
+                      value={
+                        draft.certificateIssuer
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        updateDraft(
+                          "certificateIssuer",
+                          event.target.value
+                        )
+                      }
+                      placeholder="Ví dụ: Trường THCS An Hiệp"
+                      className="mt-2 w-full rounded-xl border border-blue-800 bg-blue-950/70 px-3 py-2.5 text-sm outline-none focus:border-cyan-500"
+                    />
+                  </label>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="text-xs font-bold text-slate-300">
+                        Người ký
+                      </span>
+
+                      <input
+                        type="text"
+                        value={
+                          draft.certificateSignerName
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          updateDraft(
+                            "certificateSignerName",
+                            event.target.value
+                          )
+                        }
+                        placeholder="Họ tên người ký"
+                        className="mt-2 w-full rounded-xl border border-blue-800 bg-blue-950/70 px-3 py-2.5 text-sm outline-none focus:border-cyan-500"
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="text-xs font-bold text-slate-300">
+                        Chức danh người ký
+                      </span>
+
+                      <input
+                        type="text"
+                        value={
+                          draft.certificateSignerTitle
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          updateDraft(
+                            "certificateSignerTitle",
+                            event.target.value
+                          )
+                        }
+                        className="mt-2 w-full rounded-xl border border-blue-800 bg-blue-950/70 px-3 py-2.5 text-sm outline-none focus:border-cyan-500"
+                      />
+                    </label>
+                  </div>
+
+                  <label className="block">
+                    <span className="text-xs font-bold text-slate-300">
+                      Dòng chân chứng nhận
+                    </span>
+
+                    <input
+                      type="text"
+                      value={
+                        draft.certificateFooterText
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        updateDraft(
+                          "certificateFooterText",
+                          event.target.value
+                        )
+                      }
+                      placeholder="Ví dụ: Học tập • Sáng tạo • Phát triển"
+                      className="mt-2 w-full rounded-xl border border-blue-800 bg-blue-950/70 px-3 py-2.5 text-sm outline-none focus:border-cyan-500"
+                    />
+                  </label>
+
+                  <div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-xs font-bold text-slate-300">
+                        Màu chứng nhận
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDraft(
+                            (current) => ({
+                              ...current,
+                              certificatePrimaryColor:
+                                "",
+                              certificateAccentColor:
+                                "",
+                            })
+                          )
+                        }
+                        className="text-xs font-bold text-cyan-300 hover:text-cyan-200"
+                      >
+                        Dùng màu bài giảng
+                      </button>
+                    </div>
+
+                    <div className="mt-2 grid grid-cols-2 gap-3">
+                      {([
+                        [
+                          "certificatePrimaryColor",
+                          "Màu chính",
+                          certificatePrimaryColor,
+                        ],
+                        [
+                          "certificateAccentColor",
+                          "Màu nhấn",
+                          certificateAccentColor,
+                        ],
+                      ] as Array<[
+                        "certificatePrimaryColor" |
+                        "certificateAccentColor",
+                        string,
+                        string,
+                      ]>).map(([
+                        key,
+                        label,
+                        resolvedColor,
+                      ]) => (
+                        <label
+                          key={
+                            key
+                          }
+                          className="rounded-xl border border-blue-800 bg-blue-950/40 p-3"
+                        >
+                          <span className="text-[11px] font-bold text-slate-300">
+                            {label}
+                          </span>
+
+                          <div className="mt-2 flex items-center gap-2">
+                            <input
+                              type="color"
+                              value={
+                                resolvedColor
+                              }
+                              onChange={(
+                                event
+                              ) =>
+                                updateDraft(
+                                  key,
+                                  event.target.value
+                                )
+                              }
+                              className="h-9 w-11 cursor-pointer rounded-lg border-0 bg-transparent p-0"
+                            />
+
+                            <input
+                              type="text"
+                              value={
+                                draft[key]
+                              }
+                              onChange={(
+                                event
+                              ) =>
+                                updateDraft(
+                                  key,
+                                  event.target.value
+                                )
+                              }
+                              placeholder="Kế thừa"
+                              className="min-w-0 flex-1 rounded-lg border border-blue-800 bg-[#07182c] px-2 py-2 font-mono text-[11px] text-slate-200 outline-none focus:border-cyan-500"
+                            />
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+
+                    <div className="rounded-xl border border-blue-800 bg-blue-950/40 p-3">
+                      <div className="text-xs font-bold text-slate-300">
+                        Logo đơn vị
+                      </div>
+
+                      <div className="mt-2 flex min-h-20 items-center justify-center rounded-lg border border-dashed border-blue-700 bg-black/15 p-2">
+                        {draft.certificateLogoDataUrl ? (
+                          <img
+                            src={
+                              draft.certificateLogoDataUrl
+                            }
+                            alt="Logo chứng nhận"
+                            className="max-h-16 max-w-full object-contain"
+                          />
+                        ) : (
+                          <ImagePlus
+                            size={24}
+                            className="text-slate-500"
+                          />
+                        )}
+                      </div>
+
+                      <div className="mt-2 flex gap-2">
+                        <label className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg border border-blue-700 px-3 py-2 text-xs font-bold hover:bg-blue-900">
+                          <ImagePlus
+                            size={14}
+                          />
+                          Chọn logo
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            className="hidden"
+                            onChange={(
+                              event
+                            ) => {
+                              readCertificateImage(
+                                event.target.files?.[0],
+                                "certificateLogoDataUrl",
+                                "Logo",
+                                550 *
+                                  1024
+                              );
+
+                              event.currentTarget.value =
+                                "";
+                            }}
+                          />
+                        </label>
+
+                        {draft.certificateLogoDataUrl && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateDraft(
+                                "certificateLogoDataUrl",
+                                ""
+                              )
+                            }
+                            className="rounded-lg border border-red-800 px-3 py-2 text-red-300 hover:bg-red-950/40"
+                            title="Xóa logo"
+                          >
+                            <Trash2
+                              size={14}
+                            />
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="mt-2 text-[10px] text-slate-500">
+                        PNG/JPG/WebP, tối đa 550 KB.
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-blue-800 bg-blue-950/40 p-3">
+                      <div className="text-xs font-bold text-slate-300">
+                        Ảnh chữ ký
+                      </div>
+
+                      <div className="mt-2 flex min-h-20 items-center justify-center rounded-lg border border-dashed border-blue-700 bg-black/15 p-2">
+                        {draft.certificateSignatureDataUrl ? (
+                          <img
+                            src={
+                              draft.certificateSignatureDataUrl
+                            }
+                            alt="Chữ ký"
+                            className="max-h-16 max-w-full object-contain"
+                          />
+                        ) : (
+                          <ImagePlus
+                            size={24}
+                            className="text-slate-500"
+                          />
+                        )}
+                      </div>
+
+                      <div className="mt-2 flex gap-2">
+                        <label className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg border border-blue-700 px-3 py-2 text-xs font-bold hover:bg-blue-900">
+                          <ImagePlus
+                            size={14}
+                          />
+                          Chọn chữ ký
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            className="hidden"
+                            onChange={(
+                              event
+                            ) => {
+                              readCertificateImage(
+                                event.target.files?.[0],
+                                "certificateSignatureDataUrl",
+                                "Ảnh chữ ký",
+                                450 *
+                                  1024
+                              );
+
+                              event.currentTarget.value =
+                                "";
+                            }}
+                          />
+                        </label>
+
+                        {draft.certificateSignatureDataUrl && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateDraft(
+                                "certificateSignatureDataUrl",
+                                ""
+                              )
+                            }
+                            className="rounded-lg border border-red-800 px-3 py-2 text-red-300 hover:bg-red-950/40"
+                            title="Xóa chữ ký"
+                          >
+                            <Trash2
+                              size={14}
+                            />
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="mt-2 text-[10px] text-slate-500">
+                        Nên dùng PNG nền trong, tối đa 450 KB.
+                      </div>
+                    </div>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+
+            </div>
+
+          </div>
+
+          {/* PREVIEW */}
+
+          <div className="min-h-0 overflow-y-auto p-6">
+
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <div className="text-xs font-black uppercase tracking-[0.16em] text-cyan-300">
+                  Xem trước thiết kế
+                </div>
+
+                <div className="mt-1 text-sm text-slate-400">
+                  Kiểm tra Player, trang mở đầu, trang kết thúc hoặc mẫu chứng nhận trước khi lưu.
+                </div>
+              </div>
+
+              <div className="grid grid-cols-4 gap-2 rounded-xl border border-blue-800 bg-blue-950/40 p-1">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPreviewMode(
+                      "player"
+                    )
+                  }
+                  className={`rounded-lg px-3 py-2 text-xs font-black transition ${
+                    previewMode ===
+                    "player"
+                      ? "bg-cyan-950 text-cyan-200"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Player
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPreviewMode(
+                      "intro"
+                    )
+                  }
+                  className={`rounded-lg px-3 py-2 text-xs font-black transition ${
+                    previewMode ===
+                    "intro"
+                      ? "bg-cyan-950 text-cyan-200"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Mở đầu
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPreviewMode(
+                      "outro"
+                    )
+                  }
+                  className={`rounded-lg px-3 py-2 text-xs font-black transition ${
+                    previewMode ===
+                    "outro"
+                      ? "bg-violet-950 text-violet-200"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Kết thúc
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPreviewMode(
+                      "certificate"
+                    )
+                  }
+                  className={`rounded-lg px-3 py-2 text-xs font-black transition ${
+                    previewMode ===
+                    "certificate"
+                      ? "bg-amber-950 text-amber-200"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Chứng nhận
+                </button>
+              </div>
+            </div>
+
+            {previewMode ===
+              "player" ? (
+            <div
+              className="overflow-hidden border border-white/10 shadow-2xl"
+              style={{
+                ...previewStyle,
+                borderRadius:
+                  `${draft.playerRadius}px`,
+              }}
+            >
+
+              <div
+                className="flex items-center justify-between gap-3 border-b border-white/10 px-5 py-4"
+                style={{
+                  backgroundColor:
+                    surfaceColor,
+                }}
+              >
+                <div>
+                  <div
+                    className="text-xs font-black uppercase tracking-wider"
+                    style={{
+                      color:
+                        accentColor,
+                    }}
+                  >
+                    VLearning Studio
+                  </div>
+
+                  <div className="mt-1 font-black">
+                    {draft.courseTitle.trim() ||
+                      projectTitle}
+                  </div>
+                </div>
+
+                <div
+                  className="rounded-lg px-3 py-1.5 text-xs font-bold text-white"
+                  style={{
+                    backgroundColor:
+                      primaryColor,
+                  }}
+                >
+                  1 / 3
+                </div>
+              </div>
+
+              <div className="p-5">
+
+                <div
+                  className="flex aspect-video items-center justify-center border border-white/10 text-sm"
+                  style={{
+                    backgroundColor:
+                      surfaceColor,
+                    borderRadius:
+                      `${draft.playerRadius}px`,
+                  }}
+                >
+                  Video bài giảng
+                </div>
+
+                {draft.showProgress && (
+                  <div className="mt-5">
+                    <div className="mb-2 flex justify-between text-xs opacity-70">
+                      <span>
+                        Tiến độ
+                      </span>
+                      <span>
+                        65%
+                      </span>
+                    </div>
+
+                    <div className="h-2 overflow-hidden rounded-full bg-black/25">
+                      <div
+                        className="h-full w-[65%] rounded-full"
+                        style={{
+                          backgroundColor:
+                            accentColor,
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div
+                  className="mt-5 rounded-xl p-4"
+                  style={{
+                    backgroundColor:
+                      surfaceColor,
+                  }}
+                >
+                  <div className="text-sm font-black">
+                    Câu hỏi tương tác
+                  </div>
+
+                  <div className="mt-2 text-sm opacity-80">
+                    Nội dung câu hỏi sẽ hiển thị tại đây.
+                  </div>
+                </div>
+
+                {draft.showPageNavigation && (
+                  <div className="mt-5 flex justify-end gap-2">
+                    <button
+                      type="button"
+                      className="border border-white/15 px-4 py-2 text-sm font-bold"
+                      style={{
+                        borderRadius:
+                          `${getButtonRadius(
+                            draft.buttonStyle
+                          )}px`,
+                      }}
+                    >
+                      Trước
+                    </button>
+
+                    <button
+                      type="button"
+                      className="px-4 py-2 text-sm font-bold text-white"
+                      style={{
+                        backgroundColor:
+                          primaryColor,
+                        borderRadius:
+                          `${getButtonRadius(
+                            draft.buttonStyle
+                          )}px`,
+                      }}
+                    >
+                      Tiếp theo
+                    </button>
+                  </div>
+                )}
+
+              </div>
+
+            </div>
+            ) : previewMode ===
+              "intro" ? (
+              <div
+                className="overflow-hidden border border-white/10 shadow-2xl"
+                style={{
+                  ...previewStyle,
+                  borderRadius:
+                    `${draft.playerRadius}px`,
+                }}
+              >
+
+                <div className="grid min-h-[560px] lg:grid-cols-[1.08fr_0.92fr]">
+
+                  <div className="flex flex-col justify-center p-7 lg:p-10">
+
+                    <div
+                      className="text-xs font-black uppercase tracking-[0.2em]"
+                      style={{
+                        color:
+                          accentColor,
+                      }}
+                    >
+                      {draft.courseIntroEyebrow ||
+                        "BÀI HỌC TƯƠNG TÁC"}
+                    </div>
+
+                    <h3 className="mt-3 text-3xl font-black leading-tight">
+                      {draft.courseTitle.trim() ||
+                        projectTitle}
+                    </h3>
+
+                    <p className="mt-4 whitespace-pre-line text-sm leading-6 opacity-75">
+                      {draft.courseIntroDescription ||
+                        "Khám phá nội dung bài học và hoàn thành các hoạt động tương tác."}
+                    </p>
+
+                    <div className="mt-5 grid grid-cols-3 gap-2">
+                      {[
+                        ["Thời lượng", "18 phút"],
+                        ["Nội dung", "3 trang"],
+                        ["Câu hỏi", "8 câu"],
+                      ].map(([
+                        label,
+                        value,
+                      ]) => (
+                        <div
+                          key={
+                            label
+                          }
+                          className="rounded-xl border border-white/10 p-3"
+                          style={{
+                            backgroundColor:
+                              surfaceColor,
+                          }}
+                        >
+                          <div className="text-[10px] opacity-60">
+                            {label}
+                          </div>
+                          <div className="mt-1 text-xs font-black">
+                            {value}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-6">
+                      <div className="text-xs font-black">
+                        Mục tiêu học tập
+                      </div>
+
+                      <div className="mt-3 space-y-2">
+                        {(draft.courseIntroObjectives ||
+                          "Nắm vững kiến thức trọng tâm\\nHoàn thành câu hỏi tương tác\\nTheo dõi tiến độ học tập")
+                          .split(
+                            /\\r?\\n/
+                          )
+                          .map(
+                            (
+                              item
+                            ) =>
+                              item.trim()
+                          )
+                          .filter(
+                            Boolean
+                          )
+                          .slice(
+                            0,
+                            5
+                          )
+                          .map(
+                            (
+                              objective
+                            ) => (
+                              <div
+                                key={
+                                  objective
+                                }
+                                className="flex items-start gap-2 text-xs"
+                              >
+                                <span
+                                  className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-black text-white"
+                                  style={{
+                                    backgroundColor:
+                                      primaryColor,
+                                  }}
+                                >
+                                  ✓
+                                </span>
+                                <span className="opacity-80">
+                                  {objective}
+                                </span>
+                              </div>
+                            )
+                          )}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="mt-7 w-fit px-5 py-3 text-sm font-black text-white"
+                      style={{
+                        background:
+                          `linear-gradient(90deg, ${primaryColor}, ${accentColor})`,
+                        borderRadius:
+                          `${getButtonRadius(
+                            draft.buttonStyle
+                          )}px`,
+                      }}
+                    >
+                      {draft.courseIntroButtonLabel ||
+                        "Bắt đầu học"}
+                    </button>
+
+                  </div>
+
+                  <div
+                    className="relative min-h-72 overflow-hidden lg:min-h-full"
+                    style={{
+                      background:
+                        `linear-gradient(135deg, ${surfaceColor}, ${primaryColor})`,
+                    }}
+                  >
+                    {draft.courseIntroCoverDataUrl ? (
+                      <img
+                        src={
+                          draft.courseIntroCoverDataUrl
+                        }
+                        alt="Ảnh bìa"
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center">
+                        <BookOpen
+                          size={58}
+                          className="opacity-80"
+                        />
+                        <div className="mt-4 text-sm font-black">
+                          Ảnh bìa khóa học
+                        </div>
+                        <div className="mt-1 text-xs opacity-60">
+                          Có thể tải ảnh 16:9 trong phần cài đặt.
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+
+                    <div className="absolute bottom-5 left-5 right-5 text-left">
+                      <div className="text-xs font-bold text-white/70">
+                        VLearning Studio
+                      </div>
+                      <div className="mt-1 text-lg font-black text-white">
+                        {draft.courseTitle.trim() ||
+                          projectTitle}
+                      </div>
+                    </div>
+
+                  </div>
+
+                </div>
+
+              </div>
+            ) : previewMode ===
+              "outro" ? (
+              <div
+                className="overflow-hidden border border-white/10 shadow-2xl"
+                style={{
+                  ...previewStyle,
+                  borderRadius:
+                    `${draft.playerRadius}px`,
+                }}
+              >
+                <div className="relative flex min-h-[560px] flex-col items-center justify-center overflow-hidden p-8 text-center sm:p-12">
+
+                  <div
+                    className="absolute inset-0 opacity-20"
+                    style={{
+                      background:
+                        `radial-gradient(circle at top, ${accentColor}, transparent 58%)`,
+                    }}
+                  />
+
+                  <div className="relative z-10 w-full max-w-3xl">
+
+                    <div
+                      className="mx-auto flex h-20 w-20 items-center justify-center rounded-full"
+                      style={{
+                        backgroundColor:
+                          `${primaryColor}33`,
+                        color:
+                          accentColor,
+                      }}
+                    >
+                      <Award
+                        size={42}
+                      />
+                    </div>
+
+                    <div
+                      className="mt-5 text-xs font-black uppercase tracking-[0.22em]"
+                      style={{
+                        color:
+                          accentColor,
+                      }}
+                    >
+                      {draft.courseOutroEyebrow ||
+                        "HOÀN THÀNH BÀI HỌC"}
+                    </div>
+
+                    <h3 className="mt-3 text-3xl font-black">
+                      {draft.courseOutroPassTitle ||
+                        "Chúc mừng! Bạn đã hoàn thành bài học."}
+                    </h3>
+
+                    <p className="mx-auto mt-4 max-w-2xl whitespace-pre-line text-sm leading-7 opacity-75">
+                      {draft.courseOutroPassMessage ||
+                        "Bạn đã đạt yêu cầu của bài học. Hãy lưu kết quả hoặc xem chứng nhận hoàn thành của bạn."}
+                    </p>
+
+                    <div className="mt-7 grid gap-3 sm:grid-cols-3">
+                      {[
+                        ["Điểm", "90 / 100"],
+                        ["Kết quả", "90% • ĐẠT"],
+                        ["Nội dung", "3 / 3"],
+                      ].map(([
+                        label,
+                        value,
+                      ]) => (
+                        <div
+                          key={
+                            label
+                          }
+                          className="rounded-xl border border-white/10 p-4"
+                          style={{
+                            backgroundColor:
+                              surfaceColor,
+                          }}
+                        >
+                          <div className="text-[10px] opacity-60">
+                            {label}
+                          </div>
+                          <div className="mt-1 text-sm font-black">
+                            {value}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-8 flex flex-wrap justify-center gap-2">
+                      <button
+                        type="button"
+                        className="px-4 py-2.5 text-xs font-black text-white"
+                        style={{
+                          background:
+                            `linear-gradient(90deg, ${primaryColor}, ${accentColor})`,
+                          borderRadius:
+                            `${getButtonRadius(
+                              draft.buttonStyle
+                            )}px`,
+                        }}
+                      >
+                        Chứng nhận
+                      </button>
+
+                      <button
+                        type="button"
+                        className="border border-white/15 px-4 py-2.5 text-xs font-black"
+                        style={{
+                          borderRadius:
+                            `${getButtonRadius(
+                              draft.buttonStyle
+                            )}px`,
+                        }}
+                      >
+                        Tải báo cáo
+                      </button>
+
+                      <button
+                        type="button"
+                        className="border border-white/15 px-4 py-2.5 text-xs font-black"
+                        style={{
+                          borderRadius:
+                            `${getButtonRadius(
+                              draft.buttonStyle
+                            )}px`,
+                        }}
+                      >
+                        Học lại
+                      </button>
+                    </div>
+
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl bg-slate-100 p-3 shadow-2xl">
+
+                <div
+                  className={`relative flex min-h-[560px] flex-col justify-center overflow-hidden px-6 py-10 text-slate-900 ${
+                    certificatePreviewCorporate
+                      ? "items-start text-left"
+                      : "items-center text-center"
+                  }`}
+                  style={{
+                    backgroundColor:
+                      certificatePreviewBackground,
+                    border:
+                      draft.certificateTemplateStyle ===
+                      "corporate"
+                        ? `2px solid ${certificatePrimaryColor}`
+                        : `9px solid ${certificatePrimaryColor}`,
+                    borderLeft:
+                      draft.certificateTemplateStyle ===
+                      "corporate"
+                        ? `18px solid ${certificateAccentColor}`
+                        : undefined,
+                    outline:
+                      draft.certificateTemplateStyle ===
+                      "formal"
+                        ? `5px double ${certificateAccentColor}`
+                        : draft.certificateTemplateStyle ===
+                            "corporate"
+                          ? "none"
+                          : `3px solid ${certificateAccentColor}`,
+                    outlineOffset:
+                      draft.certificateTemplateStyle ===
+                      "formal"
+                        ? "-28px"
+                        : "-22px",
+                    borderRadius:
+                      draft.certificateTemplateStyle ===
+                      "corporate"
+                        ? "4px"
+                        : `${Math.max(
+                            14,
+                            draft.playerRadius
+                          )}px`,
+                  }}
+                >
+
+                  {draft.certificateLogoDataUrl ? (
+                    <img
+                      src={
+                        draft.certificateLogoDataUrl
+                      }
+                      alt="Logo"
+                      className="mb-3 max-h-20 max-w-[220px] object-contain"
+                    />
+                  ) : (
+                    <Award
+                      size={46}
+                      style={{
+                        color:
+                          certificatePrimaryColor,
+                      }}
+                    />
+                  )}
+
+                  <div
+                    className="mt-3 text-[10px] font-black uppercase tracking-[0.25em]"
+                    style={{
+                      color:
+                        certificatePrimaryColor,
+                    }}
+                  >
+                    {draft.certificateKicker ||
+                      "CERTIFICATE OF COMPLETION"}
+                  </div>
+
+                  <div className="mt-2 font-serif text-3xl font-black">
+                    {draft.certificateTitle ||
+                      "CHỨNG NHẬN HOÀN THÀNH"}
+                  </div>
+
+                  <div className="mt-5 font-serif text-base text-slate-600">
+                    {draft.certificateIntro ||
+                      "Trân trọng chứng nhận"}
+                  </div>
+
+                  <div
+                    className="mt-3 border-b-2 px-6 pb-2 font-serif text-2xl font-black"
+                    style={{
+                      color:
+                        certificatePrimaryColor,
+                      borderColor:
+                        certificateAccentColor,
+                    }}
+                  >
+                    NGUYỄN VĂN A
+                  </div>
+
+                  <div className="mt-5 font-serif text-base text-slate-600">
+                    {draft.certificateCompletionText ||
+                      "đã hoàn thành bài học"}
+                  </div>
+
+                  <div className="mt-2 max-w-2xl font-serif text-2xl font-bold">
+                    {draft.courseTitle.trim() ||
+                      projectTitle}
+                  </div>
+
+                  <div className="mt-6 flex flex-wrap justify-center gap-2 text-xs">
+                    <span className="rounded-full border border-slate-300 bg-slate-50 px-3 py-2">
+                      Điểm <strong>90 / 100</strong>
+                    </span>
+                    <span className="rounded-full border border-slate-300 bg-slate-50 px-3 py-2">
+                      Kết quả <strong>90% • ĐẠT</strong>
+                    </span>
+                    <span className="rounded-full border border-slate-300 bg-slate-50 px-3 py-2">
+                      Ngày cấp <strong>11/10/2026</strong>
+                    </span>
+                  </div>
+
+                  <div className="mt-9 grid w-[88%] grid-cols-2 items-end gap-6 border-t border-slate-200 pt-4 text-left text-[10px] text-slate-500">
+                    <div>
+                      <div>
+                        Mã chứng nhận: DEMO-2026-090
+                      </div>
+
+                      {draft.certificateFooterText && (
+                        <div className="mt-1">
+                          {draft.certificateFooterText}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="text-right">
+
+                      {draft.certificateSignatureDataUrl && (
+                        <img
+                          src={
+                            draft.certificateSignatureDataUrl
+                          }
+                          alt="Chữ ký"
+                          className="ml-auto mb-1 max-h-14 max-w-[160px] object-contain"
+                        />
+                      )}
+
+                      {draft.certificateSignerName && (
+                        <div className="font-bold text-slate-700">
+                          {draft.certificateSignerName}
+                        </div>
+                      )}
+
+                      <div>
+                        {draft.certificateSignerTitle ||
+                          draft.certificateIssuer ||
+                          "VLearning Studio"}
+                      </div>
+
+                      {draft.certificateIssuer && (
+                        <div className="mt-0.5 font-semibold">
+                          {draft.certificateIssuer}
+                        </div>
+                      )}
+
+                    </div>
+                  </div>
+
+                </div>
+
+              </div>
+            )}
+
+          </div>
+
+        </div>
+
+        {/* FOOTER */}
+
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-blue-800 bg-[#0d294e] px-6 py-4">
+
+          <div className="min-h-5 text-sm font-bold text-emerald-300">
+            {savedMessage && (
+              <span className="inline-flex items-center gap-2">
+                <Check
+                  size={16}
+                />
+                {savedMessage}
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+
+            <button
+              type="button"
+              onClick={
+                handleReset
+              }
+              className="flex items-center gap-2 rounded-xl border border-slate-600 px-4 py-2.5 text-sm font-bold text-slate-200 transition hover:bg-slate-800"
+            >
+              <RotateCcw
+                size={16}
+              />
+              Mặc định
+            </button>
+
+            <button
+              type="button"
+              onClick={
+                onClose
+              }
+              className="rounded-xl border border-blue-700 px-5 py-2.5 text-sm font-bold transition hover:bg-blue-900"
+            >
+              Đóng
+            </button>
+
+            <button
+              type="button"
+              onClick={
+                handleSave
+              }
+              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-600 px-5 py-2.5 text-sm font-black transition hover:brightness-110"
+            >
+              <Check
+                size={17}
+              />
+              Lưu thiết kế
+            </button>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+  );
+}

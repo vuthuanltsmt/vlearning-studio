@@ -1,0 +1,188 @@
+export type QuizType =
+  | "multiple-choice"
+  | "true-false"
+  | "multiple";
+
+export type Quiz = {
+  id: string;
+
+  // Giữ optional để tương thích project cũ.
+  // Nếu thiếu type, hệ thống hiểu là trắc nghiệm 1 đáp án.
+  type?: QuizType;
+
+  // Thời điểm câu hỏi xuất hiện trong video
+  time: number;
+
+  question: string;
+
+  // Danh sách đáp án
+  options: string[];
+
+  // Trắc nghiệm: 0 = A, 1 = B, 2 = C, 3 = D
+  // Đúng/Sai: 0 = Đúng, 1 = Sai
+  // Nhiều đáp án: vẫn giữ correctIndex để tương thích dữ liệu cũ.
+  correctIndex: number;
+
+  // Chỉ dùng cho câu hỏi nhiều đáp án đúng.
+  // Ví dụ [0, 2] = A và C đúng.
+  correctIndexes?: number[];
+
+  points: number;
+
+  feedbackCorrect: string;
+
+  feedbackWrong: string;
+};
+
+export type QuizDraft = {
+  type: QuizType;
+
+  question: string;
+
+  options: [
+    string,
+    string,
+    string,
+    string
+  ];
+
+  correctIndex: number;
+
+  correctIndexes: number[];
+
+  points: number;
+
+  feedbackCorrect: string;
+
+  feedbackWrong: string;
+};
+
+export type LessonPage = {
+  id: string;
+
+  title: string;
+
+  // Tên file video
+  videoName: string;
+
+  // URL tạm để phát video trong trình duyệt
+  videoUrl?: string;
+
+  // Thời lượng video tính bằng giây
+  duration: number;
+
+  // Danh sách câu hỏi của riêng trang này
+  quizzes: Quiz[];
+};
+
+export type ProjectDocument = {
+  id: string;
+
+  title: string;
+
+  // Trang đang được chọn
+  selectedPageId: string;
+
+  // Toàn bộ trang trong dự án
+  pages: LessonPage[];
+};
+
+export function getQuizType(
+  quiz: Pick<Quiz, "type">
+): QuizType {
+  if (quiz.type === "true-false") {
+    return "true-false";
+  }
+
+  if (quiz.type === "multiple") {
+    return "multiple";
+  }
+
+  return "multiple-choice";
+}
+
+export function getQuizCorrectIndexes(
+  quiz: Pick<
+    Quiz,
+    "type" | "correctIndex" | "correctIndexes"
+  >
+): number[] {
+  if (getQuizType(quiz) !== "multiple") {
+    return [quiz.correctIndex];
+  }
+
+  const source =
+    Array.isArray(quiz.correctIndexes)
+      ? quiz.correctIndexes
+      : [];
+
+  const normalized =
+    Array.from(
+      new Set(
+        source.filter(
+          (index) =>
+            Number.isInteger(index) &&
+            index >= 0 &&
+            index <= 3
+        )
+      )
+    ).sort((a, b) => a - b);
+
+  if (normalized.length > 0) {
+    return normalized;
+  }
+
+  return [
+    Number.isInteger(quiz.correctIndex) &&
+    quiz.correctIndex >= 0 &&
+    quiz.correctIndex <= 3
+      ? quiz.correctIndex
+      : 0,
+  ];
+}
+
+export function createEmptyDraft(): QuizDraft {
+  return {
+    type:
+      "multiple-choice",
+
+    question: "",
+
+    options: [
+      "",
+      "",
+      "",
+      "",
+    ],
+
+    correctIndex: 0,
+
+    correctIndexes: [0],
+
+    points: 10,
+
+    feedbackCorrect:
+      "Chính xác! Bạn đã trả lời đúng.",
+
+    feedbackWrong:
+      "Chưa chính xác. Hãy xem lại nội dung.",
+  };
+}
+
+export function formatTime(
+  seconds: number
+) {
+  if (!Number.isFinite(seconds)) {
+    return "0:00";
+  }
+
+  const minutes =
+    Math.floor(seconds / 60);
+
+  const secs =
+    Math.floor(seconds % 60);
+
+  return `${minutes}:${secs
+    .toString()
+    .padStart(2, "0")}`;
+}

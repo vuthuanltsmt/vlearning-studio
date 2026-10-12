@@ -1,0 +1,363 @@
+"use client";
+
+import {
+  BookOpen,
+  ChevronLeft,
+  ChevronRight,
+  FileText,
+  FolderOpen,
+  Gamepad2,
+  Globe2,
+  LogIn,
+  MonitorDown,
+  Palette,
+  Settings,
+  Shield,
+  Sparkles,
+  User,
+  X,
+} from "lucide-react";
+
+type LeftSidebarProps = {
+  active?: "projects" | "guide" | "games" | "ai" | "settings";
+  collapsed?: boolean;
+  onToggle?: () => void;
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
+};
+
+export default function LeftSidebar({
+  active = "projects",
+  collapsed = false,
+  onToggle,
+  mobileOpen = false,
+  onMobileClose,
+}: LeftSidebarProps) {
+  const menuBase =
+    "flex w-full items-center rounded-xl py-3 text-left text-sm font-semibold transition";
+
+  const menuSpacing =
+    collapsed
+      ? "gap-3 px-4 xl:justify-center xl:gap-0 xl:px-2"
+      : "gap-3 px-4";
+
+  const activeClass =
+    "bg-cyan-500/15 text-cyan-300";
+
+  const normalClass =
+    "text-slate-400 hover:bg-white/5 hover:text-white";
+
+  const labelClass =
+    collapsed
+      ? "block xl:hidden"
+      : "block";
+
+  return (
+    <>
+      {mobileOpen && (
+        <button
+          type="button"
+          aria-label="Đóng menu"
+          onClick={onMobileClose}
+          className="fixed inset-0 z-40 bg-black/65 backdrop-blur-[2px] xl:hidden"
+        />
+      )}
+
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 flex w-[280px] flex-col border-r border-[#17385c] bg-[#0a2849] shadow-2xl transition-all duration-300 xl:z-40 xl:translate-x-0 xl:shadow-none ${
+          mobileOpen
+            ? "translate-x-0"
+            : "-translate-x-full"
+        } ${
+          collapsed
+            ? "xl:w-[78px]"
+            : "xl:w-[224px]"
+        }`}
+      >
+        {/* MOBILE CLOSE */}
+        <button
+          type="button"
+          onClick={onMobileClose}
+          aria-label="Đóng menu"
+          className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10 hover:text-white xl:hidden"
+        >
+          <X size={18} />
+        </button>
+
+        {/* DESKTOP COLLAPSE */}
+        <button
+          type="button"
+          onClick={onToggle}
+          title={
+            collapsed
+              ? "Mở rộng thanh bên"
+              : "Thu gọn thanh bên"
+          }
+          className="absolute -right-4 top-[34%] z-50 hidden h-16 w-8 items-center justify-center rounded-r-2xl border border-l-0 border-cyan-400/60 bg-gradient-to-b from-cyan-400 to-purple-600 text-white shadow-[0_0_20px_rgba(34,211,238,0.35)] transition hover:brightness-110 xl:flex"
+        >
+          {collapsed ? (
+            <ChevronRight size={18} />
+          ) : (
+            <ChevronLeft size={18} />
+          )}
+        </button>
+
+        {/* USER CARD */}
+        <div
+          className={
+            collapsed
+              ? "p-4 xl:px-2 xl:py-4"
+              : "p-4"
+          }
+        >
+          <div
+            className={`overflow-hidden rounded-2xl border border-blue-800/70 bg-[#1a477d] shadow-lg ${
+              collapsed
+                ? "xl:px-2 xl:py-3"
+                : ""
+            }`}
+          >
+            <div
+              className={
+                collapsed
+                  ? "p-4 xl:p-0"
+                  : "p-4"
+              }
+            >
+              <div className="flex flex-col items-center text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-white/5 text-slate-200">
+                  <User size={20} />
+                </div>
+
+                <div
+                  className={
+                    collapsed
+                      ? "xl:hidden"
+                      : ""
+                  }
+                >
+                  <div className="mt-3 text-sm font-black text-slate-200">
+                    Khách truy cập
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      window.alert(
+                        "Tính năng tài khoản PRO chưa được tích hợp trong bản local."
+                      )
+                    }
+                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-sky-500 to-cyan-400 px-3 py-2.5 text-xs font-black text-white shadow-[0_8px_22px_rgba(14,165,233,0.28)] transition hover:brightness-110"
+                  >
+                    <User size={15} />
+                    ĐĂNG NHẬP PRO
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div
+              className={`border-t border-blue-800/80 p-2 ${
+                collapsed
+                  ? "xl:hidden"
+                  : ""
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() =>
+                  window.alert(
+                    "Bản local đang chạy trực tiếp trên máy tính này."
+                  )
+                }
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs font-bold text-slate-300 transition hover:bg-white/5"
+              >
+                <MonitorDown size={16} className="text-slate-400" />
+                TẢI CÀI PC
+              </button>
+
+              <div className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs font-bold text-slate-300">
+                <Palette size={16} className="text-slate-400" />
+                <span className="truncate">
+                  Giao diện: Đại dương
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* PROJECTS */}
+        <div className="border-t border-[#17385c] px-2 py-4">
+          <button
+            type="button"
+            title={
+              collapsed
+                ? "Dự án của tôi"
+                : undefined
+            }
+            className={`${menuBase} ${menuSpacing} ${
+              active === "projects"
+                ? activeClass
+                : normalClass
+            }`}
+          >
+            <FolderOpen size={20} className="shrink-0" />
+            <span className={labelClass}>
+              Dự án của tôi
+            </span>
+          </button>
+        </div>
+
+        {/* MAIN MENU */}
+        <nav className="flex-1 space-y-1 px-2">
+          <button
+            type="button"
+            title={collapsed ? "Hướng dẫn" : undefined}
+            onClick={() =>
+              window.alert(
+                "Hướng dẫn sử dụng đang được hoàn thiện."
+              )
+            }
+            className={`${menuBase} ${menuSpacing} ${
+              active === "guide"
+                ? activeClass
+                : normalClass
+            }`}
+          >
+            <BookOpen size={19} className="shrink-0" />
+            <span className={labelClass}>
+              Hướng dẫn
+            </span>
+          </button>
+
+          <button
+            type="button"
+            title={collapsed ? "Trò chơi" : undefined}
+            onClick={() =>
+              window.alert(
+                "Trò chơi tương tác sẽ được bổ sung ở phiên bản sau."
+              )
+            }
+            className={`${menuBase} ${menuSpacing} ${
+              active === "games"
+                ? activeClass
+                : normalClass
+            }`}
+          >
+            <Gamepad2
+              size={19}
+              className="shrink-0 text-amber-400"
+            />
+            <span className={labelClass}>
+              Trò chơi
+            </span>
+          </button>
+
+          <button
+            type="button"
+            title={collapsed ? "AI kịch bản" : undefined}
+            onClick={() =>
+              window.alert(
+                "AI kịch bản sẽ được bổ sung ở phiên bản sau."
+              )
+            }
+            className={`${menuBase} ${menuSpacing} ${
+              active === "ai"
+                ? activeClass
+                : normalClass
+            }`}
+          >
+            <Sparkles
+              size={19}
+              className="shrink-0 text-fuchsia-400"
+            />
+            <span className={labelClass}>
+              AI kịch bản
+            </span>
+          </button>
+
+          <button
+            type="button"
+            title={collapsed ? "Cài đặt AI" : undefined}
+            onClick={() =>
+              window.alert(
+                "Cài đặt AI sẽ được bổ sung ở phiên bản sau."
+              )
+            }
+            className={`${menuBase} ${menuSpacing} ${
+              active === "settings"
+                ? activeClass
+                : normalClass
+            }`}
+          >
+            <Settings
+              size={19}
+              className="shrink-0 text-cyan-400"
+            />
+            <span className={labelClass}>
+              Cài đặt AI
+            </span>
+          </button>
+        </nav>
+
+        {/* BOTTOM */}
+        <div className="border-t border-[#17385c] px-2 py-3">
+          <div
+            title={collapsed ? "Tiếng Việt" : undefined}
+            className={`flex items-center rounded-xl py-2.5 text-sm font-medium text-slate-400 ${menuSpacing}`}
+          >
+            <Globe2
+              size={18}
+              className="shrink-0 text-cyan-300"
+            />
+            <span className={labelClass}>
+              Tiếng Việt
+            </span>
+          </div>
+
+          <div
+            title={collapsed ? "Quyền riêng tư" : undefined}
+            className={`flex items-center rounded-xl py-2.5 text-sm font-medium text-slate-500 ${menuSpacing}`}
+          >
+            <Shield
+              size={18}
+              className="shrink-0 text-cyan-300"
+            />
+            <span className={labelClass}>
+              Quyền riêng tư
+            </span>
+          </div>
+
+          <div
+            title={collapsed ? "Điều khoản dịch vụ" : undefined}
+            className={`flex items-center rounded-xl py-2.5 text-sm font-medium text-slate-500 ${menuSpacing}`}
+          >
+            <FileText
+              size={18}
+              className="shrink-0 text-fuchsia-300"
+            />
+            <span className={labelClass}>
+              Điều khoản dịch vụ
+            </span>
+          </div>
+
+          <button
+            type="button"
+            title={collapsed ? "Đăng nhập" : undefined}
+            onClick={() =>
+              window.alert(
+                "Bản local không yêu cầu đăng nhập để sử dụng."
+              )
+            }
+            className={`mt-2 flex w-full items-center rounded-xl bg-cyan-500/10 py-3 text-left text-sm font-black text-cyan-300 transition hover:bg-cyan-500/15 ${menuSpacing}`}
+          >
+            <LogIn size={18} className="shrink-0" />
+            <span className={labelClass}>
+              Đăng nhập
+            </span>
+          </button>
+        </div>
+      </aside>
+    </>
+  );
+}

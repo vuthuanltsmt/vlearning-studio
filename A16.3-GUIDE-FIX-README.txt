@@ -1,0 +1,17 @@
+VLEARNING V1.1A16.3 - GUIDE OPEN FIX
+
+Loi duoc sua:
+- Ban cu: nut Mo goi onNavigate(...) nen chuyen sang Projects/Games, nguoi dung cam giac quay ve trang chu.
+- Ban A16.3: nut MỞ HƯỚNG DẪN CHI TIẾT chi mo noi dung chi tiet ngay trong trang Hướng dẫn.
+- Chi nut Đi tới ... o cuoi bai huong dan moi dieu huong sang chuc nang that.
+
+File can ghi de:
+- app\projects\page.tsx
+
+Sau giai nen:
+1. Chay VERIFY-A16.3-GUIDE.cmd
+2. Neu thay A16.3 DA DUOC CHEP DUNG: build lai.
+3. Remove-Item .\.next -Recurse -Force -ErrorAction SilentlyContinue
+4. npm.cmd run build
+5. .\START-VLEARNING.cmd
+6. Mo http://localhost:3000/projects va Ctrl+F5

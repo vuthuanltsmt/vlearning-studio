@@ -1,0 +1,37 @@
+VLEARNING STUDIO V1.1A16.8 - ULTRA COMPACT DASHBOARD
+=======================================================
+
+Purpose:
+Make the home dashboard substantially smaller so a typical laptop screen can
+see the brand header, both creation cards, and the beginning of the recent
+projects section at the same time.
+
+Main changes:
+- Main content max width: 1180px
+- Smaller page padding
+- Hero height reduced to about 138px
+- VLEARNING STUDIO forced to one line
+- Brand title reduced to 27–36px responsive size
+- Hero illustration reduced to about 105px high
+- Creation cards reduced to about 188px minimum height
+- Two cards switch to 2 columns from md breakpoint
+- Card titles, icons, images, labels and spacing all reduced
+- Recent Projects section moved further upward
+- Khóa học HUB remains removed
+- Existing actions remain unchanged
+
+INSTALL
+-------
+Extract into:
+  C:\Users\Admin\elearning-studio
+
+Then run:
+  REBUILD-A16.8-ULTRA-COMPACT.cmd
+
+Open:
+  http://localhost:3000/projects
+
+Press:
+  Ctrl + F5
+
+No Prisma/database update is required.

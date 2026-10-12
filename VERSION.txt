@@ -1,0 +1,4 @@
+VLearning Studio 1.0 Stable
+Base feature milestone: V12.4C
+Release scope: Authoring + Preview + SCORM 1.2
+Status: Feature freeze / production stabilization

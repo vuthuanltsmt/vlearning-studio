@@ -1,0 +1,24 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../generated/cloud-prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("CLOUD_DATABASE_URL")
+}
+
+model CloudProject {
+  id              String   @id @default(cuid())
+  ownerUserId     String
+  projectId       String
+  title           String
+  snapshotJson    String
+  clientUpdatedAt DateTime?
+  version         Int      @default(1)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([ownerUserId, projectId])
+  @@index([ownerUserId, updatedAt])
+}

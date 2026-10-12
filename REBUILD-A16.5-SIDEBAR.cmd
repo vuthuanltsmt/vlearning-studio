@@ -1,0 +1,39 @@
+@echo off
+setlocal
+cd /d "%~dp0"
+
+echo ============================================================
+echo VLEARNING A16.5 - SIDEBAR VIEWPORT FIX
+echo ============================================================
+echo.
+echo 1/3 Removing old Next.js build...
+if exist ".next" rmdir /s /q ".next"
+
+echo.
+echo 2/3 Building VLearning...
+call npm.cmd run build
+if errorlevel 1 goto :error
+
+echo.
+echo 3/3 Starting VLearning...
+start "" "%~dp0START-VLEARNING.cmd"
+
+echo.
+echo ============================================================
+echo SIDEBAR FIX APPLIED
+echo Open http://localhost:3000/projects
+echo Then press Ctrl+F5
+echo ============================================================
+echo.
+pause
+exit /b 0
+
+:error
+echo.
+echo ============================================================
+echo BUILD FAILED
+echo Send the FIRST build error shown above.
+echo ============================================================
+echo.
+pause
+exit /b 1

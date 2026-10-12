@@ -1,0 +1,36 @@
+VLEARNING V1.1A16.5 - SIDEBAR VIEWPORT / SCROLL FIX
+====================================================
+
+Problem fixed:
+- Left sidebar can be taller than the screen.
+- Bottom items such as Language / Privacy / Terms / Login can be pushed below
+  the viewport or appear covered.
+- Adding more A16 menu items makes the issue more visible on laptop screens.
+
+Fix:
+- Sidebar is locked to 100dvh.
+- The whole sidebar no longer overflows the viewport.
+- Profile area is fixed at the top.
+- Project shortcut is fixed above navigation.
+- ONLY the middle menu scrolls vertically.
+- Bottom utility/login area stays visible.
+- Menu rows are slightly more compact.
+- Mobile drawer keeps the same behavior.
+
+Install:
+Extract this ZIP into:
+  C:\Users\Admin\elearning-studio
+
+Then run:
+  REBUILD-A16.5-SIDEBAR.cmd
+
+Or manually:
+  Remove-Item .\.next -Recurse -Force -ErrorAction SilentlyContinue
+  npm.cmd run build
+  .\START-VLEARNING.cmd
+
+Open:
+  http://localhost:3000/projects
+
+Press:
+  Ctrl + F5

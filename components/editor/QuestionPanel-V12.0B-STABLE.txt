@@ -1,0 +1,389 @@
+"use client";
+
+import {
+  Copy,
+  Edit3,
+  Image as ImageIcon,
+  Trash2,
+  Upload,
+} from "lucide-react";
+
+import type {
+  ChangeEvent,
+} from "react";
+
+import {
+  CompletionSettingsCard,
+} from "@/components/editor/CompletionSettingsCard";
+
+import {
+  formatTime,
+  getQuizCorrectIndexes,
+  getQuizType,
+} from "@/types/lesson";
+
+import type {
+  LessonPage,
+  Quiz,
+} from "@/types/lesson";
+
+type Props = {
+  page: LessonPage;
+
+  onVideoUpload: (
+    file: File
+  ) => void;
+
+  onJump: (
+    quiz: Quiz
+  ) => void;
+
+  onEdit: (
+    quiz: Quiz
+  ) => void;
+
+  onDuplicate: (
+    quiz: Quiz
+  ) => void;
+
+  onDelete: (
+    quiz: Quiz
+  ) => void;
+};
+
+export function QuestionPanel({
+  page,
+  onVideoUpload,
+  onJump,
+  onEdit,
+  onDuplicate,
+  onDelete,
+}: Props) {
+  /* =====================================================
+     VIDEO UPLOAD
+  ===================================================== */
+
+  function handleUpload(
+    event:
+      ChangeEvent<HTMLInputElement>
+  ) {
+    const file =
+      event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    onVideoUpload(file);
+
+    /*
+     * Cho phép chọn lại cùng một file
+     * nếu cần.
+     */
+    event.target.value =
+      "";
+  }
+
+  /* =====================================================
+     UI
+  ===================================================== */
+
+  return (
+    <aside className="w-[380px] shrink-0 overflow-y-auto border-l border-blue-900 bg-[#173f73] text-white">
+
+      {/* ===================================================
+          COMPLETION SETTINGS
+      =================================================== */}
+
+      <div className="border-b border-blue-900 p-5">
+
+        <CompletionSettingsCard />
+
+      </div>
+
+      {/* ===================================================
+          MEDIA
+      =================================================== */}
+
+      <div className="border-b border-blue-900 p-6">
+
+        <div className="mb-4 flex items-center gap-2 font-bold">
+
+          <ImageIcon
+            size={17}
+          />
+
+          PHƯƠNG TIỆN
+
+        </div>
+
+        <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-blue-600 py-4 font-bold transition hover:bg-blue-500">
+
+          <Upload
+            size={18}
+          />
+
+          {page.videoUrl
+            ? "Thay video"
+            : "Tải video"}
+
+          <input
+            type="file"
+            accept="video/*"
+            className="hidden"
+            onChange={
+              handleUpload
+            }
+          />
+
+        </label>
+
+        {page.videoName && (
+
+          <div className="mt-3 truncate rounded-lg bg-blue-950/40 px-3 py-2 text-xs text-slate-300">
+
+            {page.videoName}
+
+          </div>
+
+        )}
+
+      </div>
+
+      {/* ===================================================
+          QUESTION LIST
+      =================================================== */}
+
+      <div className="p-6">
+
+        <div className="mb-5 flex items-center justify-between">
+
+          <strong>
+            CÂU HỎI
+          </strong>
+
+          <span className="rounded-full bg-blue-600 px-3 py-1 text-xs font-bold text-cyan-100">
+
+            {page.quizzes.length}
+
+          </span>
+
+        </div>
+
+        {/* EMPTY */}
+
+        {page.quizzes.length === 0 ? (
+
+          <div className="rounded-xl border border-dashed border-blue-600 p-6 text-center text-sm text-slate-300">
+
+            Trang này chưa có câu hỏi.
+
+          </div>
+
+        ) : (
+
+          <div className="space-y-3">
+
+            {page.quizzes.map(
+              (
+                quiz,
+                index
+              ) => {
+                const quizType =
+                  getQuizType(quiz);
+
+                const correctIndexes =
+                  getQuizCorrectIndexes(
+                    quiz
+                  );
+
+                const correctLabel =
+                  quizType ===
+                  "true-false"
+                    ? quiz.options[
+                        quiz.correctIndex
+                      ] ??
+                      (
+                        quiz.correctIndex ===
+                        0
+                          ? "Đúng"
+                          : "Sai"
+                      )
+                    : quizType ===
+                      "multiple"
+                      ? correctIndexes
+                          .map(
+                            (answerIndex) =>
+                              String.fromCharCode(
+                                65 +
+                                  answerIndex
+                              )
+                          )
+                          .join(", ")
+                      : String.fromCharCode(
+                          65 +
+                            quiz.correctIndex
+                        );
+
+                return (
+
+                <div
+                  key={
+                    quiz.id
+                  }
+                  className="rounded-xl border border-blue-700 bg-blue-950/40 p-4"
+                >
+
+                  {/* QUESTION INFO */}
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onJump(
+                        quiz
+                      )
+                    }
+                    className="w-full text-left"
+                  >
+
+                    <div className="flex items-center justify-between gap-3">
+
+                      <div className="flex min-w-0 items-center gap-2">
+
+                        <strong>
+                          Câu {index + 1}
+                        </strong>
+
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                          quizType ===
+                          "true-false"
+                            ? "bg-amber-950 text-amber-300"
+                            : quizType ===
+                              "multiple"
+                              ? "bg-purple-950 text-purple-300"
+                              : "bg-blue-900 text-cyan-300"
+                        }`}>
+
+                          {quizType ===
+                          "true-false"
+                            ? "ĐÚNG / SAI"
+                            : quizType ===
+                              "multiple"
+                              ? "NHIỀU ĐÁP ÁN"
+                              : "TRẮC NGHIỆM"}
+
+                        </span>
+
+                      </div>
+
+                      <span className="shrink-0 text-xs font-bold text-cyan-300">
+
+                        {formatTime(
+                          quiz.time
+                        )}
+
+                      </span>
+
+                    </div>
+
+                    <p className="mt-2 line-clamp-2 text-sm text-slate-300">
+
+                      {quiz.question}
+
+                    </p>
+
+                    <div className="mt-2 flex items-center justify-between gap-3">
+
+                      <span className="text-sm font-semibold text-purple-300">
+
+                        {quiz.points} điểm
+
+                      </span>
+
+                      <span className="text-[11px] text-slate-400">
+
+                        Đáp án đúng:{" "}
+
+                        {correctLabel}
+
+                      </span>
+
+                    </div>
+
+                  </button>
+
+                  {/* ACTION BUTTONS */}
+
+                  <div className="mt-4 grid grid-cols-3 gap-2 border-t border-blue-800 pt-3">
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onEdit(
+                          quiz
+                        )
+                      }
+                      className="flex items-center justify-center gap-1 rounded-lg bg-cyan-950 px-2 py-2 text-xs font-semibold text-cyan-300 transition hover:bg-cyan-900"
+                    >
+
+                      <Edit3
+                        size={14}
+                      />
+
+                      Sửa
+
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onDuplicate(
+                          quiz
+                        )
+                      }
+                      className="flex items-center justify-center gap-1 rounded-lg bg-purple-950 px-2 py-2 text-xs font-semibold text-purple-300 transition hover:bg-purple-900"
+                    >
+
+                      <Copy
+                        size={14}
+                      />
+
+                      Nhân bản
+
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onDelete(
+                          quiz
+                        )
+                      }
+                      className="flex items-center justify-center gap-1 rounded-lg bg-red-950 px-2 py-2 text-xs font-semibold text-red-300 transition hover:bg-red-900"
+                    >
+
+                      <Trash2
+                        size={14}
+                      />
+
+                      Xóa
+
+                    </button>
+
+                  </div>
+
+                </div>
+
+                );
+              }
+            )}
+
+          </div>
+
+        )}
+
+      </div>
+
+    </aside>
+  );
+}

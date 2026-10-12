@@ -1,0 +1,37 @@
+VLEARNING STUDIO A16 - PERMISSION MATRIX
+========================================
+
+Feature / Area                     Guest   Learner   Teacher   Admin
+-------------------------------------------------------------------
+Login / Register                   YES     YES       YES       YES
+Account / Profile                  -       YES       YES       YES
+Guide / Privacy / Terms            YES     YES       YES       YES
+Projects authoring                 NO      NO        YES       YES
+Open Editor                        NO      NO        YES       YES
+Games Builder                      NO      NO        YES       YES
+AI Script                          NO      NO        YES       YES
+AI Settings                        NO      NO        YES       YES
+Preview / learner-facing content   YES*    YES*      YES       YES
+SCORM authoring/export             NO      NO        YES       YES
+User Administration               NO      NO        NO        YES
+Change access role                NO      NO        NO        YES
+Enable / disable accounts          NO      NO        NO        YES
+Delete other accounts              NO      NO        NO        YES
+
+* Preview remains available because it is the learner-facing course player.
+  A16 does not yet implement server-side assigned-course catalogs.
+
+SERVER ENFORCEMENT
+------------------
+- /editor/demo is guarded server-side: ADMIN or TEACHER only.
+- /api/admin/* is guarded server-side: ADMIN only.
+- Disabled accounts cannot log in.
+- Role/status changes invalidate that user's sessions.
+- The signed-in admin cannot demote/disable/delete itself through Admin.
+- The final active admin cannot be removed.
+
+DATA SCOPE
+----------
+Role-based access is server-backed.
+Projects/videos/games still use the existing local browser/IndexedDB storage.
+They are not yet owned/scoped per server account.

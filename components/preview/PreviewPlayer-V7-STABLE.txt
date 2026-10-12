@@ -1,0 +1,2262 @@
+"use client";
+
+import {
+  ArrowLeft,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Pause,
+  Play,
+  RotateCcw,
+  Trophy,
+  XCircle,
+} from "lucide-react";
+
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
+import {
+  useEditorStore,
+} from "@/stores/editorStore";
+
+import {
+  getVideo,
+} from "@/lib/videoDb";
+
+import {
+  formatTime,
+} from "@/types/lesson";
+
+import type {
+  Quiz,
+} from "@/types/lesson";
+
+/* =========================================================
+   COMPLETION SETTINGS
+========================================================= */
+
+const PASS_SCORE_PERCENT =
+  80;
+
+const MIN_WATCH_PERCENT =
+  90;
+
+/* =========================================================
+   PREVIEW PLAYER
+========================================================= */
+
+export function PreviewPlayer() {
+  /* =====================================================
+     STORE
+  ===================================================== */
+
+  const {
+    project,
+    hydrated,
+    hydrate,
+  } =
+    useEditorStore();
+
+  /* =====================================================
+     PAGE
+  ===================================================== */
+
+  const [
+    pageIndex,
+    setPageIndex,
+  ] =
+    useState(0);
+
+  const page =
+    project.pages[
+      pageIndex
+    ];
+
+  /* =====================================================
+     VIDEO
+  ===================================================== */
+
+  const videoRef =
+    useRef<HTMLVideoElement>(
+      null
+    );
+
+  /*
+   * Đã bấm Play hay chưa.
+   */
+  const hasStartedVideoRef =
+    useRef(false);
+
+  /*
+   * Mốc thời gian playback trước đó.
+   *
+   * Dùng để phân biệt:
+   * - video đang xem thật
+   * - người học tua nhảy qua nội dung
+   */
+  const lastPlaybackTimeRef =
+    useRef<number | null>(
+      null
+    );
+
+  /*
+   * Lưu các giây video thực sự
+   * đã được xem theo từng pageId.
+   *
+   * Ví dụ:
+   *
+   * page-1 -> Set(0,1,2,3,...)
+   */
+  const watchedSecondsRef =
+    useRef<
+      Record<
+        string,
+        Set<number>
+      >
+    >({});
+
+  const [
+    videoUrl,
+    setVideoUrl,
+  ] =
+    useState<string | null>(
+      null
+    );
+
+  const [
+    loadingVideo,
+    setLoadingVideo,
+  ] =
+    useState(false);
+
+  /*
+   * Xác nhận IndexedDB đã kiểm tra
+   * xong video của trang nào.
+   */
+  const [
+    videoResolvedPageId,
+    setVideoResolvedPageId,
+  ] =
+    useState<string | null>(
+      null
+    );
+
+  const [
+    currentTime,
+    setCurrentTime,
+  ] =
+    useState(0);
+
+  const [
+    duration,
+    setDuration,
+  ] =
+    useState(0);
+
+  const [
+    isPlaying,
+    setIsPlaying,
+  ] =
+    useState(false);
+
+  const [
+    currentWatchPercent,
+    setCurrentWatchPercent,
+  ] =
+    useState(0);
+
+  const [
+    completionNotice,
+    setCompletionNotice,
+  ] =
+    useState("");
+
+  /* =====================================================
+     QUIZ
+  ===================================================== */
+
+  const [
+    activeQuiz,
+    setActiveQuiz,
+  ] =
+    useState<Quiz | null>(
+      null
+    );
+
+  const [
+    selectedAnswer,
+    setSelectedAnswer,
+  ] =
+    useState<number | null>(
+      null
+    );
+
+  const [
+    quizResult,
+    setQuizResult,
+  ] =
+    useState<
+      "correct" |
+      "wrong" |
+      null
+    >(null);
+
+  const [
+    answeredQuizIds,
+    setAnsweredQuizIds,
+  ] =
+    useState<string[]>([]);
+
+  const [
+    correctQuizIds,
+    setCorrectQuizIds,
+  ] =
+    useState<string[]>([]);
+
+  /* =====================================================
+     COURSE
+  ===================================================== */
+
+  const [
+    completedPageIds,
+    setCompletedPageIds,
+  ] =
+    useState<string[]>([]);
+
+  const [
+    score,
+    setScore,
+  ] =
+    useState(0);
+
+  const [
+    finished,
+    setFinished,
+  ] =
+    useState(false);
+
+  /* =====================================================
+     HYDRATE
+  ===================================================== */
+
+  useEffect(() => {
+    hydrate();
+  }, [hydrate]);
+
+  /* =====================================================
+     TOTAL QUESTIONS
+  ===================================================== */
+
+  const totalQuestions =
+    useMemo(() => {
+      return project.pages.reduce(
+        (
+          total,
+          lessonPage
+        ) =>
+          total +
+          lessonPage.quizzes.length,
+        0
+      );
+    }, [
+      project.pages,
+    ]);
+
+  /* =====================================================
+     TOTAL POSSIBLE SCORE
+  ===================================================== */
+
+  const totalPossibleScore =
+    useMemo(() => {
+      return project.pages.reduce(
+        (
+          total,
+          lessonPage
+        ) =>
+          total +
+          lessonPage.quizzes.reduce(
+            (
+              pageTotal,
+              quiz
+            ) =>
+              pageTotal +
+              quiz.points,
+            0
+          ),
+        0
+      );
+    }, [
+      project.pages,
+    ]);
+
+  /* =====================================================
+     PAGE INDEX SAFETY
+  ===================================================== */
+
+  useEffect(() => {
+    if (
+      project.pages.length ===
+      0
+    ) {
+      return;
+    }
+
+    if (
+      pageIndex >=
+      project.pages.length
+    ) {
+      setPageIndex(0);
+    }
+  }, [
+    pageIndex,
+    project.pages.length,
+  ]);
+
+  /* =====================================================
+     WATCH PERCENT
+  ===================================================== */
+
+  function getWatchPercent(
+    pageId: string,
+    totalDuration: number
+  ) {
+    if (
+      !Number.isFinite(
+        totalDuration
+      ) ||
+      totalDuration <= 0
+    ) {
+      return 0;
+    }
+
+    const watched =
+      watchedSecondsRef
+        .current[
+        pageId
+      ];
+
+    if (!watched) {
+      return 0;
+    }
+
+    const totalSeconds =
+      Math.max(
+        1,
+        Math.ceil(
+          totalDuration
+        )
+      );
+
+    return Math.min(
+      100,
+      Math.round(
+        (watched.size /
+          totalSeconds) *
+          100
+      )
+    );
+  }
+
+  /* =====================================================
+     GHI NHẬN VIDEO ĐÃ XEM
+  ===================================================== */
+
+  function recordWatchProgress(
+    pageId: string,
+    time: number,
+    totalDuration: number
+  ) {
+    const previous =
+      lastPlaybackTimeRef.current;
+
+    /*
+     * Lần đầu chỉ đặt mốc.
+     */
+    if (
+      previous === null
+    ) {
+      lastPlaybackTimeRef.current =
+        time;
+
+      return;
+    }
+
+    const delta =
+      time -
+      previous;
+
+    /*
+     * Video playback bình thường
+     * thường tăng một đoạn nhỏ.
+     *
+     * Nếu delta quá lớn:
+     * nhiều khả năng người dùng vừa tua,
+     * nên không tính phần bị bỏ qua.
+     */
+    if (
+      delta > 0 &&
+      delta <= 2.5
+    ) {
+      if (
+        !watchedSecondsRef
+          .current[
+          pageId
+        ]
+      ) {
+        watchedSecondsRef
+          .current[
+          pageId
+        ] =
+          new Set<number>();
+      }
+
+      const watchedSet =
+        watchedSecondsRef
+          .current[
+          pageId
+        ];
+
+      const totalSeconds =
+        Math.max(
+          1,
+          Math.ceil(
+            totalDuration
+          )
+        );
+
+      const startSecond =
+        Math.max(
+          0,
+          Math.floor(
+            previous
+          )
+        );
+
+      const endSecond =
+        Math.min(
+          totalSeconds - 1,
+          Math.floor(
+            time
+          )
+        );
+
+      for (
+        let second =
+          startSecond;
+        second <=
+        endSecond;
+        second++
+      ) {
+        watchedSet.add(
+          second
+        );
+      }
+
+      const percent =
+        getWatchPercent(
+          pageId,
+          totalDuration
+        );
+
+      setCurrentWatchPercent(
+        percent
+      );
+    }
+
+    lastPlaybackTimeRef.current =
+      time;
+  }
+
+  /* =====================================================
+     FIRST UNWATCHED SECOND
+  ===================================================== */
+
+  function getFirstUnwatchedSecond(
+    pageId: string,
+    totalDuration: number
+  ) {
+    const watched =
+      watchedSecondsRef
+        .current[
+        pageId
+      ];
+
+    const totalSeconds =
+      Math.max(
+        1,
+        Math.ceil(
+          totalDuration
+        )
+      );
+
+    if (!watched) {
+      return 0;
+    }
+
+    for (
+      let second = 0;
+      second <
+      totalSeconds;
+      second++
+    ) {
+      if (
+        !watched.has(
+          second
+        )
+      ) {
+        return second;
+      }
+    }
+
+    return 0;
+  }
+
+  /* =====================================================
+     LOAD VIDEO FROM INDEXEDDB
+  ===================================================== */
+
+  useEffect(() => {
+    if (
+      !hydrated ||
+      !page
+    ) {
+      return;
+    }
+
+    const pageId =
+      page.id;
+
+    let cancelled =
+      false;
+
+    let objectUrl:
+      string | null =
+      null;
+
+    setVideoResolvedPageId(
+      null
+    );
+
+    setLoadingVideo(
+      true
+    );
+
+    setVideoUrl(
+      null
+    );
+
+    async function loadVideo() {
+      try {
+        const file =
+          await getVideo(
+            pageId
+          );
+
+        if (cancelled) {
+          return;
+        }
+
+        if (!file) {
+          setVideoUrl(
+            null
+          );
+
+          return;
+        }
+
+        objectUrl =
+          URL.createObjectURL(
+            file
+          );
+
+        setVideoUrl(
+          objectUrl
+        );
+      } catch (
+        error
+      ) {
+        console.error(
+          "Không tải được video Preview:",
+          error
+        );
+
+        setVideoUrl(
+          null
+        );
+      } finally {
+        if (
+          !cancelled
+        ) {
+          setLoadingVideo(
+            false
+          );
+
+          setVideoResolvedPageId(
+            pageId
+          );
+        }
+      }
+    }
+
+    void loadVideo();
+
+    return () => {
+      cancelled =
+        true;
+
+      if (objectUrl) {
+        URL.revokeObjectURL(
+          objectUrl
+        );
+      }
+    };
+  }, [
+    hydrated,
+    page?.id,
+  ]);
+
+  /* =====================================================
+     RESET PLAYER WHEN PAGE CHANGES
+  ===================================================== */
+
+  useEffect(() => {
+    videoRef.current?.pause();
+
+    hasStartedVideoRef.current =
+      false;
+
+    lastPlaybackTimeRef.current =
+      null;
+
+    setCurrentTime(0);
+
+    setDuration(
+      page?.duration ??
+        0
+    );
+
+    setIsPlaying(
+      false
+    );
+
+    setActiveQuiz(
+      null
+    );
+
+    setSelectedAnswer(
+      null
+    );
+
+    setQuizResult(
+      null
+    );
+
+    setCompletionNotice(
+      ""
+    );
+
+    if (page) {
+      setCurrentWatchPercent(
+        getWatchPercent(
+          page.id,
+          page.duration
+        )
+      );
+    } else {
+      setCurrentWatchPercent(
+        0
+      );
+    }
+  }, [
+    page?.id,
+  ]);
+
+  /* =====================================================
+     PAGE QUIZ PROGRESS
+  ===================================================== */
+
+  const completedQuizCount =
+    page
+      ? page.quizzes.filter(
+          (quiz) =>
+            answeredQuizIds.includes(
+              quiz.id
+            )
+        ).length
+      : 0;
+
+  const allPageQuizzesDone =
+    page
+      ? completedQuizCount ===
+        page.quizzes.length
+      : false;
+
+  const pageCompleted =
+    page
+      ? completedPageIds.includes(
+          page.id
+        )
+      : false;
+
+  /* =====================================================
+     SHOW QUIZ
+  ===================================================== */
+
+  function showQuiz(
+    quiz: Quiz
+  ) {
+    videoRef.current?.pause();
+
+    lastPlaybackTimeRef.current =
+      null;
+
+    setIsPlaying(
+      false
+    );
+
+    setActiveQuiz(
+      quiz
+    );
+
+    setSelectedAnswer(
+      null
+    );
+
+    setQuizResult(
+      null
+    );
+  }
+
+  /* =====================================================
+     PLAY / PAUSE
+  ===================================================== */
+
+  function togglePlay() {
+    const video =
+      videoRef.current;
+
+    if (
+      !video ||
+      activeQuiz
+    ) {
+      return;
+    }
+
+    if (video.paused) {
+      hasStartedVideoRef.current =
+        true;
+
+      lastPlaybackTimeRef.current =
+        video.currentTime;
+
+      setCompletionNotice(
+        ""
+      );
+
+      void video.play();
+    } else {
+      video.pause();
+    }
+  }
+
+  /* =====================================================
+     METADATA
+  ===================================================== */
+
+  function handleLoadedMetadata() {
+    const video =
+      videoRef.current;
+
+    if (!video) {
+      return;
+    }
+
+    setDuration(
+      video.duration
+    );
+
+    if (page) {
+      setCurrentWatchPercent(
+        getWatchPercent(
+          page.id,
+          video.duration
+        )
+      );
+    }
+  }
+
+  /* =====================================================
+     VIDEO TIME UPDATE
+  ===================================================== */
+
+  function handleTimeUpdate() {
+    if (!page) {
+      return;
+    }
+
+    const video =
+      videoRef.current;
+
+    if (!video) {
+      return;
+    }
+
+    const time =
+      video.currentTime;
+
+    setCurrentTime(
+      time
+    );
+
+    /*
+     * Chỉ tính thời gian thực sự
+     * đang phát video.
+     */
+    if (
+      hasStartedVideoRef
+        .current &&
+      !video.paused
+    ) {
+      recordWatchProgress(
+        page.id,
+        time,
+        video.duration
+      );
+    }
+
+    /*
+     * Chưa Play thì không hiện quiz.
+     */
+    if (
+      !hasStartedVideoRef
+        .current
+    ) {
+      return;
+    }
+
+    if (activeQuiz) {
+      return;
+    }
+
+    const dueQuiz =
+      [...page.quizzes]
+        .sort(
+          (a, b) =>
+            a.time -
+            b.time
+        )
+        .find(
+          (quiz) =>
+            !answeredQuizIds.includes(
+              quiz.id
+            ) &&
+            quiz.time <=
+              time
+        );
+
+    if (dueQuiz) {
+      showQuiz(
+        dueQuiz
+      );
+    }
+  }
+
+  /* =====================================================
+     SEEK
+  ===================================================== */
+
+  function handleSeek(
+    requestedTime: number
+  ) {
+    if (
+      !page ||
+      activeQuiz
+    ) {
+      return;
+    }
+
+    const video =
+      videoRef.current;
+
+    if (!video) {
+      return;
+    }
+
+    hasStartedVideoRef.current =
+      true;
+
+    /*
+     * Không nối phần playback trước
+     * với phần sau khi tua.
+     */
+    lastPlaybackTimeRef.current =
+      null;
+
+    /*
+     * Không cho vượt qua quiz chưa làm.
+     */
+    if (
+      requestedTime >
+      currentTime
+    ) {
+      const blockingQuiz =
+        [...page.quizzes]
+          .sort(
+            (a, b) =>
+              a.time -
+              b.time
+          )
+          .find(
+            (quiz) =>
+              !answeredQuizIds.includes(
+                quiz.id
+              ) &&
+              quiz.time >
+                currentTime &&
+              quiz.time <=
+                requestedTime
+          );
+
+      if (blockingQuiz) {
+        video.currentTime =
+          blockingQuiz.time;
+
+        setCurrentTime(
+          blockingQuiz.time
+        );
+
+        showQuiz(
+          blockingQuiz
+        );
+
+        return;
+      }
+    }
+
+    video.currentTime =
+      requestedTime;
+
+    setCurrentTime(
+      requestedTime
+    );
+  }
+
+  /* =====================================================
+     ANSWER QUIZ
+  ===================================================== */
+
+  function answerQuiz(
+    answerIndex: number
+  ) {
+    if (
+      !activeQuiz ||
+      quizResult
+    ) {
+      return;
+    }
+
+    setSelectedAnswer(
+      answerIndex
+    );
+
+    const correct =
+      answerIndex ===
+      activeQuiz.correctIndex;
+
+    if (correct) {
+      setQuizResult(
+        "correct"
+      );
+
+      if (
+        !correctQuizIds.includes(
+          activeQuiz.id
+        )
+      ) {
+        setCorrectQuizIds(
+          (old) => [
+            ...old,
+            activeQuiz.id,
+          ]
+        );
+
+        setScore(
+          (old) =>
+            old +
+            activeQuiz.points
+        );
+      }
+    } else {
+      setQuizResult(
+        "wrong"
+      );
+    }
+  }
+
+  /* =====================================================
+     CONTINUE AFTER QUIZ
+  ===================================================== */
+
+  function continueAfterQuiz() {
+    if (
+      !activeQuiz ||
+      !page
+    ) {
+      return;
+    }
+
+    const quizId =
+      activeQuiz.id;
+
+    const nextAnsweredIds =
+      answeredQuizIds.includes(
+        quizId
+      )
+        ? answeredQuizIds
+        : [
+            ...answeredQuizIds,
+            quizId,
+          ];
+
+    setAnsweredQuizIds(
+      nextAnsweredIds
+    );
+
+    setActiveQuiz(
+      null
+    );
+
+    setSelectedAnswer(
+      null
+    );
+
+    setQuizResult(
+      null
+    );
+
+    /*
+     * Không có video.
+     */
+    if (!videoUrl) {
+      const done =
+        page.quizzes.every(
+          (quiz) =>
+            nextAnsweredIds.includes(
+              quiz.id
+            )
+        );
+
+      if (done) {
+        setCompletedPageIds(
+          (old) =>
+            old.includes(
+              page.id
+            )
+              ? old
+              : [
+                  ...old,
+                  page.id,
+                ]
+        );
+      }
+
+      return;
+    }
+
+    hasStartedVideoRef.current =
+      true;
+
+    setTimeout(() => {
+      const video =
+        videoRef.current;
+
+      if (
+        video &&
+        !video.ended
+      ) {
+        lastPlaybackTimeRef.current =
+          video.currentTime;
+
+        void video.play();
+      }
+    }, 80);
+  }
+
+  /* =====================================================
+     VIDEO ENDED
+  ===================================================== */
+
+  function handleVideoEnded() {
+    if (!page) {
+      return;
+    }
+
+    const video =
+      videoRef.current;
+
+    setIsPlaying(
+      false
+    );
+
+    /*
+     * Ghi nốt đoạn cuối video.
+     */
+    if (video) {
+      recordWatchProgress(
+        page.id,
+        video.duration,
+        video.duration
+      );
+    }
+
+    lastPlaybackTimeRef.current =
+      null;
+
+    /*
+     * Còn quiz chưa làm.
+     */
+    const unanswered =
+      [...page.quizzes]
+        .sort(
+          (a, b) =>
+            a.time -
+            b.time
+        )
+        .find(
+          (quiz) =>
+            !answeredQuizIds.includes(
+              quiz.id
+            )
+        );
+
+    if (unanswered) {
+      if (video) {
+        video.currentTime =
+          unanswered.time;
+      }
+
+      setCurrentTime(
+        unanswered.time
+      );
+
+      showQuiz(
+        unanswered
+      );
+
+      return;
+    }
+
+    /*
+     * Kiểm tra tỷ lệ xem.
+     */
+    const watchPercent =
+      getWatchPercent(
+        page.id,
+        video?.duration ??
+          duration
+      );
+
+    setCurrentWatchPercent(
+      watchPercent
+    );
+
+    if (
+      watchPercent <
+      MIN_WATCH_PERCENT
+    ) {
+      const missingSecond =
+        getFirstUnwatchedSecond(
+          page.id,
+          video?.duration ??
+            duration
+        );
+
+      setCompletionNotice(
+        `Bạn mới xem ${watchPercent}% video. Cần tối thiểu ${MIN_WATCH_PERCENT}% để hoàn thành trang.`
+      );
+
+      /*
+       * Đưa người học về vùng
+       * chưa xem đầu tiên.
+       */
+      if (video) {
+        video.currentTime =
+          missingSecond;
+      }
+
+      setCurrentTime(
+        missingSecond
+      );
+
+      return;
+    }
+
+    /*
+     * Hoàn thành trang.
+     */
+    setCompletionNotice(
+      ""
+    );
+
+    setCompletedPageIds(
+      (old) =>
+        old.includes(
+          page.id
+        )
+          ? old
+          : [
+              ...old,
+              page.id,
+            ]
+    );
+  }
+
+  /* =====================================================
+     PAGE WITHOUT VIDEO
+  ===================================================== */
+
+  useEffect(() => {
+    if (!page) {
+      return;
+    }
+
+    /*
+     * Chưa kiểm tra IndexedDB xong.
+     */
+    if (
+      videoResolvedPageId !==
+      page.id
+    ) {
+      return;
+    }
+
+    if (
+      loadingVideo ||
+      videoUrl
+    ) {
+      return;
+    }
+
+    /*
+     * Không có video và không có quiz.
+     */
+    if (
+      page.quizzes.length ===
+      0
+    ) {
+      setCompletedPageIds(
+        (old) =>
+          old.includes(
+            page.id
+          )
+            ? old
+            : [
+                ...old,
+                page.id,
+              ]
+      );
+
+      return;
+    }
+
+    /*
+     * Không video nhưng có quiz.
+     */
+    if (activeQuiz) {
+      return;
+    }
+
+    const nextQuiz =
+      page.quizzes.find(
+        (quiz) =>
+          !answeredQuizIds.includes(
+            quiz.id
+          )
+      );
+
+    if (nextQuiz) {
+      setActiveQuiz(
+        nextQuiz
+      );
+
+      setSelectedAnswer(
+        null
+      );
+
+      setQuizResult(
+        null
+      );
+
+      return;
+    }
+
+    if (
+      allPageQuizzesDone
+    ) {
+      setCompletedPageIds(
+        (old) =>
+          old.includes(
+            page.id
+          )
+            ? old
+            : [
+                ...old,
+                page.id,
+              ]
+      );
+    }
+  }, [
+    page?.id,
+    page?.quizzes,
+    videoResolvedPageId,
+    loadingVideo,
+    videoUrl,
+    activeQuiz,
+    answeredQuizIds,
+    allPageQuizzesDone,
+  ]);
+
+  /* =====================================================
+     PREVIOUS PAGE
+  ===================================================== */
+
+  function previousPage() {
+    if (
+      pageIndex <= 0 ||
+      activeQuiz
+    ) {
+      return;
+    }
+
+    videoRef.current?.pause();
+
+    setPageIndex(
+      (old) =>
+        old - 1
+    );
+  }
+
+  /* =====================================================
+     NEXT PAGE / FINISH
+  ===================================================== */
+
+  function nextPage() {
+    if (
+      !pageCompleted ||
+      activeQuiz
+    ) {
+      return;
+    }
+
+    videoRef.current?.pause();
+
+    if (
+      pageIndex <
+      project.pages.length -
+        1
+    ) {
+      setPageIndex(
+        (old) =>
+          old + 1
+      );
+
+      return;
+    }
+
+    setFinished(
+      true
+    );
+  }
+
+  /* =====================================================
+     RESTART COURSE
+  ===================================================== */
+
+  function restartCourse() {
+    videoRef.current?.pause();
+
+    hasStartedVideoRef.current =
+      false;
+
+    lastPlaybackTimeRef.current =
+      null;
+
+    watchedSecondsRef.current =
+      {};
+
+    setPageIndex(0);
+
+    setScore(0);
+
+    setAnsweredQuizIds(
+      []
+    );
+
+    setCorrectQuizIds(
+      []
+    );
+
+    setCompletedPageIds(
+      []
+    );
+
+    setFinished(
+      false
+    );
+
+    setCurrentTime(0);
+
+    setCurrentWatchPercent(
+      0
+    );
+
+    setCompletionNotice(
+      ""
+    );
+
+    setActiveQuiz(
+      null
+    );
+
+    setSelectedAnswer(
+      null
+    );
+
+    setQuizResult(
+      null
+    );
+  }
+
+  /* =====================================================
+     BACK TO EDITOR
+  ===================================================== */
+
+  function backToEditor() {
+    window.close();
+
+    setTimeout(() => {
+      if (!window.closed) {
+        window.location.href =
+          "/editor/demo";
+      }
+    }, 100);
+  }
+
+  /* =====================================================
+     LOADING
+  ===================================================== */
+
+  if (!hydrated) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#061426] text-white">
+
+        <div className="text-xl font-bold">
+          Đang tải bài giảng...
+        </div>
+
+      </main>
+    );
+  }
+
+  /* =====================================================
+     EMPTY
+  ===================================================== */
+
+  if (!page) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#061426] text-white">
+
+        Không có nội dung bài giảng.
+
+      </main>
+    );
+  }
+
+  /* =====================================================
+     FINISHED SCREEN
+  ===================================================== */
+
+  if (finished) {
+    const percentage =
+      totalPossibleScore >
+      0
+        ? Math.round(
+            (score /
+              totalPossibleScore) *
+              100
+          )
+        : 100;
+
+    const passed =
+      percentage >=
+      PASS_SCORE_PERCENT;
+
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#061426] p-6 text-white">
+
+        <div className="w-full max-w-3xl rounded-3xl border border-blue-700 bg-[#123665] p-8 text-center shadow-2xl">
+
+          <div
+            className={`mx-auto flex h-24 w-24 items-center justify-center rounded-full ${
+              passed
+                ? "bg-green-500/20 text-green-300"
+                : "bg-red-500/20 text-red-300"
+            }`}
+          >
+
+            {passed ? (
+              <Trophy
+                size={52}
+              />
+            ) : (
+              <XCircle
+                size={52}
+              />
+            )}
+
+          </div>
+
+          <div
+            className={`mt-6 text-sm font-black uppercase tracking-[0.25em] ${
+              passed
+                ? "text-green-300"
+                : "text-red-300"
+            }`}
+          >
+            {passed
+              ? "ĐẠT"
+              : "CHƯA ĐẠT"}
+          </div>
+
+          <h1 className="mt-2 text-4xl font-black">
+            HOÀN THÀNH BÀI HỌC
+          </h1>
+
+          <p className="mt-3 text-slate-300">
+            {project.title}
+          </p>
+
+          <div className="mt-8 grid gap-4 sm:grid-cols-3">
+
+            <div className="rounded-2xl bg-blue-950/60 p-5">
+
+              <div className="text-sm text-slate-400">
+                Tổng điểm
+              </div>
+
+              <div className="mt-2 text-3xl font-black text-cyan-300">
+
+                {score}
+                {" / "}
+                {totalPossibleScore}
+
+              </div>
+
+            </div>
+
+            <div className="rounded-2xl bg-blue-950/60 p-5">
+
+              <div className="text-sm text-slate-400">
+                Trả lời đúng
+              </div>
+
+              <div className="mt-2 text-3xl font-black text-green-300">
+
+                {correctQuizIds.length}
+                {" / "}
+                {totalQuestions}
+
+              </div>
+
+            </div>
+
+            <div className="rounded-2xl bg-blue-950/60 p-5">
+
+              <div className="text-sm text-slate-400">
+                Kết quả
+              </div>
+
+              <div
+                className={`mt-2 text-3xl font-black ${
+                  passed
+                    ? "text-green-300"
+                    : "text-red-300"
+                }`}
+              >
+                {percentage}%
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* COMPLETION CONDITIONS */}
+
+          <div className="mt-6 rounded-2xl bg-blue-950/40 p-5 text-left">
+
+            <div className="font-bold">
+              Điều kiện hoàn thành
+            </div>
+
+            <div className="mt-3 space-y-2 text-sm text-slate-300">
+
+              <div className="flex items-center justify-between gap-4">
+
+                <span>
+                  Điểm tối thiểu
+                </span>
+
+                <strong>
+                  {PASS_SCORE_PERCENT}%
+                </strong>
+
+              </div>
+
+              <div className="flex items-center justify-between gap-4">
+
+                <span>
+                  Xem tối thiểu mỗi video
+                </span>
+
+                <strong>
+                  {MIN_WATCH_PERCENT}%
+                </strong>
+
+              </div>
+
+              <div className="flex items-center justify-between gap-4">
+
+                <span>
+                  Hoàn thành câu hỏi
+                </span>
+
+                <strong>
+                  Bắt buộc
+                </strong>
+
+              </div>
+
+            </div>
+
+          </div>
+
+          {!passed && (
+
+            <div className="mt-5 rounded-xl border border-red-800 bg-red-950/40 p-4 text-sm text-red-200">
+
+              Bạn chưa đạt mức điểm tối thiểu{" "}
+              <strong>
+                {PASS_SCORE_PERCENT}%
+              </strong>
+              . Hãy học lại để cải thiện kết quả.
+
+            </div>
+
+          )}
+
+          <div className="mt-8 flex flex-wrap justify-center gap-3">
+
+            <button
+              type="button"
+              onClick={
+                restartCourse
+              }
+              className="flex items-center gap-2 rounded-xl bg-blue-600 px-6 py-3 font-bold transition hover:bg-blue-500"
+            >
+
+              <RotateCcw
+                size={18}
+              />
+
+              Học lại
+
+            </button>
+
+            <button
+              type="button"
+              onClick={
+                backToEditor
+              }
+              className="flex items-center gap-2 rounded-xl border border-blue-500 bg-blue-950 px-6 py-3 font-bold transition hover:bg-blue-900"
+            >
+
+              <ArrowLeft
+                size={18}
+              />
+
+              Quay lại thiết kế
+
+            </button>
+
+          </div>
+
+        </div>
+
+      </main>
+    );
+  }
+
+  /* =====================================================
+     MAIN UI
+  ===================================================== */
+
+  return (
+    <div className="flex h-screen flex-col overflow-hidden bg-[#061426] text-white">
+
+      {/* TOPBAR */}
+
+      <header className="shrink-0 border-b border-blue-800 bg-[#143766]">
+
+        <div className="flex h-16 items-center justify-between gap-4 px-6">
+
+          <div className="flex min-w-0 items-center gap-4">
+
+            <button
+              type="button"
+              onClick={
+                backToEditor
+              }
+              className="rounded-lg p-2 text-slate-300 transition hover:bg-blue-900 hover:text-white"
+            >
+
+              <ArrowLeft
+                size={22}
+              />
+
+            </button>
+
+            <div className="min-w-0">
+
+              <div className="truncate font-bold">
+                {project.title}
+              </div>
+
+              <div className="text-xs text-cyan-300">
+                Chế độ xem trước
+              </div>
+
+            </div>
+
+          </div>
+
+          <div className="flex shrink-0 items-center gap-3">
+
+            <div className="rounded-xl bg-blue-950 px-4 py-2 text-sm">
+
+              Điểm{" "}
+
+              <strong className="text-cyan-300">
+                {score}
+              </strong>
+
+              {" / "}
+
+              {totalPossibleScore}
+
+            </div>
+
+            <div className="rounded-xl bg-blue-950 px-4 py-2 text-sm">
+
+              Trang{" "}
+
+              <strong className="text-cyan-300">
+                {pageIndex + 1}
+              </strong>
+
+              {" / "}
+
+              {project.pages.length}
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </header>
+
+      {/* MAIN */}
+
+      <main className="flex min-h-0 flex-1 flex-col px-5 py-4">
+
+        <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col">
+
+          {/* PAGE INFO */}
+
+          <div className="mb-3 shrink-0">
+
+            <div className="text-xs font-bold uppercase tracking-wider text-cyan-300">
+              Trang {pageIndex + 1}
+            </div>
+
+            <div className="mt-1 flex items-end justify-between gap-4">
+
+              <div>
+
+                <h1 className="text-2xl font-black">
+                  {page.title}
+                </h1>
+
+                <div className="mt-1 text-sm text-slate-400">
+
+                  {page.quizzes.length} câu hỏi tương tác
+
+                </div>
+
+              </div>
+
+              <div className="hidden max-w-[360px] truncate text-sm text-slate-400 md:block">
+                {page.videoName}
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* VIDEO */}
+
+          <section className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-2xl border border-blue-700 bg-black shadow-2xl">
+
+            {loadingVideo ? (
+
+              <div className="flex h-full w-full items-center justify-center text-slate-400">
+                Đang tải video...
+              </div>
+
+            ) : videoUrl ? (
+
+              <video
+                key={
+                  page.id
+                }
+                ref={
+                  videoRef
+                }
+                src={
+                  videoUrl
+                }
+                preload="metadata"
+                className="h-full max-h-full w-full bg-black object-contain"
+                onLoadedMetadata={
+                  handleLoadedMetadata
+                }
+                onTimeUpdate={
+                  handleTimeUpdate
+                }
+                onPlay={() => {
+                  hasStartedVideoRef.current =
+                    true;
+
+                  lastPlaybackTimeRef.current =
+                    videoRef.current
+                      ?.currentTime ??
+                    currentTime;
+
+                  setIsPlaying(
+                    true
+                  );
+                }}
+                onPause={() => {
+                  lastPlaybackTimeRef.current =
+                    null;
+
+                  setIsPlaying(
+                    false
+                  );
+                }}
+                onEnded={
+                  handleVideoEnded
+                }
+              />
+
+            ) : (
+
+              <div className="flex h-full w-full flex-col items-center justify-center text-center">
+
+                <div className="text-xl font-bold">
+                  Trang này chưa có video
+                </div>
+
+              </div>
+
+            )}
+
+            {/* QUIZ */}
+
+            {activeQuiz && (
+
+              <div className="absolute inset-0 z-20 flex items-center justify-center overflow-y-auto bg-slate-950/95 p-5">
+
+                <div className="w-full max-w-3xl rounded-2xl border border-blue-600 bg-[#15376b] p-6 shadow-2xl">
+
+                  <div className="flex items-center justify-between gap-4">
+
+                    <div className="text-sm font-bold text-cyan-300">
+                      CÂU HỎI TƯƠNG TÁC
+                    </div>
+
+                    <div className="rounded-lg bg-purple-950 px-3 py-1 text-sm font-bold text-purple-300">
+
+                      {activeQuiz.points} điểm
+
+                    </div>
+
+                  </div>
+
+                  <h2 className="mt-3 text-2xl font-black">
+                    {activeQuiz.question}
+                  </h2>
+
+                  <div className="mt-6 grid gap-3 md:grid-cols-2">
+
+                    {activeQuiz.options.map(
+                      (
+                        option,
+                        index
+                      ) => {
+                        const isCorrect =
+                          index ===
+                          activeQuiz.correctIndex;
+
+                        const isSelected =
+                          index ===
+                          selectedAnswer;
+
+                        let classes =
+                          "border-blue-600 bg-blue-950/70 hover:bg-blue-900";
+
+                        if (
+                          quizResult
+                        ) {
+                          if (
+                            isCorrect
+                          ) {
+                            classes =
+                              "border-green-400 bg-green-900/70";
+                          } else if (
+                            isSelected
+                          ) {
+                            classes =
+                              "border-red-400 bg-red-900/70";
+                          } else {
+                            classes =
+                              "border-blue-900 bg-blue-950/50 opacity-60";
+                          }
+                        }
+
+                        return (
+                          <button
+                            key={
+                              index
+                            }
+                            type="button"
+                            disabled={
+                              quizResult !==
+                              null
+                            }
+                            onClick={() =>
+                              answerQuiz(
+                                index
+                              )
+                            }
+                            className={`flex min-h-20 items-center gap-4 rounded-xl border-2 p-4 text-left font-semibold transition ${classes}`}
+                          >
+
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/30 font-black">
+
+                              {String.fromCharCode(
+                                65 +
+                                  index
+                              )}
+
+                            </span>
+
+                            <span>
+                              {option}
+                            </span>
+
+                          </button>
+                        );
+                      }
+                    )}
+
+                  </div>
+
+                  {quizResult && (
+
+                    <div className="mt-6 rounded-xl bg-black/20 p-4">
+
+                      <div
+                        className={`flex items-center gap-2 text-lg font-bold ${
+                          quizResult ===
+                          "correct"
+                            ? "text-green-300"
+                            : "text-red-300"
+                        }`}
+                      >
+
+                        {quizResult ===
+                        "correct" ? (
+
+                          <CheckCircle2
+                            size={22}
+                          />
+
+                        ) : (
+
+                          <XCircle
+                            size={22}
+                          />
+
+                        )}
+
+                        {quizResult ===
+                        "correct"
+                          ? `Chính xác! +${activeQuiz.points} điểm`
+                          : "Chưa chính xác"}
+
+                      </div>
+
+                      <p className="mt-2 text-slate-200">
+
+                        {quizResult ===
+                        "correct"
+                          ? activeQuiz.feedbackCorrect
+                          : activeQuiz.feedbackWrong}
+
+                      </p>
+
+                      <button
+                        type="button"
+                        onClick={
+                          continueAfterQuiz
+                        }
+                        className="mt-5 w-full rounded-xl bg-cyan-600 px-5 py-3 font-bold transition hover:bg-cyan-500"
+                      >
+
+                        Tiếp tục
+
+                      </button>
+
+                    </div>
+
+                  )}
+
+                </div>
+
+              </div>
+
+            )}
+
+          </section>
+
+          {/* PLAYER */}
+
+          <section className="mt-3 shrink-0 rounded-xl border border-blue-800 bg-[#0d2850] px-4 py-3">
+
+            <div className="flex items-center gap-4">
+
+              <button
+                type="button"
+                onClick={
+                  togglePlay
+                }
+                disabled={
+                  !videoUrl ||
+                  activeQuiz !==
+                    null
+                }
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cyan-500 text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+
+                {isPlaying ? (
+
+                  <Pause
+                    size={20}
+                    fill="currentColor"
+                  />
+
+                ) : (
+
+                  <Play
+                    size={20}
+                    fill="currentColor"
+                  />
+
+                )}
+
+              </button>
+
+              <div className="w-32 shrink-0 font-mono text-sm">
+
+                {formatTime(
+                  currentTime
+                )}
+
+                {" / "}
+
+                {formatTime(
+                  duration
+                )}
+
+              </div>
+
+              <input
+                type="range"
+                min={0}
+                max={
+                  duration > 0
+                    ? duration
+                    : 1
+                }
+                step={0.01}
+                value={
+                  Math.min(
+                    currentTime,
+                    duration > 0
+                      ? duration
+                      : 1
+                  )
+                }
+                disabled={
+                  !videoUrl ||
+                  activeQuiz !==
+                    null
+                }
+                onChange={(event) =>
+                  handleSeek(
+                    Number(
+                      event.target.value
+                    )
+                  )
+                }
+                className="min-w-0 flex-1 cursor-pointer disabled:cursor-not-allowed"
+              />
+
+            </div>
+
+          </section>
+
+          {/* NAVIGATION */}
+
+          <section className="mt-3 shrink-0">
+
+            <div className="flex items-center justify-between gap-4">
+
+              <button
+                type="button"
+                onClick={
+                  previousPage
+                }
+                disabled={
+                  pageIndex ===
+                    0 ||
+                  activeQuiz !==
+                    null
+                }
+                className="flex items-center gap-2 rounded-xl border border-blue-600 bg-blue-950 px-5 py-2.5 font-bold transition hover:bg-blue-900 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+
+                <ChevronLeft
+                  size={18}
+                />
+
+                Trang trước
+
+              </button>
+
+              <div className="text-center">
+
+                <div className="text-sm text-slate-400">
+
+                  Câu hỏi{" "}
+
+                  <strong className="text-cyan-300">
+                    {completedQuizCount}
+                  </strong>
+
+                  {" / "}
+
+                  {page.quizzes.length}
+
+                  {" • Đã xem "}
+
+                  <strong
+                    className={
+                      currentWatchPercent >=
+                      MIN_WATCH_PERCENT
+                        ? "text-green-300"
+                        : "text-yellow-300"
+                    }
+                  >
+                    {currentWatchPercent}%
+                  </strong>
+
+                </div>
+
+                {completionNotice ? (
+
+                  <div className="mt-1 text-xs font-semibold text-yellow-300">
+
+                    {completionNotice}
+
+                  </div>
+
+                ) : pageCompleted ? (
+
+                  <div className="mt-1 text-xs font-bold text-green-300">
+                    ✓ Trang đã hoàn thành
+                  </div>
+
+                ) : (
+
+                  <div className="mt-1 text-xs text-slate-500">
+
+                    Yêu cầu: xem ≥ {MIN_WATCH_PERCENT}% và hoàn thành câu hỏi
+
+                  </div>
+
+                )}
+
+              </div>
+
+              <button
+                type="button"
+                onClick={
+                  nextPage
+                }
+                disabled={
+                  !pageCompleted ||
+                  activeQuiz !==
+                    null
+                }
+                className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-600 px-5 py-2.5 font-bold transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+
+                {pageIndex ===
+                project.pages.length -
+                  1
+                  ? "Hoàn thành"
+                  : "Trang tiếp theo"}
+
+                <ChevronRight
+                  size={18}
+                />
+
+              </button>
+
+            </div>
+
+          </section>
+
+        </div>
+
+      </main>
+
+    </div>
+  );
+}

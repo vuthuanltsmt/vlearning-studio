@@ -1,0 +1,7128 @@
+import JSZip from "jszip";
+
+import {
+  getVideo,
+} from "@/lib/videoDb";
+
+import {
+  loadCompletionSettings,
+} from "@/lib/completionSettings";
+
+import {
+  loadProjectThemeForProject,
+} from "@/lib/projectTheme";
+
+import {
+  useEditorStore,
+} from "@/stores/editorStore";
+
+import type {
+  LessonPage,
+  ProjectDocument,
+} from "@/types/lesson";
+
+import type {
+  ProjectTheme,
+} from "@/types/theme";
+
+/* =========================================================
+   EXPORT TYPES
+========================================================= */
+
+type ExportPage =
+  Omit<
+    LessonPage,
+    "videoUrl"
+  > & {
+    videoSrc: string | null;
+  };
+
+type ExportCourse = {
+  id: string;
+  title: string;
+  theme: ProjectTheme;
+
+  completion: {
+    passScorePercent: number;
+    minWatchPercent: number;
+    requireAllQuizzes: boolean;
+  };
+
+  pages: ExportPage[];
+};
+
+export type ScormExportResult = {
+  fileName: string;
+  missingVideoPages: string[];
+};
+
+/* =========================================================
+   HELPERS
+========================================================= */
+
+function safeFileName(
+  value: string
+) {
+  const cleaned =
+    value
+      .normalize("NFD")
+      .replace(
+        /[\u0300-\u036f]/g,
+        ""
+      )
+      .replace(
+        /đ/g,
+        "d"
+      )
+      .replace(
+        /Đ/g,
+        "D"
+      )
+      .replace(
+        /[^a-zA-Z0-9-_]+/g,
+        "-"
+      )
+      .replace(
+        /-+/g,
+        "-"
+      )
+      .replace(
+        /^-|-$/g,
+        ""
+      );
+
+  return (
+    cleaned ||
+    "elearning-course"
+  );
+}
+
+function xmlEscape(
+  value: string
+) {
+  return value
+    .replace(
+      /&/g,
+      "&amp;"
+    )
+    .replace(
+      /</g,
+      "&lt;"
+    )
+    .replace(
+      />/g,
+      "&gt;"
+    )
+    .replace(
+      /"/g,
+      "&quot;"
+    )
+    .replace(
+      /'/g,
+      "&apos;"
+    );
+}
+
+function getVideoExtension(
+  file: File
+) {
+  const nameMatch =
+    file.name.match(
+      /\.[a-zA-Z0-9]{1,8}$/
+    );
+
+  if (nameMatch) {
+    return nameMatch[0]
+      .toLowerCase();
+  }
+
+  switch (file.type) {
+    case "video/webm":
+      return ".webm";
+
+    case "video/ogg":
+      return ".ogv";
+
+    case "video/quicktime":
+      return ".mov";
+
+    default:
+      return ".mp4";
+  }
+}
+
+function makeCourseDataScript(
+  course: ExportCourse
+) {
+  /*
+   * Escape "<" để dữ liệu an toàn
+   * khi được JavaScript đọc.
+   */
+  const json =
+    JSON.stringify(
+      course
+    ).replace(
+      /</g,
+      "\\u003c"
+    );
+
+  return `window.COURSE_DATA = ${json};`;
+}
+
+/* =========================================================
+   MANIFEST
+========================================================= */
+
+function makeManifest(
+  course: ExportCourse,
+  files: string[]
+) {
+  const courseTitle =
+    xmlEscape(
+      course.title
+    );
+
+  const identifier =
+    `VLEARNING-${safeFileName(
+      course.id
+    )}`;
+
+  const fileEntries =
+    files
+      .map(
+        (file) =>
+          `      <file href="${xmlEscape(
+            file
+          )}" />`
+      )
+      .join("\n");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<manifest
+  identifier="${identifier}"
+  version="1.0"
+  xmlns="http://www.imsproject.org/xsd/imscp_rootv1p1p2"
+  xmlns:adlcp="http://www.adlnet.org/xsd/adlcp_rootv1p2"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="
+    http://www.imsproject.org/xsd/imscp_rootv1p1p2
+    imscp_rootv1p1p2.xsd
+    http://www.adlnet.org/xsd/adlcp_rootv1p2
+    adlcp_rootv1p2.xsd
+  "
+>
+  <metadata>
+    <schema>ADL SCORM</schema>
+    <schemaversion>1.2</schemaversion>
+  </metadata>
+
+  <organizations default="ORG-1">
+    <organization identifier="ORG-1">
+      <title>${courseTitle}</title>
+
+      <item
+        identifier="ITEM-1"
+        identifierref="RES-1"
+      >
+        <title>${courseTitle}</title>
+
+        <adlcp:masteryscore>${course.completion.passScorePercent}</adlcp:masteryscore>
+      </item>
+    </organization>
+  </organizations>
+
+  <resources>
+    <resource
+      identifier="RES-1"
+      type="webcontent"
+      adlcp:scormtype="sco"
+      href="index.html"
+    >
+${fileEntries}
+    </resource>
+  </resources>
+</manifest>
+`;
+}
+
+/* =========================================================
+   INDEX.HTML
+========================================================= */
+
+function makeIndexHtml() {
+  return `<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  />
+
+  <title>Bài giảng e-learning</title>
+
+  <link
+    rel="stylesheet"
+    href="styles.css"
+  />
+</head>
+
+<body>
+  <div id="app">
+    <div class="loading">
+      Đang tải bài giảng...
+    </div>
+  </div>
+
+  <script src="course-data.js"></script>
+  <script src="player.js"></script>
+</body>
+</html>
+`;
+}
+
+/* =========================================================
+   STYLES.CSS
+========================================================= */
+
+function makeStylesCss() {
+  return `
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+  min-height: 100%;
+  background: #061426;
+  color: white;
+  font-family:
+    Arial,
+    Helvetica,
+    sans-serif;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+#app {
+  width: 100%;
+  min-height: 100vh;
+}
+
+.loading {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.player {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.topbar {
+  min-height: 64px;
+  flex-shrink: 0;
+  padding: 0 24px;
+  background: #143766;
+  border-bottom: 1px solid #1e5eb5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.project-title {
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.preview-label {
+  margin-top: 3px;
+  color: #67e8f9;
+  font-size: 12px;
+}
+
+.top-stats {
+  display: flex;
+  gap: 10px;
+}
+
+.badge {
+  border-radius: 12px;
+  background: #0d2654;
+  padding: 10px 14px;
+  font-size: 14px;
+}
+
+.badge strong {
+  color: #67e8f9;
+}
+
+.main {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 20px;
+}
+
+.content {
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.page-info {
+  flex-shrink: 0;
+  margin-bottom: 12px;
+}
+
+.page-label {
+  color: #67e8f9;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.page-heading {
+  margin-top: 5px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.page-heading h1 {
+  margin: 0;
+  font-size: 30px;
+}
+
+.page-meta {
+  margin-top: 5px;
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.video-name {
+  max-width: 400px;
+  color: #94a3b8;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.video-shell {
+  position: relative;
+  min-height: 0;
+  flex: 1;
+  border: 1px solid #2563eb;
+  border-radius: 18px;
+  background: #000;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.video-shell video {
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+.no-video {
+  color: #cbd5e1;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.controls {
+  flex-shrink: 0;
+  margin-top: 12px;
+  padding: 12px 16px;
+  border: 1px solid #1d4ed8;
+  border-radius: 14px;
+  background: #0d2850;
+}
+
+.controls-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.play-button {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #06b6d4;
+  color: #04111f;
+  font-size: 21px;
+  font-weight: 900;
+}
+
+.time {
+  width: 145px;
+  flex-shrink: 0;
+  font-family: monospace;
+  font-size: 15px;
+}
+
+.seek {
+  min-width: 0;
+  flex: 1;
+}
+
+.navigation {
+  flex-shrink: 0;
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns:
+    minmax(170px, 1fr)
+    minmax(280px, 2fr)
+    minmax(170px, 1fr);
+  gap: 16px;
+  align-items: center;
+}
+
+.nav-button {
+  border: 1px solid #2563eb;
+  border-radius: 12px;
+  background: #082357;
+  color: white;
+  padding: 12px 18px;
+  font-weight: 800;
+}
+
+.nav-button.next {
+  border: 0;
+  background:
+    linear-gradient(
+      90deg,
+      #06b6d4,
+      #9333ea
+    );
+}
+
+.progress-info {
+  text-align: center;
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.progress-info strong {
+  color: #67e8f9;
+}
+
+.progress-notice {
+  margin-top: 5px;
+  color: #fde047;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.completed {
+  margin-top: 5px;
+  color: #86efac;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.quiz-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  padding: 20px;
+  background: rgba(2, 6, 23, 0.96);
+  overflow-y: auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.quiz-card {
+  width: 100%;
+  max-width: 760px;
+  max-height: 100%;
+  overflow-y: auto;
+  border: 1px solid #2563eb;
+  border-radius: 20px;
+  background: #15376b;
+  padding: 0;
+}
+
+.quiz-sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid #2563eb;
+  background: #15376b;
+}
+
+.quiz-body {
+  padding: 0 24px 24px;
+}
+
+.quiz-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.quiz-label {
+  color: #67e8f9;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.quiz-points {
+  border-radius: 8px;
+  background: #3b0764;
+  color: #d8b4fe;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.quiz-card h2 {
+  margin: 14px 0 0;
+  font-size: 25px;
+}
+
+.options {
+  margin-top: 22px;
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.option {
+  min-height: 76px;
+  border: 2px solid #2563eb;
+  border-radius: 12px;
+  background: #082357;
+  color: white;
+  padding: 15px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  font-weight: 700;
+}
+
+.option-letter {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.option.selected {
+  border-color: #22d3ee;
+  background: #164e63;
+}
+
+.option.correct {
+  border-color: #4ade80;
+  background: #14532d;
+}
+
+.option.wrong {
+  border-color: #f87171;
+  background: #7f1d1d;
+}
+
+.option.dim {
+  opacity: 0.55;
+}
+
+.short-answer-wrap {
+  margin-top: 22px;
+}
+
+.short-answer-input {
+  width: 100%;
+  border: 2px solid #2563eb;
+  border-radius: 12px;
+  background: #082357;
+  color: white;
+  padding: 15px 16px;
+  font: inherit;
+  font-size: 17px;
+  outline: none;
+}
+
+.short-answer-input:focus {
+  border-color: #22d3ee;
+}
+
+.short-answer-input:disabled {
+  opacity: 0.7;
+}
+
+.matching-wrap {
+  margin-top: 22px;
+  display: grid;
+  gap: 12px;
+}
+
+.matching-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #2563eb;
+  border-radius: 12px;
+  background: rgba(8, 35, 87, 0.7);
+  padding: 12px;
+}
+
+.matching-row.correct {
+  border-color: #4ade80;
+  background: rgba(20, 83, 45, 0.65);
+}
+
+.matching-row.wrong {
+  border-color: #f87171;
+  background: rgba(127, 29, 29, 0.65);
+}
+
+.matching-arrow {
+  text-align: center;
+  color: #67e8f9;
+  font-weight: 900;
+  font-size: 18px;
+}
+
+.matching-select {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid #2563eb;
+  border-radius: 10px;
+  background: #082357;
+  color: white;
+  padding: 12px;
+  font: inherit;
+}
+
+.ordering-wrap {
+  margin-top: 18px;
+  display: grid;
+  gap: 10px;
+}
+
+.ordering-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #2563eb;
+  border-radius: 12px;
+  background: rgba(8, 35, 87, 0.7);
+  padding: 12px;
+}
+
+.ordering-row.correct {
+  border-color: #4ade80;
+  background: rgba(20, 83, 45, 0.65);
+}
+
+.ordering-row.wrong {
+  border-color: #f87171;
+  background: rgba(127, 29, 29, 0.65);
+}
+
+.ordering-position {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.25);
+  color: #67e8f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+}
+
+.ordering-text {
+  min-width: 0;
+  flex: 1;
+  font-weight: 700;
+}
+
+.ordering-controls {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.ordering-move {
+  min-width: 42px;
+  border: 1px solid #2563eb;
+  border-radius: 10px;
+  background: #082357;
+  color: #67e8f9;
+  padding: 9px 12px;
+  font-weight: 900;
+}
+
+.ordering-move:disabled {
+  opacity: 0.3;
+}
+
+.classification-wrap {
+  margin-top: 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.classification-note {
+  border: 1px solid #0e7490;
+  border-radius: 12px;
+  background: rgba(8, 145, 178, 0.12);
+  color: #cffafe;
+  padding: 12px;
+  font-size: 14px;
+}
+
+.classification-unassigned {
+  display: grid;
+  gap: 8px;
+}
+
+.classification-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.classification-group {
+  min-height: 150px;
+  border: 2px dashed #0891b2;
+  border-radius: 12px;
+  background: rgba(8, 35, 87, 0.35);
+  padding: 12px;
+}
+
+.classification-group-title {
+  margin-bottom: 10px;
+  color: #67e8f9;
+  text-align: center;
+  font-weight: 900;
+}
+
+.classification-item {
+  border: 1px solid #2563eb;
+  border-radius: 10px;
+  background: rgba(8, 35, 87, 0.8);
+  padding: 11px;
+  margin-top: 8px;
+}
+
+.classification-item.correct {
+  border-color: #4ade80;
+  background: rgba(20, 83, 45, 0.65);
+}
+
+.classification-item.wrong {
+  border-color: #f87171;
+  background: rgba(127, 29, 29, 0.65);
+}
+
+.classification-item-text {
+  font-weight: 700;
+}
+
+.classification-actions {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.classification-action {
+  border: 1px solid #2563eb;
+  border-radius: 8px;
+  background: #082357;
+  color: #cffafe;
+  padding: 6px 9px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.classification-action:disabled {
+  opacity: 0.3;
+}
+
+@media (max-width: 700px) {
+  .classification-groups {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .matching-row {
+    grid-template-columns: 1fr;
+  }
+
+  .matching-arrow {
+    transform: rotate(90deg);
+  }
+}
+
+.feedback {
+  margin-top: 20px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.22);
+  padding: 16px;
+}
+
+.feedback-title {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.feedback-title.correct {
+  color: #86efac;
+}
+
+.feedback-title.wrong {
+  color: #fca5a5;
+}
+
+.feedback p {
+  color: #e2e8f0;
+}
+
+.primary-button {
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  background: #0891b2;
+  color: white;
+  padding: 13px;
+  font-weight: 800;
+}
+
+.skip-button {
+  width: 100%;
+  margin-top: 12px;
+  border: 1px solid #3b82f6;
+  border-radius: 12px;
+  background: #082357;
+  color: white;
+  padding: 12px;
+  font-weight: 800;
+}
+
+.finish-page {
+  min-height: 100vh;
+  padding: 28px;
+  background: #061426;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.finish-card {
+  width: 100%;
+  max-width: 760px;
+  border: 1px solid #2563eb;
+  border-radius: 24px;
+  background: #123665;
+  padding: 34px;
+  text-align: center;
+}
+
+.finish-status {
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+}
+
+.finish-status.pass {
+  color: #86efac;
+}
+
+.finish-status.fail {
+  color: #fca5a5;
+}
+
+.finish-card h1 {
+  margin: 10px 0 0;
+  font-size: 36px;
+}
+
+.result-grid {
+  margin-top: 28px;
+  display: grid;
+  grid-template-columns:
+    repeat(3, 1fr);
+  gap: 14px;
+}
+
+.result-box {
+  border-radius: 16px;
+  background: #082357;
+  padding: 20px;
+}
+
+.result-label {
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.result-value {
+  margin-top: 8px;
+  color: #67e8f9;
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.conditions {
+  margin-top: 20px;
+  border-radius: 16px;
+  background: rgba(8, 35, 87, 0.75);
+  padding: 18px;
+  text-align: left;
+}
+
+.condition-row {
+  padding: 7px 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  color: #cbd5e1;
+}
+
+.restart {
+  margin-top: 22px;
+  border: 0;
+  border-radius: 12px;
+  background: #2563eb;
+  color: white;
+  padding: 13px 24px;
+  font-weight: 800;
+}
+
+@media (max-width: 760px) {
+  .page-heading {
+    display: block;
+  }
+
+  .video-name {
+    margin-top: 8px;
+  }
+
+  .options {
+    grid-template-columns: 1fr;
+  }
+
+  .navigation {
+    grid-template-columns: 1fr;
+  }
+
+  .result-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* =========================================================
+   V11.0C THEME OVERRIDES
+========================================================= */
+
+:root {
+  --theme-primary: #2563eb;
+  --theme-accent: #8b5cf6;
+  --theme-background: #07182c;
+  --theme-surface: #102b52;
+  --theme-text: #ffffff;
+  --theme-muted: #94a3b8;
+  --theme-border: rgba(37, 99, 235, 0.45);
+  --theme-overlay: rgba(2, 6, 23, 0.96);
+  --theme-font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --theme-button-radius: 12px;
+  --theme-player-radius: 16px;
+  --theme-play-radius: 999px;
+}
+
+html,
+body {
+  background: var(--theme-background);
+  color: var(--theme-text);
+  font-family: var(--theme-font);
+}
+
+.player,
+.main,
+.finish-page {
+  background: var(--theme-background);
+  color: var(--theme-text);
+}
+
+.topbar {
+  background: var(--theme-surface);
+  border-bottom-color: var(--theme-border);
+}
+
+.preview-label,
+.page-label,
+.badge strong,
+.progress-info strong,
+.result-value {
+  color: var(--theme-accent);
+}
+
+.badge,
+.result-box {
+  background: var(--theme-background);
+  color: var(--theme-text);
+}
+
+.page-meta,
+.video-name,
+.progress-info,
+.result-label {
+  color: var(--theme-muted);
+}
+
+.video-shell {
+  border-color: var(--theme-border);
+  border-radius: var(--theme-player-radius);
+}
+
+.controls,
+.course-progress {
+  border-color: var(--theme-border);
+  border-radius: var(--theme-player-radius);
+  background: var(--theme-surface);
+  color: var(--theme-text);
+}
+
+.play-button {
+  border-radius: var(--theme-play-radius);
+  background: var(--theme-primary);
+  color: #ffffff;
+}
+
+.seek {
+  accent-color: var(--theme-accent);
+}
+
+.course-progress {
+  flex-shrink: 0;
+  margin-top: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--theme-border);
+}
+
+.course-progress-head {
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--theme-muted);
+  font-size: 12px;
+}
+
+.course-progress-head strong {
+  color: var(--theme-accent);
+}
+
+.course-progress-track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--theme-background);
+}
+
+.course-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--theme-accent);
+  transition: width 180ms ease;
+}
+
+.navigation.is-hidden {
+  display: none;
+}
+
+.nav-button,
+.primary-button,
+.skip-button,
+.restart {
+  border-radius: var(--theme-button-radius);
+}
+
+.nav-button {
+  border-color: var(--theme-border);
+  background: var(--theme-surface);
+  color: var(--theme-text);
+}
+
+.nav-button.next {
+  background: linear-gradient(
+    90deg,
+    var(--theme-primary),
+    var(--theme-accent)
+  );
+  color: #ffffff;
+}
+
+.quiz-overlay {
+  background: var(--theme-overlay);
+}
+
+.quiz-card {
+  border-color: var(--theme-border);
+  background: var(--theme-surface);
+  color: var(--theme-text);
+}
+
+.quiz-sticky-header {
+  border-color: var(--theme-border);
+  background: var(--theme-surface);
+}
+
+.quiz-label {
+  color: var(--theme-accent);
+}
+
+.quiz-points {
+  background: var(--theme-background);
+  color: var(--theme-accent);
+}
+
+.option {
+  border-color: var(--theme-border);
+  border-radius: var(--theme-button-radius);
+  background: var(--theme-background);
+  color: var(--theme-text);
+}
+
+.feedback p {
+  color: var(--theme-text);
+}
+
+.primary-button {
+  background: var(--theme-primary);
+  color: #ffffff;
+}
+
+.skip-button {
+  border-color: var(--theme-border);
+  background: var(--theme-background);
+  color: var(--theme-text);
+}
+
+.finish-card {
+  border-color: var(--theme-border);
+  background: var(--theme-surface);
+  color: var(--theme-text);
+}
+
+.conditions {
+  background: var(--theme-background);
+}
+
+.condition-row {
+  color: var(--theme-text);
+}
+
+.restart {
+  background: var(--theme-primary);
+  color: #ffffff;
+}
+`;
+}
+
+/* =========================================================
+   PLAYER.JS
+========================================================= */
+
+function makePlayerJs() {
+  return String.raw`
+(function () {
+  "use strict";
+
+  var course =
+    window.COURSE_DATA;
+
+  if (
+    !course ||
+    !Array.isArray(course.pages)
+  ) {
+    document.getElementById(
+      "app"
+    ).innerHTML =
+      '<div class="loading">Không đọc được dữ liệu bài giảng.</div>';
+
+    return;
+  }
+
+  /* =====================================================
+     V11.0C PROJECT THEME
+  ===================================================== */
+
+  var theme =
+    course.theme ||
+    {};
+
+  function validHex(
+    value,
+    fallback
+  ) {
+    return typeof value ===
+        "string" &&
+      /^#[0-9a-fA-F]{6}$/.test(
+        value
+      )
+      ? value
+      : fallback;
+  }
+
+  function themeFontFamily(
+    value
+  ) {
+    if (value === "serif") {
+      return 'Georgia, "Times New Roman", serif';
+    }
+
+    if (value === "sans") {
+      return 'Arial, Helvetica, sans-serif';
+    }
+
+    return 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  }
+
+  function themeButtonRadius(
+    value
+  ) {
+    if (value === "pill") {
+      return 999;
+    }
+
+    if (value === "square") {
+      return 4;
+    }
+
+    return 12;
+  }
+
+  function colorWithAlpha(
+    hex,
+    alpha
+  ) {
+    var value =
+      String(hex || "")
+        .replace("#", "");
+
+    if (
+      !/^[0-9a-fA-F]{6}$/.test(
+        value
+      )
+    ) {
+      return String(hex || "");
+    }
+
+    var red =
+      parseInt(
+        value.slice(0, 2),
+        16
+      );
+
+    var green =
+      parseInt(
+        value.slice(2, 4),
+        16
+      );
+
+    var blue =
+      parseInt(
+        value.slice(4, 6),
+        16
+      );
+
+    return (
+      "rgba(" +
+      red +
+      ", " +
+      green +
+      ", " +
+      blue +
+      ", " +
+      alpha +
+      ")"
+    );
+  }
+
+  function displayCourseTitle() {
+    var value =
+      typeof theme.courseTitle ===
+        "string"
+        ? theme.courseTitle.trim()
+        : "";
+
+    return value ||
+      course.title;
+  }
+
+  function applyTheme() {
+    var primary =
+      validHex(
+        theme.primaryColor,
+        "#2563eb"
+      );
+
+    var accent =
+      validHex(
+        theme.accentColor,
+        "#8b5cf6"
+      );
+
+    var background =
+      validHex(
+        theme.backgroundColor,
+        "#07182c"
+      );
+
+    var surface =
+      validHex(
+        theme.surfaceColor,
+        "#102b52"
+      );
+
+    var textColor =
+      validHex(
+        theme.textColor,
+        "#ffffff"
+      );
+
+    var light =
+      theme.mode ===
+      "light";
+
+    var muted =
+      light
+        ? "#475569"
+        : "#94a3b8";
+
+    var overlay =
+      light
+        ? "rgba(248, 250, 252, 0.96)"
+        : "rgba(2, 6, 23, 0.96)";
+
+    var radius =
+      Number(
+        theme.playerRadius
+      );
+
+    if (
+      !Number.isFinite(
+        radius
+      )
+    ) {
+      radius = 16;
+    }
+
+    radius =
+      Math.max(
+        0,
+        Math.min(
+          32,
+          Math.round(
+            radius
+          )
+        )
+      );
+
+    var buttonRadius =
+      themeButtonRadius(
+        theme.buttonStyle
+      );
+
+    var playRadius =
+      theme.buttonStyle ===
+      "square"
+        ? 8
+        : 999;
+
+    var root =
+      document.documentElement;
+
+    root.style.setProperty(
+      "--theme-primary",
+      primary
+    );
+
+    root.style.setProperty(
+      "--theme-accent",
+      accent
+    );
+
+    root.style.setProperty(
+      "--theme-background",
+      background
+    );
+
+    root.style.setProperty(
+      "--theme-surface",
+      surface
+    );
+
+    root.style.setProperty(
+      "--theme-text",
+      textColor
+    );
+
+    root.style.setProperty(
+      "--theme-muted",
+      muted
+    );
+
+    root.style.setProperty(
+      "--theme-border",
+      colorWithAlpha(
+        primary,
+        0.45
+      )
+    );
+
+    root.style.setProperty(
+      "--theme-overlay",
+      overlay
+    );
+
+    root.style.setProperty(
+      "--theme-font",
+      themeFontFamily(
+        theme.fontFamily
+      )
+    );
+
+    root.style.setProperty(
+      "--theme-button-radius",
+      buttonRadius +
+        "px"
+    );
+
+    root.style.setProperty(
+      "--theme-player-radius",
+      Math.max(
+        10,
+        radius
+      ) +
+        "px"
+    );
+
+    root.style.setProperty(
+      "--theme-play-radius",
+      playRadius +
+        "px"
+    );
+
+    document.title =
+      displayCourseTitle();
+  }
+
+  applyTheme();
+
+  /* =====================================================
+     SCORM 1.2 API
+  ===================================================== */
+
+  function findScormApi(win) {
+    var attempts = 0;
+
+    while (
+      win &&
+      attempts < 500
+    ) {
+      try {
+        if (win.API) {
+          return win.API;
+        }
+
+        if (
+          win.parent &&
+          win.parent !== win
+        ) {
+          win = win.parent;
+        } else {
+          break;
+        }
+      } catch (error) {
+        break;
+      }
+
+      attempts++;
+    }
+
+    try {
+      if (
+        window.opener &&
+        window.opener.API
+      ) {
+        return window.opener.API;
+      }
+    } catch (error) {}
+
+    return null;
+  }
+
+  var scormApi =
+    findScormApi(window);
+
+  var scormInitialized =
+    false;
+
+  var scormStoredLocation =
+    "";
+
+  var scormStoredSuspendData =
+    "";
+
+  var scormLastPersistAt =
+    0;
+
+  function scormInitialize() {
+    if (
+      !scormApi ||
+      scormInitialized
+    ) {
+      return;
+    }
+
+    try {
+      var result =
+        scormApi.LMSInitialize("");
+
+      scormInitialized =
+        result === true ||
+        result === "true";
+
+      if (
+        scormInitialized
+      ) {
+        var status =
+          scormApi.LMSGetValue(
+            "cmi.core.lesson_status"
+          );
+
+        try {
+          scormStoredLocation =
+            String(
+              scormApi.LMSGetValue(
+                "cmi.core.lesson_location"
+              ) || ""
+            );
+
+          scormStoredSuspendData =
+            String(
+              scormApi.LMSGetValue(
+                "cmi.suspend_data"
+              ) || ""
+            );
+        } catch (error) {
+          scormStoredLocation =
+            "";
+
+          scormStoredSuspendData =
+            "";
+        }
+
+        if (
+          !status ||
+          status ===
+            "not attempted"
+        ) {
+          scormApi.LMSSetValue(
+            "cmi.core.lesson_status",
+            "incomplete"
+          );
+        }
+
+        scormApi.LMSCommit("");
+      }
+    } catch (error) {
+      console.warn(
+        "SCORM initialize failed",
+        error
+      );
+    }
+  }
+
+  function scormReport(
+    percentage,
+    passed
+  ) {
+    if (
+      !scormApi ||
+      !scormInitialized
+    ) {
+      return;
+    }
+
+    try {
+      scormApi.LMSSetValue(
+        "cmi.core.score.min",
+        "0"
+      );
+
+      scormApi.LMSSetValue(
+        "cmi.core.score.max",
+        "100"
+      );
+
+      scormApi.LMSSetValue(
+        "cmi.core.score.raw",
+        String(percentage)
+      );
+
+      scormApi.LMSSetValue(
+        "cmi.core.lesson_status",
+        passed
+          ? "passed"
+          : "failed"
+      );
+
+      scormApi.LMSCommit("");
+    } catch (error) {
+      console.warn(
+        "SCORM report failed",
+        error
+      );
+    }
+  }
+
+  function scormFinish() {
+    if (
+      !scormApi ||
+      !scormInitialized
+    ) {
+      return;
+    }
+
+    try {
+      scormPersistProgress(
+        true
+      );
+
+      scormApi.LMSSetValue(
+        "cmi.core.exit",
+        state &&
+        state.finished
+          ? ""
+          : "suspend"
+      );
+
+      scormApi.LMSCommit("");
+
+      scormApi.LMSFinish("");
+    } catch (error) {}
+  }
+
+  scormInitialize();
+
+  window.addEventListener(
+    "beforeunload",
+    scormFinish
+  );
+
+  /* =====================================================
+     STATE
+  ===================================================== */
+
+  var state = {
+    pageIndex: 0,
+
+    currentTime: 0,
+
+    duration: 0,
+
+    playing: false,
+
+    started: false,
+
+    activeQuiz: null,
+
+    selectedAnswer: null,
+
+    selectedAnswers: [],
+
+    shortAnswer: "",
+
+    matchingSelections: [],
+
+    orderingSelections: [],
+
+    classificationSelections: [],
+
+    quizResult: null,
+
+    answeredQuizIds:
+      new Set(),
+
+    skippedQuizIds:
+      new Set(),
+
+    correctQuizIds:
+      new Set(),
+
+    completedPageIds:
+      new Set(),
+
+    watched:
+      {},
+
+    lastPositionByPage:
+      {},
+
+    lastPlaybackTime:
+      null,
+
+    score: 0,
+
+    completionNotice: "",
+
+    finished: false
+  };
+
+  var app =
+    document.getElementById(
+      "app"
+    );
+
+  /* =====================================================
+     HELPERS
+  ===================================================== */
+
+  function currentPage() {
+    return course.pages[
+      state.pageIndex
+    ];
+  }
+
+  function formatTime(
+    seconds
+  ) {
+    if (
+      !Number.isFinite(
+        seconds
+      )
+    ) {
+      return "0:00";
+    }
+
+    var minutes =
+      Math.floor(
+        seconds / 60
+      );
+
+    var secs =
+      Math.floor(
+        seconds % 60
+      );
+
+    return (
+      minutes +
+      ":" +
+      String(secs).padStart(
+        2,
+        "0"
+      )
+    );
+  }
+
+  function totalQuestions() {
+    return course.pages.reduce(
+      function (
+        total,
+        page
+      ) {
+        return (
+          total +
+          page.quizzes.length
+        );
+      },
+      0
+    );
+  }
+
+  function totalPossibleScore() {
+    return course.pages.reduce(
+      function (
+        total,
+        page
+      ) {
+        return (
+          total +
+          page.quizzes.reduce(
+            function (
+              pageTotal,
+              quiz
+            ) {
+              return (
+                pageTotal +
+                quiz.points
+              );
+            },
+            0
+          )
+        );
+      },
+      0
+    );
+  }
+
+  function pageIndexById(
+    pageId
+  ) {
+    for (
+      var index = 0;
+      index <
+      course.pages.length;
+      index++
+    ) {
+      if (
+        course.pages[index].id ===
+        pageId
+      ) {
+        return index;
+      }
+    }
+
+    return -1;
+  }
+
+  function quizRefFromId(
+    quizId
+  ) {
+    for (
+      var pageIndex = 0;
+      pageIndex <
+      course.pages.length;
+      pageIndex++
+    ) {
+      var quizzes =
+        course.pages[
+          pageIndex
+        ].quizzes;
+
+      for (
+        var quizIndex = 0;
+        quizIndex <
+        quizzes.length;
+        quizIndex++
+      ) {
+        if (
+          quizzes[quizIndex].id ===
+          quizId
+        ) {
+          return (
+            pageIndex +
+            "." +
+            quizIndex
+          );
+        }
+      }
+    }
+
+    return null;
+  }
+
+  function quizIdFromRef(
+    value
+  ) {
+    var parts =
+      String(
+        value || ""
+      ).split(".");
+
+    var pageIndex =
+      Number(parts[0]);
+
+    var quizIndex =
+      Number(parts[1]);
+
+    if (
+      !Number.isInteger(
+        pageIndex
+      ) ||
+      !Number.isInteger(
+        quizIndex
+      ) ||
+      !course.pages[
+        pageIndex
+      ] ||
+      !course.pages[
+        pageIndex
+      ].quizzes[
+        quizIndex
+      ]
+    ) {
+      return null;
+    }
+
+    return course.pages[
+      pageIndex
+    ].quizzes[
+      quizIndex
+    ].id;
+  }
+
+  function setToRanges(
+    watchedSet
+  ) {
+    if (
+      !watchedSet ||
+      watchedSet.size ===
+        0
+    ) {
+      return "";
+    }
+
+    var values =
+      Array.from(
+        watchedSet
+      )
+        .filter(
+          function (
+            value
+          ) {
+            return (
+              Number.isInteger(
+                value
+              ) &&
+              value >= 0
+            );
+          }
+        )
+        .sort(
+          function (
+            a,
+            b
+          ) {
+            return a - b;
+          }
+        );
+
+    if (
+      values.length ===
+        0
+    ) {
+      return "";
+    }
+
+    var ranges =
+      [];
+
+    var start =
+      values[0];
+
+    var end =
+      values[0];
+
+    for (
+      var index = 1;
+      index <
+      values.length;
+      index++
+    ) {
+      var value =
+        values[index];
+
+      if (
+        value ===
+        end + 1
+      ) {
+        end =
+          value;
+
+        continue;
+      }
+
+      ranges.push(
+        start ===
+          end
+          ? String(start)
+          : start +
+            "-" +
+            end
+      );
+
+      start =
+        value;
+
+      end =
+        value;
+    }
+
+    ranges.push(
+      start ===
+        end
+        ? String(start)
+        : start +
+          "-" +
+          end
+    );
+
+    return ranges.join(
+      ","
+    );
+  }
+
+  function rangesToSet(
+    value
+  ) {
+    var result =
+      new Set();
+
+    String(
+      value || ""
+    )
+      .split(",")
+      .forEach(
+        function (
+          token
+        ) {
+          if (!token) {
+            return;
+          }
+
+          var parts =
+            token.split("-");
+
+          var start =
+            Number(parts[0]);
+
+          var end =
+            parts.length >
+              1
+              ? Number(
+                  parts[1]
+                )
+              : start;
+
+          if (
+            !Number.isInteger(
+              start
+            ) ||
+            !Number.isInteger(
+              end
+            ) ||
+            start < 0 ||
+            end < start
+          ) {
+            return;
+          }
+
+          var safeEnd =
+            Math.min(
+              end,
+              start +
+                20000
+            );
+
+          for (
+            var second = start;
+            second <=
+            safeEnd;
+            second++
+          ) {
+            result.add(
+              second
+            );
+          }
+        }
+      );
+
+    return result;
+  }
+
+  function compactQuizSet(
+    setValue
+  ) {
+    return Array.from(
+      setValue
+    )
+      .map(
+        quizRefFromId
+      )
+      .filter(
+        function (
+          value
+        ) {
+          return Boolean(
+            value
+          );
+        }
+      );
+  }
+
+  function restoreQuizSet(
+    values
+  ) {
+    var result =
+      new Set();
+
+    if (
+      !Array.isArray(
+        values
+      )
+    ) {
+      return result;
+    }
+
+    values.forEach(
+      function (
+        value
+      ) {
+        var quizId =
+          quizIdFromRef(
+            value
+          );
+
+        if (quizId) {
+          result.add(
+            quizId
+          );
+        }
+      }
+    );
+
+    return result;
+  }
+
+  function createSuspendPayload(
+    watchedMode
+  ) {
+    var watched =
+      {};
+
+    Object.keys(
+      state.watched
+    ).forEach(
+      function (
+        pageId
+      ) {
+        var index =
+          pageIndexById(
+            pageId
+          );
+
+        if (
+          index < 0
+        ) {
+          return;
+        }
+
+        if (
+          watchedMode ===
+            "active" &&
+          index !==
+            state.pageIndex
+        ) {
+          return;
+        }
+
+        if (
+          watchedMode ===
+            "incomplete" &&
+          state.completedPageIds
+            .has(
+              pageId
+            )
+        ) {
+          return;
+        }
+
+        if (
+          watchedMode ===
+            "none"
+        ) {
+          return;
+        }
+
+        var encoded =
+          setToRanges(
+            state.watched[
+              pageId
+            ]
+          );
+
+        if (encoded) {
+          watched[
+            index
+          ] =
+            encoded;
+        }
+      }
+    );
+
+    var positions =
+      {};
+
+    Object.keys(
+      state.lastPositionByPage
+    ).forEach(
+      function (
+        pageId
+      ) {
+        var index =
+          pageIndexById(
+            pageId
+          );
+
+        var value =
+          Number(
+            state
+              .lastPositionByPage[
+              pageId
+            ]
+          );
+
+        if (
+          index >= 0 &&
+          Number.isFinite(
+            value
+          ) &&
+          value > 0
+        ) {
+          positions[
+            index
+          ] =
+            Math.round(
+              value *
+              10
+            ) /
+            10;
+        }
+      }
+    );
+
+    return {
+      v: 1,
+      p: state.pageIndex,
+      t:
+        Math.round(
+          state.currentTime *
+          10
+        ) /
+        10,
+      a:
+        compactQuizSet(
+          state.answeredQuizIds
+        ),
+      k:
+        compactQuizSet(
+          state.skippedQuizIds
+        ),
+      c:
+        compactQuizSet(
+          state.correctQuizIds
+        ),
+      d:
+        Array.from(
+          state.completedPageIds
+        )
+          .map(
+            pageIndexById
+          )
+          .filter(
+            function (
+              value
+            ) {
+              return value >=
+                0;
+            }
+          ),
+      w: watched,
+      l: positions,
+      f:
+        state.finished
+          ? 1
+          : 0
+    };
+  }
+
+  function makeSuspendData() {
+    var modes = [
+      "all",
+      "incomplete",
+      "active",
+      "none"
+    ];
+
+    for (
+      var index = 0;
+      index <
+      modes.length;
+      index++
+    ) {
+      var serialized =
+        JSON.stringify(
+          createSuspendPayload(
+            modes[index]
+          )
+        );
+
+      if (
+        serialized.length <=
+        3900
+      ) {
+        return serialized;
+      }
+    }
+
+    return "";
+  }
+
+  function restoreScormProgress() {
+    var restored =
+      false;
+
+    if (
+      scormStoredSuspendData
+    ) {
+      try {
+        var data =
+          JSON.parse(
+            scormStoredSuspendData
+          );
+
+        if (
+          data &&
+          data.v ===
+            1
+        ) {
+          var pageIndex =
+            Number(
+              data.p
+            );
+
+          if (
+            Number.isInteger(
+              pageIndex
+            ) &&
+            pageIndex >=
+              0 &&
+            pageIndex <
+              course.pages.length
+          ) {
+            state.pageIndex =
+              pageIndex;
+          }
+
+          state.answeredQuizIds =
+            restoreQuizSet(
+              data.a
+            );
+
+          state.skippedQuizIds =
+            restoreQuizSet(
+              data.k
+            );
+
+          state.correctQuizIds =
+            restoreQuizSet(
+              data.c
+            );
+
+          state.completedPageIds =
+            new Set();
+
+          if (
+            Array.isArray(
+              data.d
+            )
+          ) {
+            data.d.forEach(
+              function (
+                index
+              ) {
+                if (
+                  Number.isInteger(
+                    index
+                  ) &&
+                  course.pages[
+                    index
+                  ]
+                ) {
+                  state
+                    .completedPageIds
+                    .add(
+                      course.pages[
+                        index
+                      ].id
+                    );
+                }
+              }
+            );
+          }
+
+          state.watched =
+            {};
+
+          if (
+            data.w &&
+            typeof data.w ===
+              "object"
+          ) {
+            Object.keys(
+              data.w
+            ).forEach(
+              function (
+                indexText
+              ) {
+                var index =
+                  Number(
+                    indexText
+                  );
+
+                if (
+                  Number.isInteger(
+                    index
+                  ) &&
+                  course.pages[
+                    index
+                  ]
+                ) {
+                  state.watched[
+                    course.pages[
+                      index
+                    ].id
+                  ] =
+                    rangesToSet(
+                      data.w[
+                        indexText
+                      ]
+                    );
+                }
+              }
+            );
+          }
+
+          state.lastPositionByPage =
+            {};
+
+          if (
+            data.l &&
+            typeof data.l ===
+              "object"
+          ) {
+            Object.keys(
+              data.l
+            ).forEach(
+              function (
+                indexText
+              ) {
+                var index =
+                  Number(
+                    indexText
+                  );
+
+                var value =
+                  Number(
+                    data.l[
+                      indexText
+                    ]
+                  );
+
+                if (
+                  Number.isInteger(
+                    index
+                  ) &&
+                  course.pages[
+                    index
+                  ] &&
+                  Number.isFinite(
+                    value
+                  ) &&
+                  value >= 0
+                ) {
+                  state
+                    .lastPositionByPage[
+                    course.pages[
+                      index
+                    ].id
+                  ] =
+                    value;
+                }
+              }
+            );
+          }
+
+          var restoredPage =
+            course.pages[
+              state.pageIndex
+            ];
+
+          var storedTime =
+            Number(
+              data.t
+            );
+
+          if (
+            Number.isFinite(
+              storedTime
+            ) &&
+            storedTime >= 0
+          ) {
+            state.currentTime =
+              storedTime;
+
+            if (
+              restoredPage
+            ) {
+              state
+                .lastPositionByPage[
+                restoredPage.id
+              ] =
+                storedTime;
+            }
+          }
+
+          state.score =
+            0;
+
+          course.pages.forEach(
+            function (
+              page
+            ) {
+              page.quizzes.forEach(
+                function (
+                  quiz
+                ) {
+                  if (
+                    state
+                      .correctQuizIds
+                      .has(
+                        quiz.id
+                      )
+                  ) {
+                    state.score +=
+                      quiz.points;
+                  }
+                }
+              );
+            }
+          );
+
+          state.finished =
+            data.f ===
+            1;
+
+          restored =
+            true;
+        }
+      } catch (error) {
+        console.warn(
+          "Không đọc được SCORM suspend_data:",
+          error
+        );
+      }
+    }
+
+    if (
+      !restored &&
+      scormStoredLocation
+    ) {
+      try {
+        String(
+          scormStoredLocation
+        )
+          .split(";")
+          .forEach(
+            function (
+              token
+            ) {
+              var pair =
+                token.split("=");
+
+              if (
+                pair[0] ===
+                  "p"
+              ) {
+                var pageIndex =
+                  Number(
+                    pair[1]
+                  );
+
+                if (
+                  Number.isInteger(
+                    pageIndex
+                  ) &&
+                  pageIndex >=
+                    0 &&
+                  pageIndex <
+                    course.pages.length
+                ) {
+                  state.pageIndex =
+                    pageIndex;
+                }
+              }
+
+              if (
+                pair[0] ===
+                  "t"
+              ) {
+                var time =
+                  Number(
+                    pair[1]
+                  );
+
+                if (
+                  Number.isFinite(
+                    time
+                  ) &&
+                  time >= 0
+                ) {
+                  state.currentTime =
+                    time;
+                }
+              }
+            }
+          );
+      } catch (error) {}
+    }
+
+    var activePage =
+      currentPage();
+
+    if (
+      activePage &&
+      state.currentTime >
+        0
+    ) {
+      state
+        .lastPositionByPage[
+        activePage.id
+      ] =
+        state.currentTime;
+    }
+
+    return restored;
+  }
+
+  function scormPersistProgress(
+    force
+  ) {
+    if (
+      !scormApi ||
+      !scormInitialized ||
+      typeof state ===
+        "undefined"
+    ) {
+      return;
+    }
+
+    var now =
+      Date.now();
+
+    if (
+      !force &&
+      now -
+        scormLastPersistAt <
+        1500
+    ) {
+      return;
+    }
+
+    scormLastPersistAt =
+      now;
+
+    try {
+      var page =
+        currentPage();
+
+      var video =
+        document.getElementById(
+          "course-video"
+        );
+
+      if (
+        page &&
+        video &&
+        Number.isFinite(
+          video.currentTime
+        )
+      ) {
+        state.currentTime =
+          video.currentTime;
+
+        state
+          .lastPositionByPage[
+          page.id
+        ] =
+          video.currentTime;
+      }
+
+      scormApi.LMSSetValue(
+        "cmi.core.lesson_location",
+        "p=" +
+          state.pageIndex +
+          ";t=" +
+          (
+            Math.round(
+              state.currentTime *
+              10
+            ) /
+            10
+          )
+      );
+
+      var suspendData =
+        makeSuspendData();
+
+      if (
+        suspendData
+      ) {
+        scormApi.LMSSetValue(
+          "cmi.suspend_data",
+          suspendData
+        );
+      }
+
+      scormApi.LMSSetValue(
+        "cmi.core.exit",
+        state.finished
+          ? ""
+          : "suspend"
+      );
+
+      scormApi.LMSCommit("");
+    } catch (error) {
+      console.warn(
+        "SCORM persist failed",
+        error
+      );
+    }
+  }
+
+  function handledQuiz(
+    quizId
+  ) {
+    return (
+      state.answeredQuizIds.has(
+        quizId
+      ) ||
+      state.skippedQuizIds.has(
+        quizId
+      )
+    );
+  }
+
+  function completedQuizCount(
+    page
+  ) {
+    return page.quizzes.filter(
+      function (quiz) {
+        return state
+          .answeredQuizIds
+          .has(
+            quiz.id
+          );
+      }
+    ).length;
+  }
+
+  function getWatchSet(
+    pageId
+  ) {
+    if (
+      !state.watched[
+        pageId
+      ]
+    ) {
+      state.watched[
+        pageId
+      ] =
+        new Set();
+    }
+
+    return state.watched[
+      pageId
+    ];
+  }
+
+  function watchPercent(
+    pageId,
+    duration
+  ) {
+    if (
+      !Number.isFinite(
+        duration
+      ) ||
+      duration <= 0
+    ) {
+      return 0;
+    }
+
+    var total =
+      Math.max(
+        1,
+        Math.ceil(
+          duration
+        )
+      );
+
+    var watched =
+      getWatchSet(
+        pageId
+      );
+
+    return Math.min(
+      100,
+      Math.round(
+        watched.size /
+          total *
+          100
+      )
+    );
+  }
+
+  function recordWatch(
+    pageId,
+    time,
+    duration
+  ) {
+    var previous =
+      state.lastPlaybackTime;
+
+    if (
+      previous === null
+    ) {
+      state.lastPlaybackTime =
+        time;
+
+      return;
+    }
+
+    var delta =
+      time -
+      previous;
+
+    if (
+      delta > 0 &&
+      delta <= 2.5
+    ) {
+      var watched =
+        getWatchSet(
+          pageId
+        );
+
+      var total =
+        Math.max(
+          1,
+          Math.ceil(
+            duration
+          )
+        );
+
+      var start =
+        Math.max(
+          0,
+          Math.floor(
+            previous
+          )
+        );
+
+      var end =
+        Math.min(
+          total - 1,
+          Math.floor(
+            time
+          )
+        );
+
+      for (
+        var second = start;
+        second <= end;
+        second++
+      ) {
+        watched.add(
+          second
+        );
+      }
+    }
+
+    state.lastPlaybackTime =
+      time;
+  }
+
+  function firstUnwatchedSecond(
+    pageId,
+    duration
+  ) {
+    var watched =
+      getWatchSet(
+        pageId
+      );
+
+    var total =
+      Math.max(
+        1,
+        Math.ceil(
+          duration
+        )
+      );
+
+    for (
+      var second = 0;
+      second < total;
+      second++
+    ) {
+      if (
+        !watched.has(
+          second
+        )
+      ) {
+        return second;
+      }
+    }
+
+    return 0;
+  }
+
+  function sortedQuizzes(
+    page
+  ) {
+    return page.quizzes
+      .slice()
+      .sort(
+        function (
+          a,
+          b
+        ) {
+          return (
+            a.time -
+            b.time
+          );
+        }
+      );
+  }
+
+  /* =====================================================
+     PAGE COMPLETION
+  ===================================================== */
+
+  function completeCurrentPage() {
+    var page =
+      currentPage();
+
+    if (!page) {
+      return;
+    }
+
+    state
+      .completedPageIds
+      .add(
+        page.id
+      );
+
+    state.completionNotice =
+      "";
+
+    render();
+  }
+
+  /* =====================================================
+     QUIZ
+  ===================================================== */
+
+  function showQuiz(
+    quiz
+  ) {
+    var video =
+      document.getElementById(
+        "course-video"
+      );
+
+    if (video) {
+      video.pause();
+    }
+
+    state.playing =
+      false;
+
+    state.lastPlaybackTime =
+      null;
+
+    state.activeQuiz =
+      quiz;
+
+    state.selectedAnswer =
+      null;
+
+    state.selectedAnswers =
+      [];
+
+    state.shortAnswer =
+      "";
+
+    state.matchingSelections =
+      [];
+
+    state.orderingSelections =
+      quizType(quiz) ===
+        "ordering"
+        ? orderingItems(quiz)
+            .map(
+              function (
+                _,
+                index,
+                items
+              ) {
+                return (
+                  items.length -
+                  1 -
+                  index
+                );
+              }
+            )
+        : [];
+
+    state.classificationSelections =
+      quizType(quiz) ===
+        "classification"
+        ? classificationItems(quiz)
+            .map(function () {
+              return -1;
+            })
+        : [];
+
+    state.quizResult =
+      null;
+
+    render();
+  }
+
+  function quizType(
+    quiz
+  ) {
+    if (
+      quiz &&
+      quiz.type ===
+        "true-false"
+    ) {
+      return "true-false";
+    }
+
+    if (
+      quiz &&
+      quiz.type ===
+        "multiple"
+    ) {
+      return "multiple";
+    }
+
+    if (
+      quiz &&
+      quiz.type ===
+        "short-answer"
+    ) {
+      return "short-answer";
+    }
+
+    if (
+      quiz &&
+      quiz.type ===
+        "matching"
+    ) {
+      return "matching";
+    }
+
+    if (
+      quiz &&
+      quiz.type ===
+        "ordering"
+    ) {
+      return "ordering";
+    }
+
+    if (
+      quiz &&
+      quiz.type ===
+        "classification"
+    ) {
+      return "classification";
+    }
+
+    return "multiple-choice";
+  }
+
+  function quizCorrectIndexes(
+    quiz
+  ) {
+    if (
+      quizType(quiz) !==
+      "multiple"
+    ) {
+      return [
+        quiz.correctIndex
+      ];
+    }
+
+    var source =
+      Array.isArray(
+        quiz.correctIndexes
+      )
+        ? quiz.correctIndexes
+        : [];
+
+    var result = [];
+
+    source.forEach(
+      function (index) {
+        if (
+          Number.isInteger(index) &&
+          index >= 0 &&
+          index <= 3 &&
+          result.indexOf(index) ===
+            -1
+        ) {
+          result.push(index);
+        }
+      }
+    );
+
+    result.sort(
+      function (a, b) {
+        return a - b;
+      }
+    );
+
+    if (result.length > 0) {
+      return result;
+    }
+
+    return [
+      Number.isInteger(
+        quiz.correctIndex
+      )
+        ? quiz.correctIndex
+        : 0
+    ];
+  }
+
+  function sameIndexes(
+    first,
+    second
+  ) {
+    if (
+      first.length !==
+      second.length
+    ) {
+      return false;
+    }
+
+    for (
+      var index = 0;
+      index < first.length;
+      index++
+    ) {
+      if (
+        first[index] !==
+        second[index]
+      ) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  function answerQuiz(
+    index
+  ) {
+    var quiz =
+      state.activeQuiz;
+
+    if (
+      !quiz ||
+      state.quizResult
+    ) {
+      return;
+    }
+
+    if (
+      (
+        quizType(quiz) ===
+          "short-answer" ||
+        quizType(quiz) ===
+          "matching" ||
+        quizType(quiz) ===
+          "ordering" ||
+        quizType(quiz) ===
+          "classification"
+      )
+    ) {
+      return;
+    }
+
+    if (
+      quizType(quiz) ===
+      "multiple"
+    ) {
+      toggleMultipleAnswer(
+        index
+      );
+
+      return;
+    }
+
+    state.selectedAnswer =
+      index;
+
+    var correct =
+      index ===
+      quiz.correctIndex;
+
+    if (correct) {
+      state.quizResult =
+        "correct";
+
+      if (
+        !state.correctQuizIds.has(
+          quiz.id
+        )
+      ) {
+        state.correctQuizIds.add(
+          quiz.id
+        );
+
+        state.score +=
+          quiz.points;
+      }
+    } else {
+      state.quizResult =
+        "wrong";
+    }
+
+    render();
+  }
+
+  function toggleMultipleAnswer(
+    index
+  ) {
+    var quiz =
+      state.activeQuiz;
+
+    if (
+      !quiz ||
+      state.quizResult ||
+      quizType(quiz) !==
+        "multiple"
+    ) {
+      return;
+    }
+
+    var existing =
+      state.selectedAnswers
+        .indexOf(index);
+
+    if (existing >= 0) {
+      state.selectedAnswers
+        .splice(
+          existing,
+          1
+        );
+    } else {
+      state.selectedAnswers
+        .push(index);
+
+      state.selectedAnswers
+        .sort(
+          function (a, b) {
+            return a - b;
+          }
+        );
+    }
+
+    render();
+  }
+
+  function submitMultipleAnswer() {
+    var quiz =
+      state.activeQuiz;
+
+    if (
+      !quiz ||
+      state.quizResult ||
+      quizType(quiz) !==
+        "multiple" ||
+      state.selectedAnswers.length ===
+        0
+    ) {
+      return;
+    }
+
+    var selected =
+      state.selectedAnswers
+        .slice()
+        .sort(
+          function (a, b) {
+            return a - b;
+          }
+        );
+
+    var correctIndexes =
+      quizCorrectIndexes(
+        quiz
+      );
+
+    var correct =
+      sameIndexes(
+        selected,
+        correctIndexes
+      );
+
+    if (correct) {
+      state.quizResult =
+        "correct";
+
+      if (
+        !state.correctQuizIds.has(
+          quiz.id
+        )
+      ) {
+        state.correctQuizIds.add(
+          quiz.id
+        );
+
+        state.score +=
+          quiz.points;
+      }
+    } else {
+      state.quizResult =
+        "wrong";
+    }
+
+    render();
+  }
+
+  function orderingItems(
+    quiz
+  ) {
+    var items =
+      quiz &&
+      Array.isArray(
+        quiz.orderingItems
+      )
+        ? quiz.orderingItems
+        : [];
+
+    return items
+      .map(
+        function (item) {
+          return String(
+            item == null
+              ? ""
+              : item
+          ).trim();
+        }
+      )
+      .filter(Boolean);
+  }
+
+  function moveOrderingItem(
+    position,
+    direction
+  ) {
+    var quiz =
+      state.activeQuiz;
+
+    if (
+      !quiz ||
+      state.quizResult ||
+      quizType(quiz) !==
+        "ordering"
+    ) {
+      return;
+    }
+
+    var target =
+      position +
+      direction;
+
+    if (
+      target < 0 ||
+      target >=
+        state.orderingSelections.length
+    ) {
+      return;
+    }
+
+    var temp =
+      state.orderingSelections[
+        position
+      ];
+
+    state.orderingSelections[
+      position
+    ] =
+      state.orderingSelections[
+        target
+      ];
+
+    state.orderingSelections[
+      target
+    ] =
+      temp;
+
+    render();
+  }
+
+  function submitOrderingAnswer() {
+    var quiz =
+      state.activeQuiz;
+
+    if (
+      !quiz ||
+      state.quizResult ||
+      quizType(quiz) !==
+        "ordering"
+    ) {
+      return;
+    }
+
+    var items =
+      orderingItems(
+        quiz
+      );
+
+    if (
+      items.length < 2 ||
+      state.orderingSelections.length !==
+        items.length
+    ) {
+      return;
+    }
+
+    var correct =
+      state.orderingSelections
+        .every(
+          function (
+            sourceIndex,
+            position
+          ) {
+            return (
+              sourceIndex ===
+              position
+            );
+          }
+        );
+
+    if (correct) {
+      state.quizResult =
+        "correct";
+
+      if (
+        !state.correctQuizIds.has(
+          quiz.id
+        )
+      ) {
+        state.correctQuizIds.add(
+          quiz.id
+        );
+
+        state.score +=
+          quiz.points;
+      }
+    } else {
+      state.quizResult =
+        "wrong";
+    }
+
+    render();
+  }
+
+  function classificationCategories(
+    quiz
+  ) {
+    var source =
+      quiz &&
+      Array.isArray(
+        quiz.classificationCategories
+      )
+        ? quiz.classificationCategories
+        : [];
+
+    return [
+      String(
+        source[0] == null
+          ? ""
+          : source[0]
+      ).trim(),
+      String(
+        source[1] == null
+          ? ""
+          : source[1]
+      ).trim()
+    ];
+  }
+
+  function classificationItems(
+    quiz
+  ) {
+    var items =
+      quiz &&
+      Array.isArray(
+        quiz.classificationItems
+      )
+        ? quiz.classificationItems
+        : [];
+
+    return items
+      .map(
+        function (item) {
+          return {
+            text: String(
+              item &&
+              item.text != null
+                ? item.text
+                : ""
+            ).trim(),
+            categoryIndex:
+              item &&
+              Number(item.categoryIndex) === 1
+                ? 1
+                : 0
+          };
+        }
+      )
+      .filter(
+        function (item) {
+          return Boolean(
+            item.text
+          );
+        }
+      );
+  }
+
+  function changeClassificationSelection(
+    itemIndex,
+    categoryIndex
+  ) {
+    var quiz =
+      state.activeQuiz;
+
+    if (
+      !quiz ||
+      state.quizResult ||
+      quizType(quiz) !==
+        "classification"
+    ) {
+      return;
+    }
+
+    var items =
+      classificationItems(
+        quiz
+      );
+
+    if (
+      itemIndex < 0 ||
+      itemIndex >=
+        items.length
+    ) {
+      return;
+    }
+
+    var normalizedCategory =
+      categoryIndex === 0 ||
+      categoryIndex === 1
+        ? categoryIndex
+        : -1;
+
+    while (
+      state.classificationSelections.length <
+      items.length
+    ) {
+      state.classificationSelections.push(
+        -1
+      );
+    }
+
+    state.classificationSelections[
+      itemIndex
+    ] =
+      normalizedCategory;
+
+    render();
+  }
+
+  function submitClassificationAnswer() {
+    var quiz =
+      state.activeQuiz;
+
+    if (
+      !quiz ||
+      state.quizResult ||
+      quizType(quiz) !==
+        "classification"
+    ) {
+      return;
+    }
+
+    var categories =
+      classificationCategories(
+        quiz
+      );
+
+    var items =
+      classificationItems(
+        quiz
+      );
+
+    if (
+      !categories[0] ||
+      !categories[1] ||
+      items.length < 2 ||
+      state.classificationSelections.length !==
+        items.length ||
+      state.classificationSelections.some(
+        function (value) {
+          return value < 0;
+        }
+      )
+    ) {
+      return;
+    }
+
+    var correct =
+      state.classificationSelections
+        .every(
+          function (
+            categoryIndex,
+            itemIndex
+          ) {
+            return (
+              categoryIndex ===
+              items[itemIndex]
+                .categoryIndex
+            );
+          }
+        );
+
+    if (correct) {
+      state.quizResult =
+        "correct";
+
+      if (
+        !state.correctQuizIds.has(
+          quiz.id
+        )
+      ) {
+        state.correctQuizIds.add(
+          quiz.id
+        );
+
+        state.score +=
+          quiz.points;
+      }
+    } else {
+      state.quizResult =
+        "wrong";
+    }
+
+    render();
+  }
+
+  function matchingPairs(
+    quiz
+  ) {
+    var pairs =
+      quiz &&
+      Array.isArray(
+        quiz.matchingPairs
+      )
+        ? quiz.matchingPairs
+        : [];
+
+    return pairs
+      .map(
+        function (pair) {
+          return {
+            left: String(
+              pair &&
+              pair.left != null
+                ? pair.left
+                : ""
+            ).trim(),
+            right: String(
+              pair &&
+              pair.right != null
+                ? pair.right
+                : ""
+            ).trim(),
+          };
+        }
+      )
+      .filter(
+        function (pair) {
+          return (
+            pair.left &&
+            pair.right
+          );
+        }
+      );
+  }
+
+  function changeMatchingSelection(
+    leftIndex,
+    rightIndex
+  ) {
+    var quiz =
+      state.activeQuiz;
+
+    if (
+      !quiz ||
+      state.quizResult ||
+      quizType(quiz) !==
+        "matching"
+    ) {
+      return;
+    }
+
+    var pairs =
+      matchingPairs(quiz);
+
+    var next =
+      [];
+
+    for (
+      var index = 0;
+      index < pairs.length;
+      index++
+    ) {
+      next[index] =
+        typeof state.matchingSelections[index] ===
+        "number"
+          ? state.matchingSelections[index]
+          : -1;
+    }
+
+    next[leftIndex] =
+      rightIndex;
+
+    state.matchingSelections =
+      next;
+
+    render();
+  }
+
+  function submitMatchingAnswer() {
+    var quiz =
+      state.activeQuiz;
+
+    if (
+      !quiz ||
+      state.quizResult ||
+      quizType(quiz) !==
+        "matching"
+    ) {
+      return;
+    }
+
+    var pairs =
+      matchingPairs(quiz);
+
+    if (
+      pairs.length < 2 ||
+      state.matchingSelections.length !==
+        pairs.length ||
+      state.matchingSelections.some(
+        function (value) {
+          return value < 0;
+        }
+      )
+    ) {
+      return;
+    }
+
+    var correct =
+      state.matchingSelections.every(
+        function (
+          value,
+          index
+        ) {
+          return value === index;
+        }
+      );
+
+    if (correct) {
+      state.quizResult =
+        "correct";
+
+      if (
+        !state.correctQuizIds.has(
+          quiz.id
+        )
+      ) {
+        state.correctQuizIds.add(
+          quiz.id
+        );
+
+        state.score +=
+          quiz.points;
+      }
+    } else {
+      state.quizResult =
+        "wrong";
+    }
+
+    render();
+  }
+
+  function normalizeShortAnswerValue(
+    value
+  ) {
+    return String(
+      value || ""
+    )
+      .normalize("NFKC")
+      .trim()
+      .replace(
+        /\s+/g,
+        " "
+      )
+      .toLocaleLowerCase(
+        "vi"
+      );
+  }
+
+  function isShortAnswerCorrect(
+    answer,
+    acceptedAnswers
+  ) {
+    var normalizedAnswer =
+      normalizeShortAnswerValue(
+        answer
+      );
+
+    if (!normalizedAnswer) {
+      return false;
+    }
+
+    var accepted =
+      Array.isArray(
+        acceptedAnswers
+      )
+        ? acceptedAnswers
+        : [];
+
+    return accepted.some(
+      function (
+        item
+      ) {
+        return (
+          normalizeShortAnswerValue(
+            item
+          ) ===
+          normalizedAnswer
+        );
+      }
+    );
+  }
+
+  function submitShortAnswer() {
+    var quiz =
+      state.activeQuiz;
+
+    if (
+      !quiz ||
+      state.quizResult ||
+      quizType(quiz) !==
+        "short-answer" ||
+      !String(
+        state.shortAnswer ||
+        ""
+      ).trim()
+    ) {
+      return;
+    }
+
+    var correct =
+      isShortAnswerCorrect(
+        state.shortAnswer,
+        quiz.acceptedAnswers
+      );
+
+    if (correct) {
+      state.quizResult =
+        "correct";
+
+      if (
+        !state.correctQuizIds.has(
+          quiz.id
+        )
+      ) {
+        state.correctQuizIds.add(
+          quiz.id
+        );
+
+        state.score +=
+          quiz.points;
+      }
+    } else {
+      state.quizResult =
+        "wrong";
+    }
+
+    render();
+  }
+
+  function continueAfterQuiz() {
+    var quiz =
+      state.activeQuiz;
+
+    if (!quiz) {
+      return;
+    }
+
+    state
+      .answeredQuizIds
+      .add(
+        quiz.id
+      );
+
+    state.activeQuiz =
+      null;
+
+    state.selectedAnswer =
+      null;
+
+    state.selectedAnswers =
+      [];
+
+    state.shortAnswer =
+      "";
+
+    state.matchingSelections =
+      [];
+
+    state.orderingSelections =
+      [];
+
+    state.classificationSelections =
+      [];
+
+    state.quizResult =
+      null;
+
+    scormPersistProgress(
+      true
+    );
+
+    render();
+
+    var page =
+      currentPage();
+
+    if (
+      page &&
+      page.videoSrc
+    ) {
+      var video =
+        document.getElementById(
+          "course-video"
+        );
+
+      if (video) {
+        state.started =
+          true;
+
+        state.lastPlaybackTime =
+          video.currentTime;
+
+        video.play()
+          .catch(
+            function () {}
+          );
+      }
+    } else {
+      handleNoVideoPage();
+    }
+  }
+
+  function skipQuiz() {
+    var quiz =
+      state.activeQuiz;
+
+    if (
+      !quiz ||
+      course.completion
+        .requireAllQuizzes
+    ) {
+      return;
+    }
+
+    state
+      .skippedQuizIds
+      .add(
+        quiz.id
+      );
+
+    state.activeQuiz =
+      null;
+
+    state.selectedAnswer =
+      null;
+
+    state.selectedAnswers =
+      [];
+
+    state.shortAnswer =
+      "";
+
+    state.matchingSelections =
+      [];
+
+    state.orderingSelections =
+      [];
+
+    state.classificationSelections =
+      [];
+
+    state.quizResult =
+      null;
+
+    scormPersistProgress(
+      true
+    );
+
+    render();
+
+    var page =
+      currentPage();
+
+    if (
+      page &&
+      page.videoSrc
+    ) {
+      var video =
+        document.getElementById(
+          "course-video"
+        );
+
+      if (video) {
+        state.started =
+          true;
+
+        state.lastPlaybackTime =
+          video.currentTime;
+
+        video.play()
+          .catch(
+            function () {}
+          );
+      }
+    } else {
+      handleNoVideoPage();
+    }
+  }
+
+  /* =====================================================
+     VIDEO
+  ===================================================== */
+
+  function bindVideoEvents() {
+    var page =
+      currentPage();
+
+    var video =
+      document.getElementById(
+        "course-video"
+      );
+
+    if (
+      !page ||
+      !video
+    ) {
+      return;
+    }
+
+    /* ===================================================
+       UPDATE COMPLETION UI WITHOUT RENDERING VIDEO AGAIN
+    =================================================== */
+
+    function updateCompletionStateUi() {
+      var completed =
+        state.completedPageIds
+          .has(
+            page.id
+          );
+
+      var status =
+        document.querySelector(
+          ".progress-info .progress-notice, .progress-info .completed"
+        );
+
+      if (status) {
+        if (completed) {
+          status.className =
+            "completed";
+
+          status.textContent =
+            "✓ Trang đã hoàn thành";
+        } else if (
+          state.completionNotice
+        ) {
+          status.className =
+            "progress-notice";
+
+          status.textContent =
+            state.completionNotice;
+        } else {
+          status.className =
+            "progress-notice";
+
+          status.textContent =
+            "Yêu cầu: xem ≥ " +
+            course.completion
+              .minWatchPercent +
+            "%" +
+            (
+              course.completion
+                .requireAllQuizzes
+                ? " và hoàn thành tất cả câu hỏi"
+                : ""
+            );
+        }
+      }
+
+      var nextButton =
+        document.getElementById(
+          "next"
+        );
+
+      if (nextButton) {
+        nextButton.disabled =
+          !completed ||
+          Boolean(
+            state.activeQuiz
+          );
+      }
+
+      var coursePercent =
+        courseProgressPercent(
+          completed
+        );
+
+      var coursePercentLabel =
+        document.getElementById(
+          "course-progress-percent"
+        );
+
+      if (coursePercentLabel) {
+        coursePercentLabel.textContent =
+          String(
+            coursePercent
+          ) +
+          "%";
+      }
+
+      var courseProgressFill =
+        document.getElementById(
+          "course-progress-fill"
+        );
+
+      if (courseProgressFill) {
+        courseProgressFill.style.width =
+          String(
+            coursePercent
+          ) +
+          "%";
+      }
+    }
+
+    /* ===================================================
+       CHECK WHETHER ALL REQUIRED QUIZZES ARE DONE
+    =================================================== */
+
+    function requiredQuizzesDone() {
+      if (
+        !course.completion
+          .requireAllQuizzes
+      ) {
+        return true;
+      }
+
+      return page.quizzes.every(
+        function (quiz) {
+          return state
+            .answeredQuizIds
+            .has(
+              quiz.id
+            );
+        }
+      );
+    }
+
+    /* ===================================================
+       COMPLETE PAGE WITHOUT CALLING render()
+    =================================================== */
+
+    function checkPageCompletion() {
+      /*
+       * Đã hoàn thành rồi.
+       */
+      if (
+        state.completedPageIds.has(
+          page.id
+        )
+      ) {
+        updateCompletionStateUi();
+
+        return true;
+      }
+
+      /*
+       * Quiz bắt buộc nhưng chưa làm hết.
+       */
+      if (
+        !requiredQuizzesDone()
+      ) {
+        updateCompletionStateUi();
+
+        return false;
+      }
+
+      var totalDuration =
+        video.duration;
+
+      if (
+        !Number.isFinite(
+          totalDuration
+        ) ||
+        totalDuration <= 0
+      ) {
+        totalDuration =
+          state.duration ||
+          page.duration;
+      }
+
+      var percent =
+        watchPercent(
+          page.id,
+          totalDuration
+        );
+
+      /*
+       * Chưa xem đủ tỷ lệ yêu cầu.
+       */
+      if (
+        percent <
+        course.completion
+          .minWatchPercent
+      ) {
+        updateCompletionStateUi();
+
+        return false;
+      }
+
+      /*
+       * Đạt toàn bộ điều kiện.
+       *
+       * QUAN TRỌNG:
+       * Không gọi completeCurrentPage()
+       * vì function đó render lại player,
+       * có thể làm video bị gián đoạn.
+       */
+      state
+        .completedPageIds
+        .add(
+          page.id
+        );
+
+      state.completionNotice =
+        "";
+
+      scormPersistProgress(
+        true
+      );
+
+      updateCompletionStateUi();
+
+      return true;
+    }
+
+    /* ===================================================
+       METADATA
+    =================================================== */
+
+    video.addEventListener(
+      "loadedmetadata",
+      function () {
+        state.duration =
+          video.duration;
+
+        var savedPosition =
+          Number(
+            state
+              .lastPositionByPage[
+              page.id
+            ]
+          );
+
+        if (
+          !Number.isFinite(
+            savedPosition
+          )
+        ) {
+          savedPosition =
+            state.currentTime;
+        }
+
+        if (
+          savedPosition > 0 &&
+          savedPosition <
+            video.duration
+        ) {
+          video.currentTime =
+            Math.min(
+              savedPosition,
+              Math.max(
+                0,
+                video.duration -
+                  0.05
+              )
+            );
+
+          state.currentTime =
+            video.currentTime;
+        }
+
+        updateControls();
+
+        /*
+         * Hỗ trợ cả cấu hình
+         * minWatchPercent = 0.
+         */
+        checkPageCompletion();
+      }
+    );
+
+    /* ===================================================
+       PLAY
+    =================================================== */
+
+    video.addEventListener(
+      "play",
+      function () {
+        state.started =
+          true;
+
+        state.playing =
+          true;
+
+        state.lastPlaybackTime =
+          video.currentTime;
+
+        updateControls();
+      }
+    );
+
+    /* ===================================================
+       PAUSE
+    =================================================== */
+
+    video.addEventListener(
+      "pause",
+      function () {
+        state.playing =
+          false;
+
+        state.lastPlaybackTime =
+          null;
+
+        state
+          .lastPositionByPage[
+          page.id
+        ] =
+          video.currentTime;
+
+        scormPersistProgress(
+          true
+        );
+
+        updateControls();
+      }
+    );
+
+    /* ===================================================
+       TIME UPDATE
+    =================================================== */
+
+    video.addEventListener(
+      "timeupdate",
+      function () {
+        state.currentTime =
+          video.currentTime;
+
+        state
+          .lastPositionByPage[
+          page.id
+        ] =
+          video.currentTime;
+
+        scormPersistProgress(
+          false
+        );
+
+        /*
+         * Chỉ ghi nhận thời gian xem thật
+         * khi video đang phát.
+         */
+        if (
+          state.started &&
+          !video.paused
+        ) {
+          recordWatch(
+            page.id,
+            video.currentTime,
+            video.duration
+          );
+        }
+
+        updateControls();
+
+        /*
+         * Đây là thay đổi chính của V9.4:
+         *
+         * mỗi lần thời gian xem tăng,
+         * kiểm tra ngay điều kiện hoàn thành.
+         *
+         * Ví dụ yêu cầu 70%:
+         * vừa đạt 70% thì Trang tiếp theo
+         * được mở ngay.
+         */
+        checkPageCompletion();
+
+        /*
+         * Chưa Play hoặc đang hiện quiz
+         * thì không tìm quiz mới.
+         */
+        if (
+          !state.started ||
+          state.activeQuiz
+        ) {
+          return;
+        }
+
+        var due =
+          sortedQuizzes(
+            page
+          ).find(
+            function (quiz) {
+              return (
+                !handledQuiz(
+                  quiz.id
+                ) &&
+                quiz.time <=
+                  video.currentTime
+              );
+            }
+          );
+
+        if (due) {
+          showQuiz(
+            due
+          );
+        }
+      }
+    );
+
+    /* ===================================================
+       VIDEO ENDED
+    =================================================== */
+
+    video.addEventListener(
+      "ended",
+      function () {
+        state.playing =
+          false;
+
+        /*
+         * Ghi nhận nốt đoạn cuối.
+         */
+        recordWatch(
+          page.id,
+          video.duration,
+          video.duration
+        );
+
+        state.lastPlaybackTime =
+          null;
+
+        state
+          .lastPositionByPage[
+          page.id
+        ] =
+          video.duration;
+
+        scormPersistProgress(
+          true
+        );
+
+        /*
+         * Nếu quiz là bắt buộc thì
+         * không được bỏ sót quiz.
+         */
+        if (
+          course.completion
+            .requireAllQuizzes
+        ) {
+          var unanswered =
+            sortedQuizzes(
+              page
+            ).find(
+              function (
+                quiz
+              ) {
+                return !state
+                  .answeredQuizIds
+                  .has(
+                    quiz.id
+                  );
+              }
+            );
+
+          if (
+            unanswered
+          ) {
+            video.currentTime =
+              unanswered.time;
+
+            state.currentTime =
+              unanswered.time;
+
+            showQuiz(
+              unanswered
+            );
+
+            return;
+          }
+        }
+
+        var percent =
+          watchPercent(
+            page.id,
+            video.duration
+          );
+
+        /*
+         * Chạy đến cuối nhưng vẫn chưa đủ
+         * tỷ lệ xem thật, ví dụ do tua.
+         */
+        if (
+          percent <
+          course.completion
+            .minWatchPercent
+        ) {
+          var missing =
+            firstUnwatchedSecond(
+              page.id,
+              video.duration
+            );
+
+          state.completionNotice =
+            "Bạn mới xem " +
+            percent +
+            "% video. Cần tối thiểu " +
+            course.completion
+              .minWatchPercent +
+            "% để hoàn thành trang.";
+
+          video.currentTime =
+            missing;
+
+          state.currentTime =
+            missing;
+
+          updateControls();
+
+          updateCompletionStateUi();
+
+          return;
+        }
+
+        /*
+         * Nếu đủ điều kiện thì chỉ cập nhật
+         * state/UI, không render lại video.
+         */
+        checkPageCompletion();
+      }
+    );
+
+    /*
+     * Đồng bộ trạng thái ngay lần đầu.
+     */
+    updateCompletionStateUi();
+  }
+  function togglePlay() {
+    var video =
+      document.getElementById(
+        "course-video"
+      );
+
+    if (
+      !video ||
+      state.activeQuiz
+    ) {
+      return;
+    }
+
+    state.started =
+      true;
+
+    state.completionNotice =
+      "";
+
+    if (
+      video.paused
+    ) {
+      state.lastPlaybackTime =
+        video.currentTime;
+
+      video.play()
+        .catch(
+          function () {}
+        );
+    } else {
+      video.pause();
+    }
+  }
+
+  function seekVideo(
+    value
+  ) {
+    var page =
+      currentPage();
+
+    var video =
+      document.getElementById(
+        "course-video"
+      );
+
+    if (
+      !page ||
+      !video ||
+      state.activeQuiz
+    ) {
+      return;
+    }
+
+    var requested =
+      Number(value);
+
+    state.started =
+      true;
+
+    state.lastPlaybackTime =
+      null;
+
+    if (
+      course.completion
+        .requireAllQuizzes &&
+      requested >
+        state.currentTime
+    ) {
+      var blocking =
+        sortedQuizzes(
+          page
+        ).find(
+          function (
+            quiz
+          ) {
+            return (
+              !handledQuiz(
+                quiz.id
+              ) &&
+              quiz.time >
+                state.currentTime &&
+              quiz.time <=
+                requested
+            );
+          }
+        );
+
+      if (
+        blocking
+      ) {
+        video.currentTime =
+          blocking.time;
+
+        state.currentTime =
+          blocking.time;
+
+        showQuiz(
+          blocking
+        );
+
+        return;
+      }
+    }
+
+    video.currentTime =
+      requested;
+
+    state.currentTime =
+      requested;
+
+    state
+      .lastPositionByPage[
+      page.id
+    ] =
+      requested;
+
+    scormPersistProgress(
+      true
+    );
+
+    updateControls();
+  }
+
+  /* =====================================================
+     NO VIDEO PAGE
+  ===================================================== */
+
+  function handleNoVideoPage() {
+    var page =
+      currentPage();
+
+    if (!page) {
+      return;
+    }
+
+    if (
+      page.quizzes.length ===
+      0
+    ) {
+      completeCurrentPage();
+
+      return;
+    }
+
+    if (
+      !course.completion
+        .requireAllQuizzes
+    ) {
+      completeCurrentPage();
+
+      return;
+    }
+
+    var next =
+      page.quizzes.find(
+        function (
+          quiz
+        ) {
+          return !state
+            .answeredQuizIds
+            .has(
+              quiz.id
+            );
+        }
+      );
+
+    if (next) {
+      showQuiz(
+        next
+      );
+
+      return;
+    }
+
+    completeCurrentPage();
+  }
+
+  /* =====================================================
+     NAVIGATION
+  ===================================================== */
+
+  function previousPage() {
+    if (
+      state.pageIndex <= 0 ||
+      state.activeQuiz
+    ) {
+      return;
+    }
+
+    scormPersistProgress(
+      true
+    );
+
+    state.pageIndex--;
+
+    resetPageState();
+
+    scormPersistProgress(
+      true
+    );
+
+    render();
+  }
+
+  function nextPage() {
+    var page =
+      currentPage();
+
+    if (
+      !page ||
+      !state
+        .completedPageIds
+        .has(
+          page.id
+        ) ||
+      state.activeQuiz
+    ) {
+      return;
+    }
+
+    if (
+      state.pageIndex <
+      course.pages.length -
+        1
+    ) {
+      scormPersistProgress(
+        true
+      );
+
+      state.pageIndex++;
+
+      resetPageState();
+
+      scormPersistProgress(
+        true
+      );
+
+      render();
+
+      return;
+    }
+
+    finishCourse();
+  }
+
+  function resetPageState() {
+    var page =
+      currentPage();
+
+    var savedPosition =
+      page
+        ? Number(
+            state
+              .lastPositionByPage[
+              page.id
+            ]
+          )
+        : 0;
+
+    state.currentTime =
+      Number.isFinite(
+        savedPosition
+      )
+        ? Math.max(
+            0,
+            savedPosition
+          )
+        : 0;
+
+    state.duration =
+      0;
+
+    state.playing =
+      false;
+
+    state.started =
+      false;
+
+    state.activeQuiz =
+      null;
+
+    state.selectedAnswer =
+      null;
+
+    state.selectedAnswers =
+      [];
+
+    state.shortAnswer =
+      "";
+
+    state.matchingSelections =
+      [];
+
+    state.orderingSelections =
+      [];
+
+    state.classificationSelections =
+      [];
+
+    state.quizResult =
+      null;
+
+    state.lastPlaybackTime =
+      null;
+
+    state.completionNotice =
+      "";
+  }
+
+  /* =====================================================
+     FINISH
+  ===================================================== */
+
+  function finishCourse() {
+    state.finished =
+      true;
+
+    var possible =
+      totalPossibleScore();
+
+    var percentage =
+      possible > 0
+        ? Math.round(
+            state.score /
+              possible *
+              100
+          )
+        : 100;
+
+    var passed =
+      percentage >=
+      course.completion
+        .passScorePercent;
+
+    scormReport(
+      percentage,
+      passed
+    );
+
+    scormPersistProgress(
+      true
+    );
+
+    render();
+  }
+
+  function restartCourse() {
+    state.pageIndex =
+      0;
+
+    state.currentTime =
+      0;
+
+    state.duration =
+      0;
+
+    state.playing =
+      false;
+
+    state.started =
+      false;
+
+    state.activeQuiz =
+      null;
+
+    state.selectedAnswer =
+      null;
+
+    state.selectedAnswers =
+      [];
+
+    state.shortAnswer =
+      "";
+
+    state.matchingSelections =
+      [];
+
+    state.orderingSelections =
+      [];
+
+    state.classificationSelections =
+      [];
+
+    state.quizResult =
+      null;
+
+    state.answeredQuizIds =
+      new Set();
+
+    state.skippedQuizIds =
+      new Set();
+
+    state.correctQuizIds =
+      new Set();
+
+    state.completedPageIds =
+      new Set();
+
+    state.watched =
+      {};
+
+    state.lastPositionByPage =
+      {};
+
+    state.lastPlaybackTime =
+      null;
+
+    state.score =
+      0;
+
+    state.completionNotice =
+      "";
+
+    state.finished =
+      false;
+
+    try {
+      if (
+        scormApi &&
+        scormInitialized
+      ) {
+        scormApi.LMSSetValue(
+          "cmi.core.lesson_status",
+          "incomplete"
+        );
+
+        scormApi.LMSSetValue(
+          "cmi.core.score.raw",
+          "0"
+        );
+
+        scormApi.LMSSetValue(
+          "cmi.core.lesson_location",
+          ""
+        );
+
+        scormApi.LMSSetValue(
+          "cmi.suspend_data",
+          ""
+        );
+
+        scormApi.LMSSetValue(
+          "cmi.core.exit",
+          ""
+        );
+
+        scormApi.LMSCommit("");
+      }
+    } catch (error) {}
+
+    render();
+  }
+
+  /* =====================================================
+     UPDATE SMALL UI PARTS
+  ===================================================== */
+
+  function updateControls() {
+    var page =
+      currentPage();
+
+    if (!page) {
+      return;
+    }
+
+    var play =
+      document.getElementById(
+        "play-button"
+      );
+
+    if (play) {
+      play.textContent =
+        state.playing
+          ? "❚❚"
+          : "▶";
+    }
+
+    var time =
+      document.getElementById(
+        "time-display"
+      );
+
+    if (time) {
+      time.textContent =
+        formatTime(
+          state.currentTime
+        ) +
+        " / " +
+        formatTime(
+          state.duration
+        );
+    }
+
+    var seek =
+      document.getElementById(
+        "seek"
+      );
+
+    if (seek) {
+      seek.max =
+        String(
+          state.duration > 0
+            ? state.duration
+            : 1
+        );
+
+      seek.value =
+        String(
+          Math.min(
+            state.currentTime,
+            state.duration > 0
+              ? state.duration
+              : 1
+          )
+        );
+    }
+
+    var watch =
+      document.getElementById(
+        "watch-percent"
+      );
+
+    if (watch) {
+      watch.textContent =
+        String(
+          watchPercent(
+            page.id,
+            state.duration ||
+              page.duration
+          )
+        ) +
+        "%";
+    }
+  }
+
+  /* =====================================================
+     RENDER QUIZ
+  ===================================================== */
+
+  function renderQuiz() {
+    var quiz =
+      state.activeQuiz;
+
+    if (!quiz) {
+      return "";
+    }
+
+    var type =
+      quizType(quiz);
+
+    var correctIndexes =
+      quizCorrectIndexes(
+        quiz
+      );
+
+    var answerArea =
+      "";
+
+    if (
+      type ===
+        "classification"
+    ) {
+      var categories =
+        classificationCategories(
+          quiz
+        );
+
+      var items =
+        classificationItems(
+          quiz
+        );
+
+      var unassigned =
+        items
+          .map(
+            function (
+              item,
+              itemIndex
+            ) {
+              var selected =
+                typeof state.classificationSelections[itemIndex] ===
+                  "number"
+                  ? state.classificationSelections[itemIndex]
+                  : -1;
+
+              if (selected >= 0) {
+                return "";
+              }
+
+              var buttons =
+                state.quizResult
+                  ? ""
+                  : categories
+                      .map(
+                        function (
+                          category,
+                          categoryIndex
+                        ) {
+                          return (
+                            '<button class="classification-action" data-classify-item="' +
+                            itemIndex +
+                            '" data-classify-category="' +
+                            categoryIndex +
+                            '">→ ' +
+                            escapeHtml(
+                              category ||
+                              (
+                                "Nhóm " +
+                                (
+                                  categoryIndex +
+                                  1
+                                )
+                              )
+                            ) +
+                            "</button>"
+                          );
+                        }
+                      )
+                      .join("");
+
+              return (
+                '<div class="classification-item" draggable="' +
+                (state.quizResult ? "false" : "true") +
+                '" data-classify-drag-item="' +
+                itemIndex +
+                '">' +
+                '<div class="classification-item-text">' +
+                escapeHtml(
+                  item.text
+                ) +
+                "</div>" +
+                (
+                  buttons
+                    ? '<div class="classification-actions">' +
+                      buttons +
+                      "</div>"
+                    : ""
+                ) +
+                "</div>"
+              );
+            }
+          )
+          .join("");
+
+      var groups =
+        categories
+          .map(
+            function (
+              category,
+              categoryIndex
+            ) {
+              var cards =
+                items
+                  .map(
+                    function (
+                      item,
+                      itemIndex
+                    ) {
+                      if (
+                        state.classificationSelections[itemIndex] !==
+                        categoryIndex
+                      ) {
+                        return "";
+                      }
+
+                      var classes =
+                        "classification-item";
+
+                      if (
+                        state.quizResult
+                      ) {
+                        classes +=
+                          item.categoryIndex ===
+                          categoryIndex
+                            ? " correct"
+                            : " wrong";
+                      }
+
+                      var buttons =
+                        state.quizResult
+                          ? ""
+                          : categories
+                              .map(
+                                function (
+                                  targetCategory,
+                                  targetIndex
+                                ) {
+                                  return (
+                                    '<button class="classification-action" data-classify-item="' +
+                                    itemIndex +
+                                    '" data-classify-category="' +
+                                    targetIndex +
+                                    '"' +
+                                    (
+                                      targetIndex ===
+                                      categoryIndex
+                                        ? " disabled"
+                                        : ""
+                                    ) +
+                                    '>→ ' +
+                                    escapeHtml(
+                                      targetCategory ||
+                                      (
+                                        "Nhóm " +
+                                        (
+                                          targetIndex +
+                                          1
+                                        )
+                                      )
+                                    ) +
+                                    "</button>"
+                                  );
+                                }
+                              )
+                              .join("") +
+                            '<button class="classification-action" data-classify-item="' +
+                            itemIndex +
+                            '" data-classify-category="-1">↩ Bỏ chọn</button>';
+
+                      return (
+                        '<div class="' +
+                        classes +
+                        '" draggable="' +
+                        (state.quizResult ? "false" : "true") +
+                        '" data-classify-drag-item="' +
+                        itemIndex +
+                        '">' +
+                        '<div class="classification-item-text">' +
+                        escapeHtml(
+                          item.text
+                        ) +
+                        "</div>" +
+                        (
+                          buttons
+                            ? '<div class="classification-actions">' +
+                              buttons +
+                              "</div>"
+                            : ""
+                        ) +
+                        "</div>"
+                      );
+                    }
+                  )
+                  .join("");
+
+              return (
+                '<div class="classification-group" data-classify-drop-category="' +
+                categoryIndex +
+                '">' +
+                '<div class="classification-group-title">' +
+                escapeHtml(
+                  category ||
+                  (
+                    "Nhóm " +
+                    (
+                      categoryIndex +
+                      1
+                    )
+                  )
+                ) +
+                "</div>" +
+                cards +
+                "</div>"
+              );
+            }
+          )
+          .join("");
+
+      var allClassified =
+        items.length >= 2 &&
+        state.classificationSelections.length ===
+          items.length &&
+        state.classificationSelections.every(
+          function (value) {
+            return value >= 0;
+          }
+        );
+
+      answerArea =
+        '<div class="classification-wrap">' +
+        '<div class="classification-note">Kéo từng thẻ vào đúng nhóm. Nếu không muốn kéo, có thể dùng nút nhóm trên từng thẻ.</div>' +
+        '<div class="classification-unassigned">' +
+        unassigned +
+        "</div>" +
+        '<div class="classification-groups">' +
+        groups +
+        "</div>" +
+        (
+          state.quizResult
+            ? ""
+            : '<button class="primary-button" id="submit-classification"' +
+              (
+                allClassified
+                  ? ""
+                  : " disabled"
+              ) +
+              '>Xác nhận phân loại</button>'
+        ) +
+        "</div>";
+    } else if (
+      type ===
+        "ordering"
+    ) {
+      var orderItems =
+        orderingItems(
+          quiz
+        );
+
+      var orderRows =
+        state.orderingSelections
+          .map(
+            function (
+              sourceIndex,
+              position
+            ) {
+              var classes =
+                "ordering-row";
+
+              if (
+                state.quizResult
+              ) {
+                classes +=
+                  sourceIndex ===
+                  position
+                    ? " correct"
+                    : " wrong";
+              }
+
+              return (
+                '<div class="' +
+                classes +
+                '">' +
+                '<div class="ordering-position">' +
+                (position + 1) +
+                "</div>" +
+                '<div class="ordering-text">' +
+                escapeHtml(
+                  orderItems[
+                    sourceIndex
+                  ] || ""
+                ) +
+                "</div>" +
+                (
+                  state.quizResult
+                    ? ""
+                    : '<div class="ordering-controls">' +
+                      '<button class="ordering-move" data-order-position="' +
+                      position +
+                      '" data-order-direction="-1"' +
+                      (
+                        position ===
+                          0
+                          ? " disabled"
+                          : ""
+                      ) +
+                      '>↑</button>' +
+                      '<button class="ordering-move" data-order-position="' +
+                      position +
+                      '" data-order-direction="1"' +
+                      (
+                        position ===
+                          state.orderingSelections.length -
+                            1
+                          ? " disabled"
+                          : ""
+                      ) +
+                      '>↓</button>' +
+                      "</div>"
+                ) +
+                "</div>"
+              );
+            }
+          )
+          .join("");
+
+      answerArea =
+        '<div class="ordering-wrap">' +
+        orderRows +
+        (
+          state.quizResult
+            ? ""
+            : '<button class="primary-button" id="submit-ordering"' +
+              (
+                state.orderingSelections.length <
+                  2
+                  ? " disabled"
+                  : ""
+              ) +
+              '>Xác nhận thứ tự</button>'
+        ) +
+        "</div>";
+    } else if (
+      type ===
+        "matching"
+    ) {
+      var pairs =
+        matchingPairs(quiz);
+
+      var rows =
+        pairs.map(
+          function (
+            pair,
+            leftIndex
+          ) {
+            var selected =
+              typeof state.matchingSelections[leftIndex] ===
+              "number"
+                ? state.matchingSelections[leftIndex]
+                : -1;
+
+            var rowClass =
+              "matching-row";
+
+            if (state.quizResult) {
+              rowClass +=
+                selected ===
+                leftIndex
+                  ? " correct"
+                  : " wrong";
+            }
+
+            var optionOrder =
+              pairs.map(
+                function (
+                  _,
+                  index
+                ) {
+                  return (
+                    pairs.length -
+                    1 -
+                    index
+                  );
+                }
+              );
+
+            var options =
+              '<option value="-1">-- Chọn nội dung phù hợp --</option>' +
+              optionOrder
+                .map(
+                  function (rightIndex) {
+                    return (
+                      '<option value="' +
+                      rightIndex +
+                      '"' +
+                      (
+                        selected ===
+                        rightIndex
+                          ? " selected"
+                          : ""
+                      ) +
+                      '>' +
+                      escapeHtml(
+                        pairs[rightIndex].right
+                      ) +
+                      "</option>"
+                    );
+                  }
+                )
+                .join("");
+
+            return (
+              '<div class="' +
+              rowClass +
+              '">' +
+              '<div style="font-weight:700">' +
+              escapeHtml(
+                pair.left
+              ) +
+              '</div>' +
+              '<div class="matching-arrow">↔</div>' +
+              '<select class="matching-select" data-match-left="' +
+              leftIndex +
+              '"' +
+              (
+                state.quizResult
+                  ? " disabled"
+                  : ""
+              ) +
+              '>' +
+              options +
+              '</select>' +
+              '</div>'
+            );
+          }
+        )
+        .join("");
+
+      var allSelected =
+        pairs.length >= 2 &&
+        pairs.every(
+          function (
+            _,
+            index
+          ) {
+            return (
+              typeof state.matchingSelections[index] ===
+                "number" &&
+              state.matchingSelections[index] >=
+                0
+            );
+          }
+        );
+
+      answerArea =
+        '<div class="matching-wrap">' +
+        rows +
+        (
+          state.quizResult
+            ? ""
+            : '<button class="primary-button" id="submit-matching"' +
+              (
+                allSelected
+                  ? ""
+                  : " disabled"
+              ) +
+              '>Xác nhận ghép đôi</button>'
+        ) +
+        '</div>';
+    } else if (
+      type ===
+        "short-answer"
+    ) {
+      answerArea =
+        '<div class="short-answer-wrap">' +
+        '<input class="short-answer-input" id="short-answer-input" type="text" placeholder="Nhập câu trả lời của bạn..." value="' +
+        escapeHtml(
+          state.shortAnswer ||
+          ""
+        ) +
+        '"' +
+        (
+          state.quizResult
+            ? " disabled"
+            : ""
+        ) +
+        " />" +
+        (
+          state.quizResult
+            ? ""
+            : '<button class="primary-button" id="submit-short-answer"' +
+              (
+                String(
+                  state.shortAnswer ||
+                  ""
+                ).trim()
+                  ? ""
+                  : " disabled"
+              ) +
+              '>Xác nhận câu trả lời</button>'
+        ) +
+        "</div>";
+    } else {
+      var options =
+        quiz.options
+          .map(
+            function (
+              option,
+              index
+            ) {
+              var classes =
+                "option";
+
+              var isCorrect =
+                correctIndexes
+                  .indexOf(index) >=
+                0;
+
+              var isSelected =
+                type ===
+                "multiple"
+                  ? state.selectedAnswers
+                      .indexOf(index) >=
+                    0
+                  : index ===
+                    state.selectedAnswer;
+
+              if (
+                state.quizResult
+              ) {
+                if (isCorrect) {
+                  classes +=
+                    " correct";
+                } else if (isSelected) {
+                  classes +=
+                    " wrong";
+                } else {
+                  classes +=
+                    " dim";
+                }
+              } else if (
+                type ===
+                  "multiple" &&
+                isSelected
+              ) {
+                classes +=
+                  " selected";
+              }
+
+              return (
+                '<button class="' +
+                classes +
+                '" data-answer="' +
+                index +
+                '"' +
+                (
+                  state.quizResult
+                    ? " disabled"
+                    : ""
+                ) +
+                ">" +
+                '<span class="option-letter">' +
+                (
+                  type ===
+                    "true-false"
+                    ? (
+                        index ===
+                        0
+                          ? "✓"
+                          : "✕"
+                      )
+                    : String.fromCharCode(
+                        65 + index
+                      )
+                ) +
+                "</span>" +
+                "<span>" +
+                escapeHtml(
+                  option
+                ) +
+                "</span>" +
+                (
+                  type ===
+                    "multiple" &&
+                  isSelected &&
+                  !state.quizResult
+                    ? '<span style="margin-left:auto;color:#67e8f9;font-weight:900">✓</span>'
+                    : ""
+                ) +
+                "</button>"
+              );
+            }
+          )
+          .join("");
+
+      var submit =
+        "";
+
+      if (
+        type ===
+          "multiple" &&
+        !state.quizResult
+      ) {
+        submit =
+          '<button class="primary-button" id="submit-multiple"' +
+          (
+            state.selectedAnswers.length ===
+              0
+              ? " disabled"
+              : ""
+          ) +
+          '>Xác nhận đáp án</button>';
+      }
+
+      answerArea =
+        '<div class="options">' +
+        options +
+        "</div>" +
+        submit;
+    }
+
+    var feedback =
+      "";
+
+    if (
+      state.quizResult
+    ) {
+      var correct =
+        state.quizResult ===
+        "correct";
+
+      feedback =
+        '<div class="feedback">' +
+        '<div class="feedback-title ' +
+        (
+          correct
+            ? "correct"
+            : "wrong"
+        ) +
+        '">' +
+        (
+          correct
+            ? "Chính xác! +" +
+              quiz.points +
+              " điểm"
+            : "Chưa chính xác"
+        ) +
+        "</div>" +
+        "<p>" +
+        escapeHtml(
+          correct
+            ? quiz.feedbackCorrect
+            : quiz.feedbackWrong
+        ) +
+        "</p>" +
+        '<button class="primary-button" id="continue-quiz">Tiếp tục</button>' +
+        "</div>";
+    }
+
+    var skip =
+      "";
+
+    if (
+      !course.completion
+        .requireAllQuizzes &&
+      !state.quizResult
+    ) {
+      skip =
+        '<button class="skip-button" id="skip-quiz">Bỏ qua câu hỏi</button>';
+    }
+
+    return (
+      '<div class="quiz-overlay">' +
+      '<div class="quiz-card">' +
+      '<div class="quiz-sticky-header">' +
+      '<div class="quiz-top">' +
+      '<div class="quiz-label">' +
+      (
+        type ===
+          "true-false"
+          ? "CÂU HỎI ĐÚNG / SAI"
+          : type ===
+            "multiple"
+            ? "CÂU HỎI NHIỀU ĐÁP ÁN"
+            : type ===
+              "short-answer"
+              ? "CÂU HỎI TRẢ LỜI NGẮN"
+              : type ===
+                "matching"
+                ? "CÂU HỎI GHÉP ĐÔI"
+                : type ===
+                  "ordering"
+                  ? "CÂU HỎI SẮP XẾP THỨ TỰ"
+                  : type ===
+                    "classification"
+                    ? "CÂU HỎI PHÂN LOẠI KÉO THẢ"
+                    : "CÂU HỎI TƯƠNG TÁC"
+      ) +
+      "</div>" +
+      '<div class="quiz-points">' +
+      quiz.points +
+      " điểm</div>" +
+      "</div>" +
+      "<h2>" +
+      escapeHtml(
+        quiz.question
+      ) +
+      "</h2>" +
+      "</div>" +
+      '<div class="quiz-body">' +
+      answerArea +
+      feedback +
+      skip +
+      "</div>" +
+      "</div>" +
+      "</div>"
+    );
+  }
+
+  /* =====================================================
+     HTML ESCAPE
+  ===================================================== */
+
+  function escapeHtml(
+    value
+  ) {
+    return String(
+      value == null
+        ? ""
+        : value
+    )
+      .replace(
+        /&/g,
+        "&amp;"
+      )
+      .replace(
+        /</g,
+        "&lt;"
+      )
+      .replace(
+        />/g,
+        "&gt;"
+      )
+      .replace(
+        /"/g,
+        "&quot;"
+      )
+      .replace(
+        /'/g,
+        "&#039;"
+      );
+  }
+
+  /* =====================================================
+     COURSE PROGRESS
+  ===================================================== */
+
+  function courseProgressPercent(
+    completed
+  ) {
+    return Math.min(
+      100,
+      Math.round(
+        (
+          state.pageIndex +
+          (completed ? 1 : 0)
+        ) /
+          Math.max(
+            1,
+            course.pages.length
+          ) *
+          100
+      )
+    );
+  }
+
+  function renderCourseProgress(
+    completed
+  ) {
+    if (
+      theme.showProgress ===
+      false
+    ) {
+      return "";
+    }
+
+    var percent =
+      courseProgressPercent(
+        completed
+      );
+
+    return (
+      '<section class="course-progress">' +
+      '<div class="course-progress-head">' +
+      '<span>Tiến độ bài giảng</span>' +
+      '<strong id="course-progress-percent">' +
+      percent +
+      '%</strong>' +
+      '</div>' +
+      '<div class="course-progress-track">' +
+      '<div class="course-progress-fill" id="course-progress-fill" style="width:' +
+      percent +
+      '%"></div>' +
+      '</div>' +
+      '</section>'
+    );
+  }
+
+  /* =====================================================
+     RENDER FINISH
+  ===================================================== */
+
+  function renderFinish() {
+    var possible =
+      totalPossibleScore();
+
+    var percentage =
+      possible > 0
+        ? Math.round(
+            state.score /
+              possible *
+              100
+          )
+        : 100;
+
+    var passed =
+      percentage >=
+      course.completion
+        .passScorePercent;
+
+    app.innerHTML =
+      '<div class="finish-page">' +
+      '<div class="finish-card">' +
+
+      '<div class="finish-status ' +
+      (
+        passed
+          ? "pass"
+          : "fail"
+      ) +
+      '">' +
+      (
+        passed
+          ? "ĐẠT"
+          : "CHƯA ĐẠT"
+      ) +
+      "</div>" +
+
+      "<h1>HOÀN THÀNH BÀI HỌC</h1>" +
+
+      "<p>" +
+      escapeHtml(
+        displayCourseTitle()
+      ) +
+      "</p>" +
+
+      '<div class="result-grid">' +
+
+      '<div class="result-box">' +
+      '<div class="result-label">Tổng điểm</div>' +
+      '<div class="result-value">' +
+      state.score +
+      " / " +
+      possible +
+      "</div>" +
+      "</div>" +
+
+      '<div class="result-box">' +
+      '<div class="result-label">Trả lời đúng</div>' +
+      '<div class="result-value">' +
+      state.correctQuizIds.size +
+      " / " +
+      totalQuestions() +
+      "</div>" +
+      "</div>" +
+
+      '<div class="result-box">' +
+      '<div class="result-label">Kết quả</div>' +
+      '<div class="result-value">' +
+      percentage +
+      "%</div>" +
+      "</div>" +
+
+      "</div>" +
+
+      '<div class="conditions">' +
+      "<strong>Điều kiện hoàn thành</strong>" +
+
+      '<div class="condition-row">' +
+      "<span>Điểm tối thiểu</span>" +
+      "<strong>" +
+      course.completion
+        .passScorePercent +
+      "%</strong>" +
+      "</div>" +
+
+      '<div class="condition-row">' +
+      "<span>Xem tối thiểu mỗi video</span>" +
+      "<strong>" +
+      course.completion
+        .minWatchPercent +
+      "%</strong>" +
+      "</div>" +
+
+      '<div class="condition-row">' +
+      "<span>Hoàn thành tất cả câu hỏi</span>" +
+      "<strong>" +
+      (
+        course.completion
+          .requireAllQuizzes
+          ? "Bắt buộc"
+          : "Không bắt buộc"
+      ) +
+      "</strong>" +
+      "</div>" +
+
+      "</div>" +
+
+      '<button class="restart" id="restart">Học lại</button>' +
+
+      "</div>" +
+      "</div>";
+
+    document
+      .getElementById(
+        "restart"
+      )
+      .addEventListener(
+        "click",
+        restartCourse
+      );
+  }
+
+  /* =====================================================
+     RENDER MAIN
+  ===================================================== */
+
+  function render() {
+    if (
+      state.finished
+    ) {
+      renderFinish();
+
+      return;
+    }
+
+    var page =
+      currentPage();
+
+    if (!page) {
+      app.innerHTML =
+        '<div class="loading">Không có nội dung bài giảng.</div>';
+
+      return;
+    }
+
+    var completed =
+      state.completedPageIds
+        .has(
+          page.id
+        );
+
+    var watch =
+      watchPercent(
+        page.id,
+        state.duration ||
+          page.duration
+      );
+
+    var videoHtml =
+      page.videoSrc
+        ? (
+            '<video id="course-video" preload="metadata" src="' +
+            escapeHtml(
+              page.videoSrc
+            ) +
+            '"></video>'
+          )
+        : (
+            '<div class="no-video">Trang này chưa có video</div>'
+          );
+
+    var notice =
+      state.completionNotice
+        ? (
+            '<div class="progress-notice">' +
+            escapeHtml(
+              state.completionNotice
+            ) +
+            "</div>"
+          )
+        : completed
+          ? (
+              '<div class="completed">✓ Trang đã hoàn thành</div>'
+            )
+          : (
+              '<div class="progress-notice">' +
+              "Yêu cầu: xem ≥ " +
+              course.completion
+                .minWatchPercent +
+              "%" +
+              (
+                course.completion
+                  .requireAllQuizzes
+                  ? " và hoàn thành tất cả câu hỏi"
+                  : ""
+              ) +
+              "</div>"
+            );
+
+    app.innerHTML =
+      '<div class="player">' +
+
+      '<header class="topbar">' +
+
+      "<div>" +
+      '<div class="project-title">' +
+      escapeHtml(
+        displayCourseTitle()
+      ) +
+      "</div>" +
+      '<div class="preview-label">SCORM 1.2 • Tự động lưu tiến độ</div>' +
+      "</div>" +
+
+      '<div class="top-stats">' +
+      '<div class="badge">Điểm <strong>' +
+      state.score +
+      " / " +
+      totalPossibleScore() +
+      "</strong></div>" +
+      '<div class="badge">Trang <strong>' +
+      (
+        state.pageIndex +
+        1
+      ) +
+      " / " +
+      course.pages.length +
+      "</strong></div>" +
+      "</div>" +
+
+      "</header>" +
+
+      '<main class="main">' +
+      '<div class="content">' +
+
+      '<div class="page-info">' +
+      '<div class="page-label">TRANG ' +
+      (
+        state.pageIndex +
+        1
+      ) +
+      "</div>" +
+
+      '<div class="page-heading">' +
+      "<div>" +
+      "<h1>" +
+      escapeHtml(
+        page.title
+      ) +
+      "</h1>" +
+      '<div class="page-meta">' +
+      page.quizzes.length +
+      " câu hỏi tương tác</div>" +
+      "</div>" +
+
+      '<div class="video-name">' +
+      escapeHtml(
+        page.videoName ||
+        ""
+      ) +
+      "</div>" +
+      "</div>" +
+
+      "</div>" +
+
+      '<section class="video-shell">' +
+      videoHtml +
+      renderQuiz() +
+      "</section>" +
+
+      renderCourseProgress(
+        completed
+      ) +
+
+      '<section class="controls">' +
+      '<div class="controls-row">' +
+
+      '<button id="play-button" class="play-button"' +
+      (
+        !page.videoSrc ||
+        state.activeQuiz
+          ? " disabled"
+          : ""
+      ) +
+      ">" +
+      (
+        state.playing
+          ? "❚❚"
+          : "▶"
+      ) +
+      "</button>" +
+
+      '<div class="time" id="time-display">' +
+      formatTime(
+        state.currentTime
+      ) +
+      " / " +
+      formatTime(
+        state.duration ||
+        page.duration
+      ) +
+      "</div>" +
+
+      '<input id="seek" class="seek" type="range" min="0" step="0.01" max="' +
+      (
+        state.duration > 0
+          ? state.duration
+          : page.duration ||
+            1
+      ) +
+      '" value="' +
+      state.currentTime +
+      '"' +
+      (
+        !page.videoSrc ||
+        state.activeQuiz
+          ? " disabled"
+          : ""
+      ) +
+      " />" +
+
+      "</div>" +
+      "</section>" +
+
+      '<section class="navigation' +
+      (
+        theme.showPageNavigation ===
+        false
+          ? " is-hidden"
+          : ""
+      ) +
+      '">' +
+
+      '<button id="previous" class="nav-button"' +
+      (
+        state.pageIndex ===
+          0 ||
+        state.activeQuiz
+          ? " disabled"
+          : ""
+      ) +
+      ">‹ Trang trước</button>" +
+
+      '<div class="progress-info">' +
+      "Câu hỏi <strong>" +
+      completedQuizCount(
+        page
+      ) +
+      " / " +
+      page.quizzes.length +
+      "</strong> • Đã xem <strong id=\"watch-percent\">" +
+      watch +
+      "%</strong>" +
+      notice +
+      "</div>" +
+
+      '<button id="next" class="nav-button next"' +
+      (
+        !completed ||
+        state.activeQuiz
+          ? " disabled"
+          : ""
+      ) +
+      ">" +
+      (
+        state.pageIndex ===
+        course.pages.length -
+          1
+          ? "Hoàn thành ›"
+          : "Trang tiếp theo ›"
+      ) +
+      "</button>" +
+
+      "</section>" +
+
+      "</div>" +
+      "</main>" +
+
+      "</div>";
+
+    var play =
+      document.getElementById(
+        "play-button"
+      );
+
+    if (play) {
+      play.addEventListener(
+        "click",
+        togglePlay
+      );
+    }
+
+    var seek =
+      document.getElementById(
+        "seek"
+      );
+
+    if (seek) {
+      seek.addEventListener(
+        "input",
+        function (
+          event
+        ) {
+          seekVideo(
+            event.target.value
+          );
+        }
+      );
+    }
+
+    var previous =
+      document.getElementById(
+        "previous"
+      );
+
+    if (previous) {
+      previous.addEventListener(
+        "click",
+        previousPage
+      );
+    }
+
+    var next =
+      document.getElementById(
+        "next"
+      );
+
+    if (next) {
+      next.addEventListener(
+        "click",
+        nextPage
+      );
+    }
+
+    document
+      .querySelectorAll(
+        "[data-answer]"
+      )
+      .forEach(
+        function (
+          element
+        ) {
+          element.addEventListener(
+            "click",
+            function () {
+              answerQuiz(
+                Number(
+                  element.getAttribute(
+                    "data-answer"
+                  )
+                )
+              );
+            }
+          );
+        }
+      );
+
+    var submitMultipleButton =
+      document.getElementById(
+        "submit-multiple"
+      );
+
+    if (
+      submitMultipleButton
+    ) {
+      submitMultipleButton.addEventListener(
+        "click",
+        submitMultipleAnswer
+      );
+    }
+
+    document
+      .querySelectorAll(
+        "[data-order-position]"
+      )
+      .forEach(
+        function (element) {
+          element.addEventListener(
+            "click",
+            function () {
+              moveOrderingItem(
+                Number(
+                  element.getAttribute(
+                    "data-order-position"
+                  )
+                ),
+                Number(
+                  element.getAttribute(
+                    "data-order-direction"
+                  )
+                )
+              );
+            }
+          );
+        }
+      );
+
+    var submitOrderingButton =
+      document.getElementById(
+        "submit-ordering"
+      );
+
+    if (
+      submitOrderingButton
+    ) {
+      submitOrderingButton.addEventListener(
+        "click",
+        submitOrderingAnswer
+      );
+    }
+
+    document
+      .querySelectorAll(
+        "[data-classify-item]"
+      )
+      .forEach(
+        function (element) {
+          element.addEventListener(
+            "click",
+            function () {
+              changeClassificationSelection(
+                Number(
+                  element.getAttribute(
+                    "data-classify-item"
+                  )
+                ),
+                Number(
+                  element.getAttribute(
+                    "data-classify-category"
+                  )
+                )
+              );
+            }
+          );
+        }
+      );
+
+    document
+      .querySelectorAll(
+        "[data-classify-drag-item]"
+      )
+      .forEach(
+        function (element) {
+          element.addEventListener(
+            "dragstart",
+            function (event) {
+              if (
+                state.quizResult ||
+                !event.dataTransfer
+              ) {
+                return;
+              }
+
+              event.dataTransfer.setData(
+                "text/plain",
+                String(
+                  element.getAttribute(
+                    "data-classify-drag-item"
+                  )
+                )
+              );
+            }
+          );
+        }
+      );
+
+    document
+      .querySelectorAll(
+        "[data-classify-drop-category]"
+      )
+      .forEach(
+        function (element) {
+          element.addEventListener(
+            "dragover",
+            function (event) {
+              if (
+                !state.quizResult
+              ) {
+                event.preventDefault();
+              }
+            }
+          );
+
+          element.addEventListener(
+            "drop",
+            function (event) {
+              if (
+                state.quizResult ||
+                !event.dataTransfer
+              ) {
+                return;
+              }
+
+              event.preventDefault();
+
+              changeClassificationSelection(
+                Number(
+                  event.dataTransfer.getData(
+                    "text/plain"
+                  )
+                ),
+                Number(
+                  element.getAttribute(
+                    "data-classify-drop-category"
+                  )
+                )
+              );
+            }
+          );
+        }
+      );
+
+    var submitClassificationButton =
+      document.getElementById(
+        "submit-classification"
+      );
+
+    if (
+      submitClassificationButton
+    ) {
+      submitClassificationButton.addEventListener(
+        "click",
+        submitClassificationAnswer
+      );
+    }
+
+    document
+      .querySelectorAll(
+        "[data-match-left]"
+      )
+      .forEach(
+        function (element) {
+          element.addEventListener(
+            "change",
+            function () {
+              changeMatchingSelection(
+                Number(
+                  element.getAttribute(
+                    "data-match-left"
+                  )
+                ),
+                Number(
+                  element.value
+                )
+              );
+            }
+          );
+        }
+      );
+
+    var submitMatchingButton =
+      document.getElementById(
+        "submit-matching"
+      );
+
+    if (
+      submitMatchingButton
+    ) {
+      submitMatchingButton.addEventListener(
+        "click",
+        submitMatchingAnswer
+      );
+    }
+
+    var shortAnswerInput =
+      document.getElementById(
+        "short-answer-input"
+      );
+
+    if (
+      shortAnswerInput
+    ) {
+      shortAnswerInput.addEventListener(
+        "input",
+        function (
+          event
+        ) {
+          state.shortAnswer =
+            event.target.value;
+
+          var submitShortButton =
+            document.getElementById(
+              "submit-short-answer"
+            );
+
+          if (
+            submitShortButton
+          ) {
+            submitShortButton.disabled =
+              !String(
+                state.shortAnswer ||
+                ""
+              ).trim();
+          }
+        }
+      );
+
+      shortAnswerInput.addEventListener(
+        "keydown",
+        function (
+          event
+        ) {
+          if (
+            event.key ===
+              "Enter" &&
+            String(
+              state.shortAnswer ||
+              ""
+            ).trim()
+          ) {
+            submitShortAnswer();
+          }
+        }
+      );
+    }
+
+    var submitShortButton =
+      document.getElementById(
+        "submit-short-answer"
+      );
+
+    if (
+      submitShortButton
+    ) {
+      submitShortButton.addEventListener(
+        "click",
+        submitShortAnswer
+      );
+    }
+
+    var continueButton =
+      document.getElementById(
+        "continue-quiz"
+      );
+
+    if (
+      continueButton
+    ) {
+      continueButton.addEventListener(
+        "click",
+        continueAfterQuiz
+      );
+    }
+
+    var skipButton =
+      document.getElementById(
+        "skip-quiz"
+      );
+
+    if (skipButton) {
+      skipButton.addEventListener(
+        "click",
+        skipQuiz
+      );
+    }
+
+    if (
+      page.videoSrc
+    ) {
+      bindVideoEvents();
+    } else {
+      window.setTimeout(
+        handleNoVideoPage,
+        0
+      );
+    }
+  }
+
+  restoreScormProgress();
+
+  render();
+})();
+`;
+}
+
+/* =========================================================
+   BUILD EXPORT COURSE
+========================================================= */
+
+async function buildExportCourse(
+  project: ProjectDocument,
+  zip: JSZip
+) {
+  const completion =
+    loadCompletionSettings();
+
+  const theme =
+    loadProjectThemeForProject(
+      project.id,
+      project.title
+    );
+
+  const pages:
+    ExportPage[] =
+      [];
+
+  const missingVideoPages:
+    string[] =
+      [];
+
+  const mediaFiles:
+    string[] =
+      [];
+
+  for (
+    let index = 0;
+    index <
+    project.pages.length;
+    index++
+  ) {
+    const page =
+      project.pages[
+        index
+      ];
+
+    const videoFile =
+      await getVideo(
+        page.id
+      );
+
+    let videoSrc:
+      string | null =
+      null;
+
+    if (videoFile) {
+      const extension =
+        getVideoExtension(
+          videoFile
+        );
+
+      const mediaPath =
+        `media/page-${
+          index + 1
+        }${extension}`;
+
+      /*
+       * Video không nén lại.
+       *
+       * Video vốn đã là dữ liệu nén;
+       * STORE giúp export nhanh hơn
+       * và đỡ tốn RAM/CPU.
+       */
+      zip.file(
+        mediaPath,
+        videoFile,
+        {
+          binary: true,
+          compression:
+            "STORE",
+        }
+      );
+
+      videoSrc =
+        mediaPath;
+
+      mediaFiles.push(
+        mediaPath
+      );
+    } else if (
+      page.videoName
+    ) {
+      /*
+       * Metadata nói rằng trang từng
+       * có video nhưng IndexedDB hiện
+       * không còn file.
+       */
+      missingVideoPages.push(
+        page.title
+      );
+    }
+
+    pages.push({
+      id:
+        page.id,
+
+      title:
+        page.title,
+
+      videoName:
+        page.videoName,
+
+      duration:
+        page.duration,
+
+      quizzes:
+        page.quizzes.map(
+          (quiz) => ({
+            ...quiz,
+
+            options:
+              [...quiz.options],
+          })
+        ),
+
+      videoSrc,
+    });
+  }
+
+  const course:
+    ExportCourse = {
+      id:
+        project.id,
+
+      title:
+        project.title,
+
+      theme,
+
+      completion: {
+        passScorePercent:
+          completion.passScorePercent,
+
+        minWatchPercent:
+          completion.minWatchPercent,
+
+        requireAllQuizzes:
+          completion.requireAllQuizzes,
+      },
+
+      pages,
+    };
+
+  return {
+    course,
+    missingVideoPages,
+    mediaFiles,
+  };
+}
+
+/* =========================================================
+   PUBLIC EXPORT FUNCTION
+========================================================= */
+
+export async function exportCurrentProjectAsScorm(): Promise<ScormExportResult> {
+  const project =
+    useEditorStore.getState()
+      .project;
+
+  if (
+    !project ||
+    project.pages.length ===
+      0
+  ) {
+    throw new Error(
+      "Dự án chưa có nội dung để xuất."
+    );
+  }
+
+  const zip =
+    new JSZip();
+
+  const {
+    course,
+    missingVideoPages,
+    mediaFiles,
+  } =
+    await buildExportCourse(
+      project,
+      zip
+    );
+
+  const indexHtml =
+    makeIndexHtml();
+
+  const stylesCss =
+    makeStylesCss();
+
+  const playerJs =
+    makePlayerJs();
+
+  const courseDataJs =
+    makeCourseDataScript(
+      course
+    );
+
+  zip.file(
+    "index.html",
+    indexHtml
+  );
+
+  zip.file(
+    "styles.css",
+    stylesCss
+  );
+
+  zip.file(
+    "player.js",
+    playerJs
+  );
+
+  zip.file(
+    "course-data.js",
+    courseDataJs
+  );
+
+  const resourceFiles = [
+    "index.html",
+    "styles.css",
+    "player.js",
+    "course-data.js",
+    ...mediaFiles,
+  ];
+
+  zip.file(
+    "imsmanifest.xml",
+    makeManifest(
+      course,
+      resourceFiles
+    )
+  );
+
+  const blob =
+    await zip.generateAsync({
+      type:
+        "blob",
+
+      compression:
+        "DEFLATE",
+
+      compressionOptions: {
+        level:
+          6,
+      },
+    });
+
+  const fileName =
+    `${safeFileName(
+      project.title
+    )}-SCORM12.zip`;
+
+  const url =
+    URL.createObjectURL(
+      blob
+    );
+
+  const anchor =
+    document.createElement(
+      "a"
+    );
+
+  anchor.href =
+    url;
+
+  anchor.download =
+    fileName;
+
+  document.body.appendChild(
+    anchor
+  );
+
+  anchor.click();
+
+  anchor.remove();
+
+  window.setTimeout(
+    () => {
+      URL.revokeObjectURL(
+        url
+      );
+    },
+    1000
+  );
+
+  return {
+    fileName,
+    missingVideoPages,
+  };
+}

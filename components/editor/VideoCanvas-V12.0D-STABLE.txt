@@ -1,0 +1,683 @@
+"use client";
+
+import {
+  Upload,
+} from "lucide-react";
+
+import type {
+  ChangeEvent,
+  RefObject,
+} from "react";
+
+import {
+  getQuizCorrectIndexes,
+  getQuizType,
+} from "@/types/lesson";
+
+import type {
+  LessonPage,
+  Quiz,
+} from "@/types/lesson";
+
+type Props = {
+  page: LessonPage;
+
+  videoRef:
+    RefObject<HTMLVideoElement | null>;
+
+  activeQuiz:
+    Quiz | null;
+
+  selectedAnswer:
+    number | null;
+
+  selectedAnswers:
+    number[];
+
+  shortAnswer:
+    string;
+
+  matchingSelections:
+    number[];
+
+  quizResult:
+    "correct" |
+    "wrong" |
+    null;
+
+  onVideoUpload: (
+    file: File
+  ) => void;
+
+  onLoadedMetadata:
+    () => void;
+
+  onTimeUpdate:
+    () => void;
+
+  onPlay:
+    () => void;
+
+  onPause:
+    () => void;
+
+  onAnswer: (
+    index: number
+  ) => void;
+
+  onToggleMultipleAnswer: (
+    index: number
+  ) => void;
+
+  onSubmitMultipleAnswer:
+    () => void;
+
+  onShortAnswerChange: (
+    value: string
+  ) => void;
+
+  onSubmitShortAnswer:
+    () => void;
+
+  onMatchingSelectionChange: (
+    leftIndex: number,
+    rightIndex: number
+  ) => void;
+
+  onSubmitMatchingAnswer:
+    () => void;
+
+  onContinue:
+    () => void;
+};
+
+export function VideoCanvas({
+  page,
+  videoRef,
+  activeQuiz,
+  selectedAnswer,
+  selectedAnswers,
+  shortAnswer,
+  matchingSelections,
+  quizResult,
+  onVideoUpload,
+  onLoadedMetadata,
+  onTimeUpdate,
+  onPlay,
+  onPause,
+  onAnswer,
+  onToggleMultipleAnswer,
+  onSubmitMultipleAnswer,
+  onShortAnswerChange,
+  onSubmitShortAnswer,
+  onMatchingSelectionChange,
+  onSubmitMatchingAnswer,
+  onContinue,
+}: Props) {
+  const activeQuizType =
+    activeQuiz
+      ? getQuizType(
+          activeQuiz
+        )
+      : null;
+
+  const activeCorrectIndexes =
+    activeQuiz
+      ? getQuizCorrectIndexes(
+          activeQuiz
+        )
+      : [];
+
+  function handleUpload(
+    event:
+      ChangeEvent<HTMLInputElement>
+  ) {
+    const file =
+      event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    onVideoUpload(file);
+  }
+
+  return (
+    <section className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-5">
+
+      <div className="w-full max-w-5xl">
+
+        {/* TÊN TRANG */}
+
+        <div className="mb-4 text-center">
+
+          <div className="inline-flex rounded-full border border-cyan-700 bg-cyan-950/30 px-4 py-1 text-sm font-semibold text-cyan-300">
+            {page.title}
+          </div>
+
+        </div>
+
+        {/* VIDEO CANVAS */}
+
+        <div className="relative aspect-video w-full overflow-hidden rounded-2xl border border-blue-500 bg-[#17396e] shadow-2xl">
+
+          {!page.videoUrl ? (
+
+            /* =============================================
+               CHƯA CÓ VIDEO
+            ============================================= */
+
+            <label className="flex h-full cursor-pointer flex-col items-center justify-center transition hover:bg-[#1b447f]">
+
+              <div className="mb-5 rounded-2xl bg-gradient-to-br from-blue-400 to-purple-600 p-5">
+
+                <Upload
+                  size={40}
+                />
+
+              </div>
+
+              <div className="text-xl font-bold">
+                Tải video cho {page.title}
+              </div>
+
+              <div className="mt-2 text-sm text-slate-400">
+                MP4 / WEBM / MOV
+              </div>
+
+              <input
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={
+                  handleUpload
+                }
+              />
+
+            </label>
+
+          ) : (
+
+            /* =============================================
+               ĐÃ CÓ VIDEO
+            ============================================= */
+
+            <>
+
+              <video
+                ref={
+                  videoRef
+                }
+                src={
+                  page.videoUrl
+                }
+                className="h-full w-full bg-black object-contain"
+                onLoadedMetadata={
+                  onLoadedMetadata
+                }
+                onTimeUpdate={
+                  onTimeUpdate
+                }
+                onPlay={
+                  onPlay
+                }
+                onPause={
+                  onPause
+                }
+                onEnded={
+                  onPause
+                }
+              />
+
+              {/* ===========================================
+                  CÂU HỎI XUẤT HIỆN TRÊN VIDEO
+              =========================================== */}
+
+              {activeQuiz && (
+
+                <div className="absolute inset-0 z-30 flex items-start justify-center overflow-y-auto bg-black/80 p-3 sm:p-4">
+
+                  <div className="w-full max-w-3xl max-h-full overflow-y-auto rounded-2xl border border-cyan-500 bg-[#123565] shadow-2xl">
+
+                    {/*
+                     * Header sticky để nội dung câu hỏi không bị che khi
+                     * câu ghép đôi có nhiều dòng và cần cuộn bên trong video.
+                     */}
+                    <div className="sticky top-0 z-20 border-b border-blue-800/80 bg-[#123565] px-4 py-4 sm:px-6">
+
+                      <div className="text-sm font-bold uppercase tracking-wider text-cyan-300">
+                        {activeQuizType ===
+                        "true-false"
+                          ? "Câu hỏi Đúng / Sai"
+                          : activeQuizType ===
+                            "multiple"
+                            ? "Câu hỏi nhiều đáp án"
+                            : activeQuizType ===
+                              "short-answer"
+                              ? "Câu hỏi trả lời ngắn"
+                              : activeQuizType ===
+                                "matching"
+                                ? "Câu hỏi ghép đôi"
+                                : "Câu hỏi tương tác"}
+                      </div>
+
+                      <h2 className="mt-2 break-words text-xl font-bold sm:text-2xl">
+                        {
+                          activeQuiz.question
+                        }
+                      </h2>
+
+                    </div>
+
+                    <div className="px-4 pb-5 pt-1 sm:px-6 sm:pb-6">
+
+                    {/* ĐÁP ÁN */}
+
+                    {activeQuizType ===
+                    "matching" ? (
+
+                      <div className="mt-4 space-y-3">
+
+                        {(activeQuiz.matchingPairs ?? [])
+                          .filter(
+                            (pair) =>
+                              pair.left?.trim() &&
+                              pair.right?.trim()
+                          )
+                          .map(
+                            (pair, leftIndex, pairs) => {
+                              const optionOrder =
+                                pairs.map(
+                                  (_, index) =>
+                                    pairs.length -
+                                    1 -
+                                    index
+                                );
+
+                              const selected =
+                                matchingSelections[
+                                  leftIndex
+                                ] ?? -1;
+
+                              const isCorrect =
+                                selected ===
+                                leftIndex;
+
+                              return (
+                                <div
+                                  key={leftIndex}
+                                  className={`grid gap-2 rounded-xl border p-3 md:grid-cols-[minmax(0,1fr)_36px_minmax(0,1fr)] md:items-center ${
+                                    quizResult
+                                      ? isCorrect
+                                        ? "border-green-500 bg-green-950/30"
+                                        : "border-red-500 bg-red-950/30"
+                                      : "border-blue-700 bg-blue-950/50"
+                                  }`}
+                                >
+                                  <div className="font-semibold">
+                                    {pair.left}
+                                  </div>
+
+                                  <div className="text-center font-black text-cyan-300">
+                                    ↔
+                                  </div>
+
+                                  <select
+                                    value={selected}
+                                    disabled={
+                                      quizResult !==
+                                      null
+                                    }
+                                    onChange={(e) =>
+                                      onMatchingSelectionChange(
+                                        leftIndex,
+                                        Number(
+                                          e.target.value
+                                        )
+                                      )
+                                    }
+                                    className="min-w-0 rounded-lg border border-blue-600 bg-blue-950 px-3 py-3 text-white outline-none focus:border-cyan-400 disabled:opacity-80"
+                                  >
+                                    <option value={-1}>
+                                      -- Chọn nội dung phù hợp --
+                                    </option>
+
+                                    {optionOrder.map(
+                                      (rightIndex) => (
+                                        <option
+                                          key={rightIndex}
+                                          value={rightIndex}
+                                        >
+                                          {pairs[rightIndex].right}
+                                        </option>
+                                      )
+                                    )}
+                                  </select>
+                                </div>
+                              );
+                            }
+                          )}
+
+                        {!quizResult && (
+                          <button
+                            type="button"
+                            disabled={
+                              !(activeQuiz.matchingPairs ?? [])
+                                .filter(
+                                  (pair) =>
+                                    pair.left?.trim() &&
+                                    pair.right?.trim()
+                                )
+                                .every(
+                                  (_, index) =>
+                                    (matchingSelections[index] ?? -1) >=
+                                    0
+                                )
+                            }
+                            onClick={
+                              onSubmitMatchingAnswer
+                            }
+                            className="w-full rounded-lg bg-cyan-600 px-5 py-3 font-bold text-white transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            Xác nhận ghép đôi
+                          </button>
+                        )}
+
+                      </div>
+
+                    ) : activeQuizType ===
+                    "short-answer" ? (
+
+                      <div className="mt-6 space-y-4">
+
+                        <input
+                          type="text"
+                          value={
+                            shortAnswer
+                          }
+                          disabled={
+                            quizResult !==
+                            null
+                          }
+                          onChange={(e) =>
+                            onShortAnswerChange(
+                              e.target.value
+                            )
+                          }
+                          onKeyDown={(e) => {
+                            if (
+                              e.key ===
+                              "Enter" &&
+                              shortAnswer.trim() &&
+                              !quizResult
+                            ) {
+                              onSubmitShortAnswer();
+                            }
+                          }}
+                          className="w-full rounded-xl border border-blue-600 bg-blue-950 px-4 py-4 text-lg text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 disabled:opacity-70"
+                          placeholder="Nhập câu trả lời của bạn..."
+                        />
+
+                        {!quizResult && (
+                          <button
+                            type="button"
+                            disabled={
+                              !shortAnswer.trim()
+                            }
+                            onClick={
+                              onSubmitShortAnswer
+                            }
+                            className="w-full rounded-lg bg-cyan-600 px-5 py-3 font-bold text-white transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            Xác nhận câu trả lời
+                          </button>
+                        )}
+
+                      </div>
+
+                    ) : (
+
+                      <>
+
+                        <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-2">
+
+                          {activeQuiz.options.map(
+                            (
+                              option,
+                              index
+                            ) => {
+                              let buttonStyle =
+                                "border-blue-700 bg-blue-950 hover:bg-blue-900";
+
+                              const isCorrect =
+                                activeCorrectIndexes.includes(
+                                  index
+                                );
+
+                              const isSelected =
+                                activeQuizType ===
+                                "multiple"
+                                  ? selectedAnswers.includes(
+                                      index
+                                    )
+                                  : selectedAnswer ===
+                                    index;
+
+                              if (quizResult) {
+                                if (isCorrect) {
+                                  buttonStyle =
+                                    "border-green-400 bg-green-700";
+                                } else if (isSelected) {
+                                  buttonStyle =
+                                    "border-red-400 bg-red-700";
+                                } else {
+                                  buttonStyle =
+                                    "border-blue-900 bg-blue-950 opacity-60";
+                                }
+                              } else if (
+                                activeQuizType ===
+                                  "multiple" &&
+                                isSelected
+                              ) {
+                                buttonStyle =
+                                  "border-cyan-400 bg-cyan-950 ring-1 ring-cyan-400";
+                              }
+
+                              return (
+
+                                <button
+                                  key={
+                                    index
+                                  }
+                                  type="button"
+                                  disabled={
+                                    quizResult !==
+                                    null
+                                  }
+                                  onClick={() => {
+                                    if (
+                                      activeQuizType ===
+                                      "multiple"
+                                    ) {
+                                      onToggleMultipleAnswer(
+                                        index
+                                      );
+
+                                      return;
+                                    }
+
+                                    onAnswer(
+                                      index
+                                    );
+                                  }}
+                                  className={`rounded-xl border p-4 text-left text-base font-semibold transition ${buttonStyle}`}
+                                >
+
+                                  <span className="mr-2 font-bold text-cyan-300">
+
+                                    {activeQuizType ===
+                                    "true-false"
+                                      ? (
+                                          index ===
+                                          0
+                                            ? "✓"
+                                            : "✕"
+                                        )
+                                      : String.fromCharCode(
+                                          65 +
+                                            index
+                                        )}
+                                    {activeQuizType ===
+                                    "multiple"
+                                      ? "."
+                                      : activeQuizType ===
+                                        "true-false"
+                                        ? ""
+                                        : "."}
+
+                                  </span>
+
+                                  {
+                                    option
+                                  }
+
+                                  {activeQuizType ===
+                                    "multiple" &&
+                                  selectedAnswers.includes(
+                                    index
+                                  ) &&
+                                  !quizResult && (
+                                    <span className="ml-auto text-cyan-300">
+                                      ✓
+                                    </span>
+                                  )}
+
+                                </button>
+
+                              );
+                            }
+                          )}
+
+                        </div>
+
+                        {activeQuizType ===
+                          "multiple" &&
+                        !quizResult && (
+
+                          <button
+                            type="button"
+                            disabled={
+                              selectedAnswers.length ===
+                              0
+                            }
+                            onClick={
+                              onSubmitMultipleAnswer
+                            }
+                            className="mt-5 w-full rounded-lg bg-cyan-600 px-5 py-3 font-bold text-white transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            Xác nhận đáp án
+                          </button>
+
+                        )}
+
+                      </>
+
+                    )}
+
+                    {/* =====================================
+                        FEEDBACK
+                    ===================================== */}
+
+                    {quizResult && (
+
+                      <div
+                        className={`mt-6 rounded-xl p-4 ${
+                          quizResult ===
+                          "correct"
+                            ? "bg-green-950 text-green-300"
+                            : "bg-red-950 text-red-300"
+                        }`}
+                      >
+
+                        <strong className="text-lg">
+
+                          {quizResult ===
+                          "correct"
+                            ? "✓ Chính xác"
+                            : "✕ Chưa chính xác"}
+
+                        </strong>
+
+                        <p className="mt-2 text-sm">
+
+                          {quizResult ===
+                          "correct"
+                            ? activeQuiz.feedbackCorrect
+                            : activeQuiz.feedbackWrong}
+
+                        </p>
+
+                        <button
+                          type="button"
+                          onClick={
+                            onContinue
+                          }
+                          className="mt-4 rounded-lg bg-cyan-600 px-5 py-2 font-bold text-white transition hover:bg-cyan-500"
+                        >
+                          Tiếp tục video
+                        </button>
+
+                      </div>
+
+                    )}
+
+                    </div>
+
+                  </div>
+
+                </div>
+
+              )}
+
+            </>
+
+          )}
+
+        </div>
+
+        {/* ===============================================
+            THÔNG TIN FILE VIDEO
+        =============================================== */}
+
+        {page.videoUrl && (
+
+          <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
+
+            <span className="max-w-[70%] truncate">
+              {page.videoName}
+            </span>
+
+            <label className="cursor-pointer font-semibold text-cyan-300 hover:text-cyan-200">
+
+              Đổi video
+
+              <input
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={
+                  handleUpload
+                }
+              />
+
+            </label>
+
+          </div>
+
+        )}
+
+      </div>
+
+    </section>
+  );
+}

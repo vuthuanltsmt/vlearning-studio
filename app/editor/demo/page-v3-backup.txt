@@ -1,0 +1,1205 @@
+"use client";
+
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+import {
+  EditorTopbar,
+} from "@/components/editor/EditorTopbar";
+
+import {
+  PageNavigator,
+} from "@/components/editor/PageNavigator";
+
+import {
+  VideoCanvas,
+} from "@/components/editor/VideoCanvas";
+
+import {
+  PlayerControls,
+} from "@/components/editor/PlayerControls";
+
+import {
+  Timeline,
+} from "@/components/editor/Timeline";
+
+import {
+  QuestionPanel,
+} from "@/components/editor/QuestionPanel";
+
+import {
+  QuestionEditor,
+} from "@/components/editor/QuestionEditor";
+
+import {
+  useEditorStore,
+} from "@/stores/editorStore";
+
+import {
+  createEmptyDraft,
+} from "@/types/lesson";
+
+import type {
+  Quiz,
+  QuizDraft,
+} from "@/types/lesson";
+
+/* =========================================================
+   MAIN EDITOR PAGE
+========================================================= */
+
+export default function EditorPage() {
+  /* =======================================================
+     VIDEO REF
+  ======================================================= */
+
+  const videoRef =
+    useRef<HTMLVideoElement>(
+      null
+    );
+
+  /*
+   * Lưu thời điểm video trước lần
+   * onTimeUpdate gần nhất.
+   *
+   * Ta dùng nó để phát hiện khi
+   * video "đi qua" một câu hỏi.
+   */
+  const previousTimeRef =
+    useRef(0);
+
+  /* =======================================================
+     ZUSTAND STORE
+  ======================================================= */
+
+  const project =
+    useEditorStore(
+      (state) =>
+        state.project
+    );
+
+  const saveStatus =
+    useEditorStore(
+      (state) =>
+        state.saveStatus
+    );
+
+  const hydrate =
+    useEditorStore(
+      (state) =>
+        state.hydrate
+    );
+
+  const saveProject =
+    useEditorStore(
+      (state) =>
+        state.saveProject
+    );
+
+  /* PAGE ACTIONS */
+
+  const selectPage =
+    useEditorStore(
+      (state) =>
+        state.selectPage
+    );
+
+  const addPage =
+    useEditorStore(
+      (state) =>
+        state.addPage
+    );
+
+  const renamePage =
+    useEditorStore(
+      (state) =>
+        state.renamePage
+    );
+
+  const duplicatePage =
+    useEditorStore(
+      (state) =>
+        state.duplicatePage
+    );
+
+  const deletePage =
+    useEditorStore(
+      (state) =>
+        state.deletePage
+    );
+
+  /* VIDEO ACTIONS */
+
+  const setPageVideo =
+    useEditorStore(
+      (state) =>
+        state.setPageVideo
+    );
+
+  const setPageDuration =
+    useEditorStore(
+      (state) =>
+        state.setPageDuration
+    );
+
+  /* QUIZ ACTIONS */
+
+  const addQuiz =
+    useEditorStore(
+      (state) =>
+        state.addQuiz
+    );
+
+  const updateQuiz =
+    useEditorStore(
+      (state) =>
+        state.updateQuiz
+    );
+
+  const duplicateQuiz =
+    useEditorStore(
+      (state) =>
+        state.duplicateQuiz
+    );
+
+  const deleteQuiz =
+    useEditorStore(
+      (state) =>
+        state.deleteQuiz
+    );
+
+  /* =======================================================
+     TRANG ĐANG ĐƯỢC CHỌN
+  ======================================================= */
+
+  const page =
+    project.pages.find(
+      (item) =>
+        item.id ===
+        project.selectedPageId
+    ) ??
+    project.pages[0];
+
+  /* =======================================================
+     PLAYER STATE
+  ======================================================= */
+
+  const [
+    currentTime,
+    setCurrentTime,
+  ] =
+    useState(0);
+
+  const [
+    isPlaying,
+    setIsPlaying,
+  ] =
+    useState(false);
+
+  /* =======================================================
+     QUIZ PLAYER STATE
+  ======================================================= */
+
+  const [
+    activeQuiz,
+    setActiveQuiz,
+  ] =
+    useState<Quiz | null>(
+      null
+    );
+
+  const [
+    answeredIds,
+    setAnsweredIds,
+  ] =
+    useState<string[]>([]);
+
+  const [
+    score,
+    setScore,
+  ] =
+    useState(0);
+
+  const [
+    selectedAnswer,
+    setSelectedAnswer,
+  ] =
+    useState<number | null>(
+      null
+    );
+
+  const [
+    quizResult,
+    setQuizResult,
+  ] =
+    useState<
+      "correct" |
+      "wrong" |
+      null
+    >(null);
+
+  /* =======================================================
+     QUESTION EDITOR STATE
+  ======================================================= */
+
+  const [
+    questionEditorOpen,
+    setQuestionEditorOpen,
+  ] =
+    useState(false);
+
+  /*
+   * null:
+   * đang tạo câu hỏi mới
+   *
+   * string:
+   * đang sửa câu hỏi có id tương ứng
+   */
+  const [
+    editingQuizId,
+    setEditingQuizId,
+  ] =
+    useState<string | null>(
+      null
+    );
+
+  const [
+    questionTime,
+    setQuestionTime,
+  ] =
+    useState(0);
+
+  const [
+    draft,
+    setDraft,
+  ] =
+    useState<QuizDraft>(
+      createEmptyDraft()
+    );
+
+  /* =======================================================
+     LOAD DỰ ÁN TỪ LOCAL STORAGE
+  ======================================================= */
+
+  useEffect(() => {
+    hydrate();
+  }, [hydrate]);
+
+  /* =======================================================
+     KHI CHUYỂN TRANG
+  ======================================================= */
+
+  useEffect(() => {
+    /*
+     * Dừng video của trang cũ.
+     */
+
+    videoRef.current?.pause();
+
+    /*
+     * Reset player.
+     */
+
+    setCurrentTime(0);
+
+    setIsPlaying(false);
+
+    setActiveQuiz(null);
+
+    setAnsweredIds([]);
+
+    setSelectedAnswer(
+      null
+    );
+
+    setQuizResult(null);
+
+    /*
+     * Đóng editor nếu đang mở.
+     */
+
+    setQuestionEditorOpen(
+      false
+    );
+
+    setEditingQuizId(
+      null
+    );
+
+    previousTimeRef.current =
+      0;
+  }, [
+    project.selectedPageId,
+  ]);
+
+  /* =======================================================
+     VIDEO UPLOAD
+  ======================================================= */
+
+  function handleVideoUpload(
+    file: File
+  ) {
+    /*
+     * Tạo URL tạm để video chạy ngay
+     * trên trình duyệt.
+     */
+
+    const url =
+      URL.createObjectURL(
+        file
+      );
+
+    setPageVideo(
+      page.id,
+      url,
+      file.name
+    );
+
+    /*
+     * Reset player khi thay video.
+     */
+
+    setCurrentTime(0);
+
+    setAnsweredIds([]);
+
+    setActiveQuiz(null);
+
+    setSelectedAnswer(
+      null
+    );
+
+    setQuizResult(null);
+
+    previousTimeRef.current =
+      0;
+  }
+
+  /* =======================================================
+     VIDEO METADATA
+  ======================================================= */
+
+  function handleLoadedMetadata() {
+    const video =
+      videoRef.current;
+
+    if (!video) {
+      return;
+    }
+
+    /*
+     * Lưu duration thật của video
+     * vào trang hiện tại.
+     */
+
+    setPageDuration(
+      page.id,
+      video.duration
+    );
+  }
+
+  /* =======================================================
+     PLAY / PAUSE
+  ======================================================= */
+
+  function togglePlay() {
+    const video =
+      videoRef.current;
+
+    if (!video) {
+      alert(
+        "Trang này chưa có video. Hãy tải video trước."
+      );
+
+      return;
+    }
+
+    /*
+     * Nếu đang hiện câu hỏi
+     * thì không cho phát video.
+     */
+
+    if (activeQuiz) {
+      return;
+    }
+
+    if (video.paused) {
+      video.play();
+    } else {
+      video.pause();
+    }
+  }
+
+  /* =======================================================
+     VIDEO TIME UPDATE
+  ======================================================= */
+
+  function handleTimeUpdate() {
+    const video =
+      videoRef.current;
+
+    if (!video) {
+      return;
+    }
+
+    const time =
+      video.currentTime;
+
+    setCurrentTime(time);
+
+    /*
+     * Nếu đang có câu hỏi trên màn hình
+     * thì không tìm câu hỏi khác.
+     */
+
+    if (!activeQuiz) {
+      const previous =
+        previousTimeRef.current;
+
+      /*
+       * Tìm câu hỏi mà video vừa đi qua.
+       */
+
+      const quiz =
+        page.quizzes.find(
+          (item) =>
+            !answeredIds.includes(
+              item.id
+            ) &&
+            item.time >=
+              previous &&
+            item.time <=
+              time
+        );
+
+      /*
+       * Nếu gặp câu hỏi:
+       *
+       * - dừng video
+       * - mở quiz
+       */
+
+      if (quiz) {
+        video.pause();
+
+        setIsPlaying(
+          false
+        );
+
+        setActiveQuiz(
+          quiz
+        );
+
+        setSelectedAnswer(
+          null
+        );
+
+        setQuizResult(
+          null
+        );
+      }
+    }
+
+    previousTimeRef.current =
+      time;
+  }
+
+  /* =======================================================
+     SEEK VIDEO
+  ======================================================= */
+
+  function handleSeek(
+    time: number
+  ) {
+    const video =
+      videoRef.current;
+
+    /*
+     * Nếu người dùng tua về phía trước
+     * không cần reset.
+     *
+     * Nếu tua ngược lại, cho phép
+     * các câu hỏi xuất hiện lại.
+     */
+
+    if (
+      time <
+      currentTime
+    ) {
+      setAnsweredIds(
+        []
+      );
+
+      setActiveQuiz(
+        null
+      );
+
+      setQuizResult(
+        null
+      );
+
+      setSelectedAnswer(
+        null
+      );
+    }
+
+    setCurrentTime(time);
+
+    previousTimeRef.current =
+      time;
+
+    if (video) {
+      video.currentTime =
+        time;
+    }
+  }
+
+  /* =======================================================
+     MỞ CỬA SỔ THÊM CÂU HỎI
+  ======================================================= */
+
+  function openAddQuestion() {
+    if (
+      !page.videoUrl
+    ) {
+      alert(
+        "Hãy tải video cho trang này trước khi thêm câu hỏi."
+      );
+
+      return;
+    }
+
+    videoRef.current?.pause();
+
+    setEditingQuizId(
+      null
+    );
+
+    /*
+     * Câu hỏi mới sẽ xuất hiện
+     * tại vị trí video hiện tại.
+     */
+
+    setQuestionTime(
+      currentTime
+    );
+
+    setDraft(
+      createEmptyDraft()
+    );
+
+    setQuestionEditorOpen(
+      true
+    );
+  }
+
+  /* =======================================================
+     MỞ CỬA SỔ SỬA CÂU HỎI
+  ======================================================= */
+
+  function openEditQuestion(
+    quiz: Quiz
+  ) {
+    videoRef.current?.pause();
+
+    setEditingQuizId(
+      quiz.id
+    );
+
+    setQuestionTime(
+      quiz.time
+    );
+
+    /*
+     * Đổ toàn bộ dữ liệu cũ
+     * vào form.
+     */
+
+    setDraft({
+      question:
+        quiz.question,
+
+      options: [
+        quiz.options[0] ??
+          "",
+
+        quiz.options[1] ??
+          "",
+
+        quiz.options[2] ??
+          "",
+
+        quiz.options[3] ??
+          "",
+      ],
+
+      correctIndex:
+        quiz.correctIndex,
+
+      points:
+        quiz.points,
+
+      feedbackCorrect:
+        quiz.feedbackCorrect,
+
+      feedbackWrong:
+        quiz.feedbackWrong,
+    });
+
+    setQuestionEditorOpen(
+      true
+    );
+  }
+
+  /* =======================================================
+     LƯU / CẬP NHẬT CÂU HỎI
+  ======================================================= */
+
+  function saveQuestion() {
+    /* CHECK QUESTION */
+
+    if (
+      !draft.question.trim()
+    ) {
+      alert(
+        "Hãy nhập nội dung câu hỏi."
+      );
+
+      return;
+    }
+
+    /* CHECK ANSWERS */
+
+    const hasEmptyAnswer =
+      draft.options.some(
+        (item) =>
+          !item.trim()
+      );
+
+    if (hasEmptyAnswer) {
+      alert(
+        "Hãy nhập đầy đủ 4 đáp án A, B, C, D."
+      );
+
+      return;
+    }
+
+    /*
+     * Tạo dữ liệu quiz hoàn chỉnh.
+     */
+
+    const quiz: Quiz = {
+      id:
+        editingQuizId ??
+        crypto.randomUUID(),
+
+      time:
+        questionTime,
+
+      question:
+        draft.question.trim(),
+
+      options:
+        draft.options.map(
+          (item) =>
+            item.trim()
+        ),
+
+      correctIndex:
+        draft.correctIndex,
+
+      points:
+        draft.points,
+
+      feedbackCorrect:
+        draft.feedbackCorrect.trim(),
+
+      feedbackWrong:
+        draft.feedbackWrong.trim(),
+    };
+
+    /*
+     * Nếu có editingQuizId:
+     * cập nhật câu hỏi cũ.
+     *
+     * Nếu không:
+     * tạo câu hỏi mới.
+     */
+
+    if (
+      editingQuizId
+    ) {
+      updateQuiz(
+        page.id,
+        editingQuizId,
+        quiz
+      );
+    } else {
+      addQuiz(
+        page.id,
+        quiz
+      );
+    }
+
+    setQuestionEditorOpen(
+      false
+    );
+
+    setEditingQuizId(
+      null
+    );
+  }
+
+  /* =======================================================
+     NGƯỜI HỌC TRẢ LỜI
+  ======================================================= */
+
+  function answerQuestion(
+    index: number
+  ) {
+    if (
+      !activeQuiz
+    ) {
+      return;
+    }
+
+    /*
+     * Không cho click lần hai.
+     */
+
+    if (quizResult) {
+      return;
+    }
+
+    setSelectedAnswer(
+      index
+    );
+
+    const isCorrect =
+      index ===
+      activeQuiz.correctIndex;
+
+    if (isCorrect) {
+      setQuizResult(
+        "correct"
+      );
+
+      setScore(
+        (oldScore) =>
+          oldScore +
+          activeQuiz.points
+      );
+    } else {
+      setQuizResult(
+        "wrong"
+      );
+    }
+  }
+
+  /* =======================================================
+     TIẾP TỤC VIDEO SAU CÂU HỎI
+  ======================================================= */
+
+  function continueVideo() {
+    if (
+      !activeQuiz
+    ) {
+      return;
+    }
+
+    /*
+     * Đánh dấu câu hỏi đã làm.
+     */
+
+    setAnsweredIds(
+      (old) => [
+        ...old,
+        activeQuiz.id,
+      ]
+    );
+
+    setActiveQuiz(
+      null
+    );
+
+    setQuizResult(
+      null
+    );
+
+    setSelectedAnswer(
+      null
+    );
+
+    /*
+     * Dịch mốc kiểm tra một chút
+     * để tránh câu hỏi xuất hiện lại
+     * ngay tức thì.
+     */
+
+    previousTimeRef.current =
+      currentTime +
+      0.05;
+
+    /*
+     * Chờ overlay biến mất rồi
+     * phát video tiếp.
+     */
+
+    setTimeout(() => {
+      videoRef.current?.play();
+    }, 50);
+  }
+
+  /* =======================================================
+     NHẢY ĐẾN CÂU HỎI
+  ======================================================= */
+
+  function jumpToQuiz(
+    quiz: Quiz
+  ) {
+    const video =
+      videoRef.current;
+
+    if (!video) {
+      alert(
+        "Hãy tải lại video của trang này trước."
+      );
+
+      return;
+    }
+
+    video.pause();
+
+    /*
+     * Cho phép câu hỏi này
+     * xuất hiện lại khi Play.
+     */
+
+    setAnsweredIds(
+      (old) =>
+        old.filter(
+          (id) =>
+            id !==
+            quiz.id
+        )
+    );
+
+    setActiveQuiz(
+      null
+    );
+
+    setQuizResult(
+      null
+    );
+
+    setSelectedAnswer(
+      null
+    );
+
+    video.currentTime =
+      quiz.time;
+
+    setCurrentTime(
+      quiz.time
+    );
+
+    previousTimeRef.current =
+      quiz.time;
+  }
+
+  /* =======================================================
+     NHÂN BẢN CÂU HỎI
+  ======================================================= */
+
+  function handleDuplicateQuiz(
+    quiz: Quiz
+  ) {
+    duplicateQuiz(
+      page.id,
+      quiz.id
+    );
+  }
+
+  /* =======================================================
+     XÓA CÂU HỎI
+  ======================================================= */
+
+  function handleDeleteQuiz(
+    quiz: Quiz
+  ) {
+    const confirmed =
+      window.confirm(
+        `Bạn có chắc muốn xóa câu hỏi:\n\n"${quiz.question}"?`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    deleteQuiz(
+      page.id,
+      quiz.id
+    );
+
+    /*
+     * Nếu đang hiển thị đúng quiz
+     * vừa xóa thì đóng overlay.
+     */
+
+    if (
+      activeQuiz?.id ===
+      quiz.id
+    ) {
+      setActiveQuiz(
+        null
+      );
+
+      setQuizResult(
+        null
+      );
+
+      setSelectedAnswer(
+        null
+      );
+    }
+  }
+
+  /* =======================================================
+     KHÔNG CÓ PAGE
+  ======================================================= */
+
+  if (!page) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#061426] text-white">
+        Không tìm thấy trang bài giảng.
+      </div>
+    );
+  }
+
+  /* =======================================================
+     UI
+  ======================================================= */
+
+  return (
+    <div className="flex h-screen flex-col overflow-hidden bg-[#061426] text-white">
+
+      {/* ===================================================
+          TOP BAR
+      =================================================== */}
+
+      <EditorTopbar
+        title={
+          project.title
+        }
+        saveStatus={
+          saveStatus
+        }
+        score={
+          score
+        }
+        onSave={
+          saveProject
+        }
+      />
+
+      {/* ===================================================
+          MAIN WORKSPACE
+      =================================================== */}
+
+      <div className="flex min-h-0 flex-1">
+
+        {/* ===============================================
+            LEFT - PAGE NAVIGATOR
+        =============================================== */}
+
+        <PageNavigator
+          pages={
+            project.pages
+          }
+          selectedPageId={
+            project.selectedPageId
+          }
+          onSelect={
+            selectPage
+          }
+          onAdd={
+            addPage
+          }
+          onRename={
+            renamePage
+          }
+          onDuplicate={
+            duplicatePage
+          }
+          onDelete={
+            deletePage
+          }
+        />
+
+        {/* ===============================================
+            CENTER
+        =============================================== */}
+
+        <main className="flex min-w-0 flex-1 flex-col">
+
+          {/* VIDEO */}
+
+          <VideoCanvas
+            page={
+              page
+            }
+            videoRef={
+              videoRef
+            }
+            activeQuiz={
+              activeQuiz
+            }
+            selectedAnswer={
+              selectedAnswer
+            }
+            quizResult={
+              quizResult
+            }
+            onVideoUpload={
+              handleVideoUpload
+            }
+            onLoadedMetadata={
+              handleLoadedMetadata
+            }
+            onTimeUpdate={
+              handleTimeUpdate
+            }
+            onPlay={() =>
+              setIsPlaying(
+                true
+              )
+            }
+            onPause={() =>
+              setIsPlaying(
+                false
+              )
+            }
+            onAnswer={
+              answerQuestion
+            }
+            onContinue={
+              continueVideo
+            }
+          />
+
+          {/* PLAYER CONTROLS */}
+
+          <PlayerControls
+            currentTime={
+              currentTime
+            }
+            duration={
+              page.duration
+            }
+            isPlaying={
+              isPlaying
+            }
+            onTogglePlay={
+              togglePlay
+            }
+            onSeek={
+              handleSeek
+            }
+            onAddQuestion={
+              openAddQuestion
+            }
+          />
+
+          {/* TIMELINE */}
+
+          <Timeline
+            duration={
+              page.duration
+            }
+            currentTime={
+              currentTime
+            }
+            quizzes={
+              page.quizzes
+            }
+            onQuizClick={
+              jumpToQuiz
+            }
+          />
+
+        </main>
+
+        {/* ===============================================
+            RIGHT PANEL
+        =============================================== */}
+
+        <QuestionPanel
+          page={
+            page
+          }
+          onVideoUpload={
+            handleVideoUpload
+          }
+          onJump={
+            jumpToQuiz
+          }
+          onEdit={
+            openEditQuestion
+          }
+          onDuplicate={
+            handleDuplicateQuiz
+          }
+          onDelete={
+            handleDeleteQuiz
+          }
+        />
+
+      </div>
+
+      {/* ===================================================
+          QUESTION EDITOR MODAL
+      =================================================== */}
+
+      <QuestionEditor
+        open={
+          questionEditorOpen
+        }
+        editing={
+          editingQuizId !==
+          null
+        }
+        draft={
+          draft
+        }
+        time={
+          questionTime
+        }
+        duration={
+          page.duration
+        }
+        onDraftChange={
+          setDraft
+        }
+        onTimeChange={
+          setQuestionTime
+        }
+        onClose={() => {
+          setQuestionEditorOpen(
+            false
+          );
+
+          setEditingQuizId(
+            null
+          );
+        }}
+        onSave={
+          saveQuestion
+        }
+      />
+
+    </div>
+  );
+}

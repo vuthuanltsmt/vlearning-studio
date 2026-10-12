@@ -1,0 +1,188 @@
+"use client";
+
+import {
+  BookOpen,
+  FileText,
+  FolderOpen,
+  Gamepad2,
+  Globe2,
+  LogIn,
+  MonitorDown,
+  Palette,
+  Settings,
+  Shield,
+  Sparkles,
+  User,
+} from "lucide-react";
+
+type LeftSidebarProps = {
+  active?: "projects" | "guide" | "games" | "ai" | "settings";
+};
+
+export default function LeftSidebar({
+  active = "projects",
+}: LeftSidebarProps) {
+  const menuBase =
+    "flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold transition";
+
+  const activeClass =
+    "bg-cyan-500/15 text-cyan-300";
+
+  const normalClass =
+    "text-slate-400 hover:bg-white/5 hover:text-white";
+
+  return (
+    <aside className="fixed inset-y-0 left-0 z-40 hidden w-[224px] border-r border-[#17385c] bg-[#0a2849] xl:flex xl:flex-col">
+      {/* USER CARD */}
+      <div className="p-4">
+        <div className="overflow-hidden rounded-2xl border border-blue-800/70 bg-[#1a477d] shadow-lg">
+          <div className="p-4">
+            <div className="flex flex-col items-center text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-white/5 text-slate-200">
+                <User size={20} />
+              </div>
+
+              <div className="mt-3 text-sm font-black text-slate-200">
+                Khách truy cập
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  window.alert(
+                    "Tính năng tài khoản PRO chưa được tích hợp trong bản local."
+                  )
+                }
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-sky-500 to-cyan-400 px-3 py-2.5 text-xs font-black text-white shadow-[0_8px_22px_rgba(14,165,233,0.28)] transition hover:brightness-110"
+              >
+                <User size={15} />
+                ĐĂNG NHẬP PRO
+              </button>
+            </div>
+          </div>
+
+          <div className="border-t border-blue-800/80 p-2">
+            <button
+              type="button"
+              onClick={() =>
+                window.alert(
+                  "Bản local đang chạy trực tiếp trên máy tính này."
+                )
+              }
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs font-bold text-slate-300 transition hover:bg-white/5"
+            >
+              <MonitorDown size={16} className="text-slate-400" />
+              TẢI CÀI PC
+            </button>
+
+            <div className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs font-bold text-slate-300">
+              <Palette size={16} className="text-slate-400" />
+              <span className="truncate">Giao diện: Đại dương</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ACTIVE PROJECTS */}
+      <div className="border-t border-[#17385c] px-2 py-4">
+        <button
+          type="button"
+          className={`${menuBase} ${
+            active === "projects" ? activeClass : normalClass
+          }`}
+        >
+          <FolderOpen size={20} />
+          Dự án của tôi
+        </button>
+      </div>
+
+      {/* MAIN MENU */}
+      <nav className="flex-1 space-y-1 px-2">
+        <button
+          type="button"
+          onClick={() =>
+            window.alert("Hướng dẫn sử dụng đang được hoàn thiện.")
+          }
+          className={`${menuBase} ${
+            active === "guide" ? activeClass : normalClass
+          }`}
+        >
+          <BookOpen size={19} />
+          Hướng dẫn
+        </button>
+
+        <button
+          type="button"
+          onClick={() =>
+            window.alert(
+              "Trò chơi tương tác sẽ được bổ sung ở phiên bản sau."
+            )
+          }
+          className={`${menuBase} ${
+            active === "games" ? activeClass : normalClass
+          }`}
+        >
+          <Gamepad2 size={19} className="text-amber-400" />
+          Trò chơi
+        </button>
+
+        <button
+          type="button"
+          onClick={() =>
+            window.alert("AI kịch bản sẽ được bổ sung ở phiên bản sau.")
+          }
+          className={`${menuBase} ${
+            active === "ai" ? activeClass : normalClass
+          }`}
+        >
+          <Sparkles size={19} className="text-fuchsia-400" />
+          AI kịch bản
+        </button>
+
+        <button
+          type="button"
+          onClick={() =>
+            window.alert("Cài đặt AI sẽ được bổ sung ở phiên bản sau.")
+          }
+          className={`${menuBase} ${
+            active === "settings" ? activeClass : normalClass
+          }`}
+        >
+          <Settings size={19} className="text-cyan-400" />
+          Cài đặt AI
+        </button>
+      </nav>
+
+      {/* BOTTOM LINKS */}
+      <div className="border-t border-[#17385c] px-2 py-3">
+        <div className="flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-400">
+          <Globe2 size={18} className="text-cyan-300" />
+          Tiếng Việt
+        </div>
+
+        <div className="flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-500">
+          <Shield size={18} className="text-cyan-300" />
+          Quyền riêng tư
+        </div>
+
+        <div className="flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-500">
+          <FileText size={18} className="text-fuchsia-300" />
+          Điều khoản dịch vụ
+        </div>
+
+        <button
+          type="button"
+          onClick={() =>
+            window.alert(
+              "Bản local không yêu cầu đăng nhập để sử dụng."
+            )
+          }
+          className="mt-2 flex w-full items-center gap-3 rounded-xl bg-cyan-500/10 px-4 py-3 text-left text-sm font-black text-cyan-300 transition hover:bg-cyan-500/15"
+        >
+          <LogIn size={18} />
+          Đăng nhập
+        </button>
+      </div>
+    </aside>
+  );
+}

@@ -1,0 +1,860 @@
+"use client";
+
+import {
+  Activity,
+  ArrowRight,
+  BookOpen,
+  Clock3,
+  FileQuestion,
+  FolderOpen,
+  Layers3,
+  Plus,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
+
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
+import {
+  createNewProject,
+  getProjectLibrary,
+  getProjectQuizCount,
+  setActiveProject,
+  syncCurrentProjectToLibrary,
+} from "@/lib/projectLibrary";
+
+import type {
+  ProjectLibraryEntry,
+} from "@/lib/projectLibrary";
+
+import {
+  clearActivityLog,
+  getActivityLog,
+  getActivityLogChangeEventName,
+  logActivity,
+} from "@/lib/activityLog";
+
+import type {
+  ActivityEntry,
+} from "@/lib/activityLog";
+
+/* =========================================================
+   FORMAT DATE
+========================================================= */
+
+function formatUpdatedAt(
+  value: string
+) {
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return "";
+  }
+
+  return date.toLocaleString(
+    "vi-VN"
+  );
+}
+
+/* =========================================================
+   ACTIVITY ICON
+========================================================= */
+
+function getActivityLabel(
+  type: ActivityEntry["type"]
+) {
+  switch (type) {
+    case "create_project":
+      return "Tạo dự án";
+
+    case "open_project":
+      return "Mở dự án";
+
+    case "rename_project":
+      return "Đổi tên";
+
+    case "duplicate_project":
+      return "Nhân bản";
+
+    case "delete_project":
+      return "Xóa dự án";
+
+    case "add_page":
+      return "Thêm trang";
+
+    case "add_quiz":
+      return "Thêm câu hỏi";
+
+    case "backup_project":
+      return "Sao lưu";
+
+    case "restore_project":
+      return "Khôi phục Backup";
+
+    case "export_scorm":
+      return "Xuất SCORM";
+
+    case "recovery_restore":
+      return "Recovery";
+
+    default:
+      return "Hoạt động";
+  }
+}
+
+/* =========================================================
+   HOME PAGE
+========================================================= */
+
+export default function HomePage() {
+  const [
+    projects,
+    setProjects,
+  ] =
+    useState<
+      ProjectLibraryEntry[]
+    >([]);
+
+  const [
+    activities,
+    setActivities,
+  ] =
+    useState<
+      ActivityEntry[]
+    >([]);
+
+  /* =====================================================
+     LOAD
+  ===================================================== */
+
+  useEffect(() => {
+    syncCurrentProjectToLibrary();
+
+    setProjects(
+      getProjectLibrary()
+    );
+
+    setActivities(
+      getActivityLog(8)
+    );
+
+    function handleActivityChange() {
+      setActivities(
+        getActivityLog(8)
+      );
+    }
+
+    const eventName =
+      getActivityLogChangeEventName();
+
+    window.addEventListener(
+      eventName,
+      handleActivityChange
+    );
+
+    return () => {
+      window.removeEventListener(
+        eventName,
+        handleActivityChange
+      );
+    };
+  }, []);
+
+  /* =====================================================
+     STATISTICS
+  ===================================================== */
+
+  const statistics =
+    useMemo(() => {
+      const totalProjects =
+        projects.length;
+
+      const totalPages =
+        projects.reduce(
+          (
+            total,
+            entry
+          ) =>
+            total +
+            entry.project.pages.length,
+          0
+        );
+
+      const totalQuizzes =
+        projects.reduce(
+          (
+            total,
+            entry
+          ) =>
+            total +
+            getProjectQuizCount(
+              entry.project
+            ),
+          0
+        );
+
+      return {
+        totalProjects,
+        totalPages,
+        totalQuizzes,
+      };
+    }, [
+      projects,
+    ]);
+
+  /* =====================================================
+     RECENT PROJECTS
+  ===================================================== */
+
+  const recentProjects =
+    useMemo(
+      () =>
+        projects.slice(
+          0,
+          6
+        ),
+      [
+        projects,
+      ]
+    );
+
+  /* =====================================================
+     CREATE PROJECT
+  ===================================================== */
+
+  function handleCreateProject() {
+    const title =
+      window.prompt(
+        "Tên bài giảng mới:",
+        "Bài giảng mới"
+      );
+
+    if (
+      title === null
+    ) {
+      return;
+    }
+
+    const cleanTitle =
+      title.trim();
+
+    if (
+      !cleanTitle
+    ) {
+      alert(
+        "Tên bài giảng không được để trống."
+      );
+
+      return;
+    }
+
+    createNewProject(
+      cleanTitle
+    );
+
+    logActivity({
+      type: "create_project",
+      projectTitle:
+        cleanTitle,
+      message: `Đã tạo dự án "${cleanTitle}"`,
+    });
+
+    window.location.href =
+      "/editor/demo";
+  }
+
+  /* =====================================================
+     OPEN PROJECT
+  ===================================================== */
+
+  function handleOpenProject(
+    entry:
+      ProjectLibraryEntry
+  ) {
+    setActiveProject(
+      entry.project
+    );
+
+    logActivity({
+      type: "open_project",
+      projectId:
+        entry.project.id,
+      projectTitle:
+        entry.project.title,
+      message: `Đã mở dự án "${entry.project.title}"`,
+    });
+
+    window.location.href =
+      "/editor/demo";
+  }
+
+  /* =====================================================
+     PROJECT LIBRARY
+  ===================================================== */
+
+  function handleOpenLibrary() {
+    window.location.href =
+      "/projects";
+  }
+
+  /* =====================================================
+     CLEAR ACTIVITY
+  ===================================================== */
+
+  function handleClearActivities() {
+    if (
+      activities.length === 0
+    ) {
+      return;
+    }
+
+    const confirmed =
+      window.confirm(
+        "Xóa toàn bộ lịch sử hoạt động trên thiết bị này?"
+      );
+
+    if (
+      !confirmed
+    ) {
+      return;
+    }
+
+    clearActivityLog();
+
+    setActivities([]);
+  }
+
+  /* =====================================================
+     UI
+  ===================================================== */
+
+  return (
+    <main className="min-h-screen bg-[#061426] text-white">
+
+      {/* HERO */}
+
+      <section className="border-b border-blue-950 bg-gradient-to-br from-[#0b2344] via-[#102e59] to-[#151b46]">
+
+        <div className="mx-auto flex min-h-[350px] max-w-7xl flex-col justify-center px-6 py-14">
+
+          <div className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.25em] text-cyan-300">
+
+            <Sparkles
+              size={18}
+            />
+
+            VLearning Studio
+
+          </div>
+
+          <h1 className="mt-5 max-w-3xl text-4xl font-black leading-tight md:text-6xl">
+
+            Xây dựng bài giảng
+
+            <span className="block bg-gradient-to-r from-cyan-300 to-purple-400 bg-clip-text text-transparent">
+              e-learning tương tác
+            </span>
+
+          </h1>
+
+          <p className="mt-5 max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
+            Tạo bài giảng có video, câu hỏi tương tác,
+            điều kiện hoàn thành, sao lưu dự án và xuất
+            SCORM 1.2.
+          </p>
+
+          <div className="mt-8 flex flex-wrap gap-3">
+
+            <button
+              type="button"
+              onClick={
+                handleCreateProject
+              }
+              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-600 px-6 py-3.5 font-bold transition hover:brightness-110"
+            >
+              <Plus
+                size={20}
+              />
+
+              Tạo bài giảng mới
+            </button>
+
+            <button
+              type="button"
+              onClick={
+                handleOpenLibrary
+              }
+              className="flex items-center gap-2 rounded-xl border border-blue-600 bg-blue-950/60 px-6 py-3.5 font-bold transition hover:bg-blue-900"
+            >
+              <FolderOpen
+                size={20}
+              />
+
+              Dự án của tôi
+            </button>
+
+          </div>
+
+        </div>
+
+      </section>
+
+      <div className="mx-auto max-w-7xl px-6 py-10">
+
+        {/* STATISTICS */}
+
+        <section>
+
+          <div className="mb-5">
+
+            <div className="text-xs font-black uppercase tracking-[0.18em] text-cyan-300">
+              Tổng quan
+            </div>
+
+            <h2 className="mt-2 text-2xl font-black">
+              Không gian làm việc
+            </h2>
+
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3">
+
+            <div className="rounded-2xl border border-blue-800 bg-[#102b52] p-6 shadow-xl">
+
+              <div className="flex items-start justify-between">
+
+                <div>
+                  <div className="text-sm text-slate-400">
+                    Dự án
+                  </div>
+
+                  <div className="mt-2 text-4xl font-black text-cyan-300">
+                    {
+                      statistics.totalProjects
+                    }
+                  </div>
+                </div>
+
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-cyan-950 text-cyan-300">
+                  <FolderOpen
+                    size={24}
+                  />
+                </div>
+
+              </div>
+
+            </div>
+
+            <div className="rounded-2xl border border-blue-800 bg-[#102b52] p-6 shadow-xl">
+
+              <div className="flex items-start justify-between">
+
+                <div>
+                  <div className="text-sm text-slate-400">
+                    Tổng số trang
+                  </div>
+
+                  <div className="mt-2 text-4xl font-black text-blue-300">
+                    {
+                      statistics.totalPages
+                    }
+                  </div>
+                </div>
+
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-950 text-blue-300">
+                  <Layers3
+                    size={24}
+                  />
+                </div>
+
+              </div>
+
+            </div>
+
+            <div className="rounded-2xl border border-blue-800 bg-[#102b52] p-6 shadow-xl">
+
+              <div className="flex items-start justify-between">
+
+                <div>
+                  <div className="text-sm text-slate-400">
+                    Câu hỏi tương tác
+                  </div>
+
+                  <div className="mt-2 text-4xl font-black text-purple-300">
+                    {
+                      statistics.totalQuizzes
+                    }
+                  </div>
+                </div>
+
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-purple-950 text-purple-300">
+                  <FileQuestion
+                    size={24}
+                  />
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </section>
+
+        {/* RECENT PROJECTS */}
+
+        <section className="mt-12">
+
+          <div className="flex flex-wrap items-end justify-between gap-4">
+
+            <div>
+              <div className="text-xs font-black uppercase tracking-[0.18em] text-cyan-300">
+                Gần đây
+              </div>
+
+              <h2 className="mt-2 text-2xl font-black">
+                Dự án gần đây
+              </h2>
+            </div>
+
+            {projects.length >
+              0 && (
+
+              <button
+                type="button"
+                onClick={
+                  handleOpenLibrary
+                }
+                className="flex items-center gap-2 text-sm font-bold text-cyan-300 transition hover:text-cyan-200"
+              >
+                Xem tất cả
+
+                <ArrowRight
+                  size={17}
+                />
+              </button>
+
+            )}
+
+          </div>
+
+          {recentProjects.length ===
+          0 ? (
+
+            <div className="mt-6 rounded-3xl border border-dashed border-blue-700 bg-[#102b52] p-12 text-center">
+
+              <BookOpen
+                size={50}
+                className="mx-auto text-cyan-300"
+              />
+
+              <h3 className="mt-5 text-xl font-black">
+                Chưa có bài giảng
+              </h3>
+
+              <p className="mt-2 text-slate-400">
+                Tạo dự án đầu tiên để bắt đầu xây dựng
+                bài giảng tương tác.
+              </p>
+
+            </div>
+
+          ) : (
+
+            <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+
+              {recentProjects.map(
+                (
+                  entry
+                ) => {
+                  const project =
+                    entry.project;
+
+                  const quizCount =
+                    getProjectQuizCount(
+                      project
+                    );
+
+                  return (
+                    <article
+                      key={
+                        project.id
+                      }
+                      className="overflow-hidden rounded-2xl border border-blue-800 bg-[#123665] shadow-xl transition hover:-translate-y-1 hover:border-cyan-700"
+                    >
+
+                      <div className="bg-gradient-to-br from-[#173f73] to-[#1b2f66] p-5">
+
+                        <div className="flex items-start justify-between gap-4">
+
+                          <div className="min-w-0">
+
+                            <div className="text-xs font-bold uppercase tracking-wider text-cyan-300">
+                              Bài giảng
+                            </div>
+
+                            <h3 className="mt-2 line-clamp-2 min-h-[56px] text-xl font-black">
+                              {
+                                project.title
+                              }
+                            </h3>
+
+                          </div>
+
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-950 text-cyan-300">
+                            <FolderOpen
+                              size={21}
+                            />
+                          </div>
+
+                        </div>
+
+                      </div>
+
+                      <div className="p-5">
+
+                        <div className="grid grid-cols-2 gap-3">
+
+                          <div className="rounded-xl bg-blue-950/50 p-3">
+
+                            <div className="flex items-center gap-2 text-xs text-slate-400">
+                              <Layers3
+                                size={14}
+                              />
+                              Trang
+                            </div>
+
+                            <div className="mt-2 text-xl font-black text-cyan-300">
+                              {
+                                project.pages.length
+                              }
+                            </div>
+
+                          </div>
+
+                          <div className="rounded-xl bg-blue-950/50 p-3">
+
+                            <div className="flex items-center gap-2 text-xs text-slate-400">
+                              <FileQuestion
+                                size={14}
+                              />
+                              Câu hỏi
+                            </div>
+
+                            <div className="mt-2 text-xl font-black text-purple-300">
+                              {
+                                quizCount
+                              }
+                            </div>
+
+                          </div>
+
+                        </div>
+
+                        <div className="mt-4 flex items-center gap-2 text-xs text-slate-400">
+                          <Clock3
+                            size={14}
+                          />
+
+                          Cập nhật:{" "}
+                          {
+                            formatUpdatedAt(
+                              entry.updatedAt
+                            )
+                          }
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleOpenProject(
+                              entry
+                            )
+                          }
+                          className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 font-bold transition hover:bg-blue-500"
+                        >
+                          <FolderOpen
+                            size={18}
+                          />
+
+                          Mở dự án
+                        </button>
+
+                      </div>
+
+                    </article>
+                  );
+                }
+              )}
+
+            </div>
+
+          )}
+
+        </section>
+
+        {/* ACTIVITY LOG */}
+
+        <section className="mt-12">
+
+          <div className="flex flex-wrap items-end justify-between gap-4">
+
+            <div>
+
+              <div className="text-xs font-black uppercase tracking-[0.18em] text-cyan-300">
+                Nhật ký
+              </div>
+
+              <h2 className="mt-2 flex items-center gap-2 text-2xl font-black">
+                <Activity
+                  size={23}
+                />
+
+                Hoạt động gần đây
+              </h2>
+
+            </div>
+
+            {activities.length >
+              0 && (
+
+              <button
+                type="button"
+                onClick={
+                  handleClearActivities
+                }
+                className="flex items-center gap-2 rounded-lg border border-red-900/70 px-3 py-2 text-sm font-bold text-red-300 transition hover:bg-red-950/50"
+              >
+                <Trash2
+                  size={16}
+                />
+
+                Xóa lịch sử
+              </button>
+
+            )}
+
+          </div>
+
+          {activities.length ===
+          0 ? (
+
+            <div className="mt-6 rounded-2xl border border-dashed border-blue-800 bg-[#102b52] px-6 py-10 text-center">
+
+              <Activity
+                size={35}
+                className="mx-auto text-slate-500"
+              />
+
+              <div className="mt-4 font-bold text-slate-300">
+                Chưa có hoạt động nào được ghi lại
+              </div>
+
+              <div className="mt-2 text-sm text-slate-500">
+                Các hoạt động mới từ V10.14 sẽ xuất hiện tại đây.
+              </div>
+
+            </div>
+
+          ) : (
+
+            <div className="mt-6 overflow-hidden rounded-2xl border border-blue-800 bg-[#102b52]">
+
+              {activities.map(
+                (
+                  entry,
+                  index
+                ) => (
+
+                  <div
+                    key={
+                      entry.id
+                    }
+                    className={`flex flex-col gap-3 px-5 py-4 md:flex-row md:items-center md:justify-between ${
+                      index !==
+                      activities.length -
+                        1
+                        ? "border-b border-blue-900"
+                        : ""
+                    }`}
+                  >
+
+                    <div className="flex min-w-0 items-start gap-4">
+
+                      <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-950 text-cyan-300">
+                        <Activity
+                          size={18}
+                        />
+                      </div>
+
+                      <div className="min-w-0">
+
+                        <div className="text-xs font-black uppercase tracking-wider text-cyan-300">
+                          {
+                            getActivityLabel(
+                              entry.type
+                            )
+                          }
+                        </div>
+
+                        <div className="mt-1 break-words font-semibold text-slate-100">
+                          {
+                            entry.message
+                          }
+                        </div>
+
+                      </div>
+
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-2 pl-14 text-xs text-slate-400 md:pl-0">
+                      <Clock3
+                        size={14}
+                      />
+
+                      {
+                        formatUpdatedAt(
+                          entry.createdAt
+                        )
+                      }
+                    </div>
+
+                  </div>
+
+                )
+              )}
+
+            </div>
+
+          )}
+
+        </section>
+
+      </div>
+
+      <footer className="mt-14 border-t border-blue-950 bg-[#07182c]">
+
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-6 py-6 text-sm text-slate-500">
+          <div>
+            VLearning Studio
+          </div>
+
+          <div>
+            E-learning Authoring • SCORM 1.2
+          </div>
+        </div>
+
+      </footer>
+
+    </main>
+  );
+}

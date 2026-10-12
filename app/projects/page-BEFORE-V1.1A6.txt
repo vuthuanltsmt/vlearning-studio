@@ -1,0 +1,1981 @@
+"use client";
+
+import {
+  BookOpen,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  Copy,
+  Download,
+  FileQuestion,
+  FileText,
+  FolderOpen,
+  Gamepad2,
+  Globe2,
+  ImageOff,
+  ImagePlus,
+  Languages,
+  Layers3,
+  Loader2,
+  LogOut,
+  MonitorDown,
+  Palette,
+  Pencil,
+  Play,
+  Plus,
+  Search,
+  Settings,
+  Shield,
+  Sparkles,
+  Trash2,
+  Upload,
+  User,
+  X,
+} from "lucide-react";
+
+import {
+  ChangeEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
+import {
+  createNewProject,
+  deleteProjectFromLibrary,
+  duplicateProjectInLibrary,
+  getProjectLibrary,
+  getProjectQuizCount,
+  renameProjectInLibrary,
+  saveProjectToLibrary,
+  setActiveProject,
+  syncCurrentProjectToLibrary,
+} from "@/lib/projectLibrary";
+
+import {
+  deleteProjectThumbnail,
+  getProjectThumbnail,
+  saveProjectThumbnail,
+} from "@/lib/projectThumbnailDb";
+
+import {
+  exportProjectBackup,
+  importProjectBackup,
+} from "@/lib/projectBackup";
+
+import {
+  logActivity,
+} from "@/lib/activityLog";
+
+import type {
+  ProjectLibraryEntry,
+} from "@/lib/projectLibrary";
+
+/* =========================================================
+   TYPES
+========================================================= */
+
+type SortMode =
+  | "updated-desc"
+  | "updated-asc"
+  | "title-asc"
+  | "title-desc";
+
+/* =========================================================
+   DATE
+========================================================= */
+
+function formatUpdatedAt(
+  value: string
+) {
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return "";
+  }
+
+  return date.toLocaleString(
+    "vi-VN"
+  );
+}
+
+/* =========================================================
+   SEARCH
+========================================================= */
+
+function normalizeText(
+  value: string
+) {
+  return value
+    .normalize("NFD")
+    .replace(
+      /[\u0300-\u036f]/g,
+      ""
+    )
+    .replace(
+      /đ/g,
+      "d"
+    )
+    .replace(
+      /Đ/g,
+      "D"
+    )
+    .toLowerCase()
+    .trim();
+}
+
+/* =========================================================
+   BLOB -> DATA URL
+========================================================= */
+
+function blobToDataUrl(
+  blob: Blob
+): Promise<string> {
+  return new Promise(
+    (
+      resolve,
+      reject
+    ) => {
+      const reader =
+        new FileReader();
+
+      reader.onload =
+        () => {
+          if (
+            typeof reader.result ===
+            "string"
+          ) {
+            resolve(
+              reader.result
+            );
+          } else {
+            reject(
+              new Error(
+                "Không đọc được ảnh."
+              )
+            );
+          }
+        };
+
+      reader.onerror =
+        () => {
+          reject(
+            reader.error ??
+              new Error(
+                "Không đọc được ảnh."
+              )
+          );
+        };
+
+      reader.readAsDataURL(
+        blob
+      );
+    }
+  );
+}
+
+/* =========================================================
+   PAGE
+========================================================= */
+
+export default function ProjectsPage() {
+  const importInputRef =
+    useRef<HTMLInputElement>(
+      null
+    );
+
+  const [
+    projects,
+    setProjects,
+  ] =
+    useState<
+      ProjectLibraryEntry[]
+    >([]);
+
+  const [
+    searchQuery,
+    setSearchQuery,
+  ] =
+    useState("");
+
+  const [
+    sortMode,
+    setSortMode,
+  ] =
+    useState<SortMode>(
+      "updated-desc"
+    );
+
+  const [
+    duplicatingId,
+    setDuplicatingId,
+  ] =
+    useState<string | null>(
+      null
+    );
+
+  const [
+    thumbnailBusyId,
+    setThumbnailBusyId,
+  ] =
+    useState<string | null>(
+      null
+    );
+
+  const [
+    backupBusyId,
+    setBackupBusyId,
+  ] =
+    useState<string | null>(
+      null
+    );
+
+  const [
+    importing,
+    setImporting,
+  ] =
+    useState(false);
+
+  const [
+    thumbnails,
+    setThumbnails,
+  ] =
+    useState<
+      Record<
+        string,
+        string
+      >
+    >({});
+
+  const globalBusy =
+    duplicatingId !==
+      null ||
+    thumbnailBusyId !==
+      null ||
+    backupBusyId !==
+      null ||
+    importing;
+
+  /* =====================================================
+     FILTER + SORT
+  ===================================================== */
+
+  const visibleProjects =
+    useMemo(() => {
+      const keyword =
+        normalizeText(
+          searchQuery
+        );
+
+      const filtered =
+        keyword
+          ? projects.filter(
+              (entry) =>
+                normalizeText(
+                  entry.project.title
+                ).includes(
+                  keyword
+                )
+            )
+          : [...projects];
+
+      return filtered.sort(
+        (a, b) => {
+          switch (
+            sortMode
+          ) {
+            case "updated-asc":
+              return (
+                new Date(
+                  a.updatedAt
+                ).getTime() -
+                new Date(
+                  b.updatedAt
+                ).getTime()
+              );
+
+            case "title-asc":
+              return a.project.title.localeCompare(
+                b.project.title,
+                "vi"
+              );
+
+            case "title-desc":
+              return b.project.title.localeCompare(
+                a.project.title,
+                "vi"
+              );
+
+            case "updated-desc":
+            default:
+              return (
+                new Date(
+                  b.updatedAt
+                ).getTime() -
+                new Date(
+                  a.updatedAt
+                ).getTime()
+              );
+          }
+        }
+      );
+    }, [
+      projects,
+      searchQuery,
+      sortMode,
+    ]);
+
+  /* =====================================================
+     REFRESH
+  ===================================================== */
+
+  function refreshProjects() {
+    setProjects(
+      getProjectLibrary()
+    );
+  }
+
+  /* =====================================================
+     LOAD
+  ===================================================== */
+
+  useEffect(() => {
+    syncCurrentProjectToLibrary();
+
+    refreshProjects();
+  }, []);
+
+  /* =====================================================
+     LOAD THUMBNAILS
+  ===================================================== */
+
+  useEffect(() => {
+    let cancelled =
+      false;
+
+    async function loadThumbnails() {
+      const result: Record<
+        string,
+        string
+      > = {};
+
+      for (
+        const entry of
+        projects
+      ) {
+        try {
+          const blob =
+            await getProjectThumbnail(
+              entry.project.id
+            );
+
+          if (
+            cancelled
+          ) {
+            return;
+          }
+
+          if (blob) {
+            result[
+              entry.project.id
+            ] =
+              await blobToDataUrl(
+                blob
+              );
+          }
+        } catch (
+          error
+        ) {
+          console.error(
+            `Không tải được thumbnail của ${entry.project.title}:`,
+            error
+          );
+        }
+      }
+
+      if (
+        !cancelled
+      ) {
+        setThumbnails(
+          result
+        );
+      }
+    }
+
+    void loadThumbnails();
+
+    return () => {
+      cancelled =
+        true;
+    };
+  }, [
+    projects,
+  ]);
+
+  /* =====================================================
+     OPEN
+  ===================================================== */
+
+  function handleOpen(
+    entry:
+      ProjectLibraryEntry
+  ) {
+    setActiveProject(
+      entry.project
+    );
+
+    logActivity({
+      type: "open_project",
+      projectId: entry.project.id,
+      projectTitle: entry.project.title,
+      message: `Đã mở dự án "${entry.project.title}"`,
+    });
+
+    window.location.href =
+      "/editor/demo";
+  }
+
+  /* =====================================================
+     CREATE
+  ===================================================== */
+
+  function handleCreate() {
+    const title =
+      window.prompt(
+        "Tên bài giảng mới:",
+        "Bài giảng mới"
+      );
+
+    if (
+      title === null
+    ) {
+      return;
+    }
+
+    const cleanTitle =
+      title.trim();
+
+    if (!cleanTitle) {
+      alert(
+        "Tên bài giảng không được để trống."
+      );
+
+      return;
+    }
+
+    createNewProject(
+      cleanTitle
+    );
+
+    logActivity({
+      type: "create_project",
+      projectTitle: cleanTitle,
+      message: `Đã tạo dự án "${cleanTitle}"`,
+    });
+
+    window.location.href =
+      "/editor/demo";
+  }
+
+  /* =====================================================
+     RENAME
+  ===================================================== */
+
+  function handleRename(
+    entry:
+      ProjectLibraryEntry
+  ) {
+    const newTitle =
+      window.prompt(
+        "Nhập tên mới cho bài giảng:",
+        entry.project.title
+      );
+
+    if (
+      newTitle === null
+    ) {
+      return;
+    }
+
+    const cleanTitle =
+      newTitle.trim();
+
+    if (!cleanTitle) {
+      alert(
+        "Tên bài giảng không được để trống."
+      );
+
+      return;
+    }
+
+    if (
+      cleanTitle ===
+      entry.project.title
+    ) {
+      return;
+    }
+
+    const renamed =
+      renameProjectInLibrary(
+        entry.project.id,
+        cleanTitle
+      );
+
+    if (!renamed) {
+      alert(
+        "Không thể đổi tên dự án."
+      );
+
+      return;
+    }
+
+    logActivity({
+      type: "rename_project",
+      projectId: entry.project.id,
+      projectTitle: cleanTitle,
+      message: `Đã đổi tên dự án "${entry.project.title}" thành "${cleanTitle}"`,
+    });
+
+    refreshProjects();
+  }
+
+  /* =====================================================
+     DUPLICATE
+  ===================================================== */
+
+  async function handleDuplicate(
+    entry:
+      ProjectLibraryEntry
+  ) {
+    if (
+      globalBusy
+    ) {
+      return;
+    }
+
+    const confirmed =
+      window.confirm(
+        `Nhân bản dự án "${entry.project.title}"?\n\nTrang, câu hỏi, video, điều kiện hoàn thành và ảnh đại diện sẽ được sao chép.`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDuplicatingId(
+      entry.project.id
+    );
+
+    try {
+      const result =
+        await duplicateProjectInLibrary(
+          entry.project
+        );
+
+      logActivity({
+        type: "duplicate_project",
+        projectId: result.project.id,
+        projectTitle: result.project.title,
+        message: `Đã nhân bản "${entry.project.title}" thành "${result.project.title}"`,
+      });
+
+      refreshProjects();
+
+      if (
+        result.missingVideoPages.length >
+        0
+      ) {
+        alert(
+          [
+            "Đã nhân bản dự án.",
+            "",
+            `Tên mới: ${result.project.title}`,
+            "",
+            "Không tìm thấy video của:",
+            "",
+            ...result.missingVideoPages.map(
+              (title) =>
+                `• ${title}`
+            ),
+          ].join("\n")
+        );
+
+        return;
+      }
+
+      alert(
+        [
+          "Nhân bản dự án thành công!",
+          "",
+          `Tên mới: ${result.project.title}`,
+        ].join("\n")
+      );
+    } catch (
+      error
+    ) {
+      console.error(
+        "Nhân bản dự án thất bại:",
+        error
+      );
+
+      alert(
+        error instanceof Error
+          ? `Không thể nhân bản dự án:\n${error.message}`
+          : "Không thể nhân bản dự án."
+      );
+    } finally {
+      setDuplicatingId(
+        null
+      );
+    }
+  }
+
+  /* =====================================================
+     BACKUP
+  ===================================================== */
+
+  async function handleBackup(
+    entry:
+      ProjectLibraryEntry
+  ) {
+    if (
+      globalBusy
+    ) {
+      return;
+    }
+
+    setBackupBusyId(
+      entry.project.id
+    );
+
+    try {
+      const result =
+        await exportProjectBackup(
+          entry.project
+        );
+
+      logActivity({
+        type: "backup_project",
+        projectId: entry.project.id,
+        projectTitle: entry.project.title,
+        message: `Đã sao lưu dự án "${entry.project.title}"`,
+      });
+
+      if (
+        result.missingVideoPages.length >
+        0
+      ) {
+        alert(
+          [
+            "Đã tạo file sao lưu.",
+            "",
+            `File: ${result.fileName}`,
+            "",
+            "CẢNH BÁO:",
+            "Không tìm thấy video của:",
+            "",
+            ...result.missingVideoPages.map(
+              (title) =>
+                `• ${title}`
+            ),
+            "",
+            "File backup vẫn được tạo.",
+          ].join("\n")
+        );
+
+        return;
+      }
+
+      alert(
+        [
+          "Sao lưu dự án thành công!",
+          "",
+          `File: ${result.fileName}`,
+          "",
+          "Hãy lưu file này ở nơi an toàn.",
+        ].join("\n")
+      );
+    } catch (
+      error
+    ) {
+      console.error(
+        "Sao lưu dự án thất bại:",
+        error
+      );
+
+      alert(
+        error instanceof Error
+          ? `Không thể sao lưu dự án:\n${error.message}`
+          : "Không thể sao lưu dự án."
+      );
+    } finally {
+      setBackupBusyId(
+        null
+      );
+    }
+  }
+
+  /* =====================================================
+     IMPORT BACKUP
+  ===================================================== */
+
+  async function handleImportBackup(
+    event:
+      ChangeEvent<HTMLInputElement>
+  ) {
+    const input =
+      event.currentTarget;
+
+    const file =
+      input.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    if (
+      !file.name
+        .toLowerCase()
+        .endsWith(
+          ".zip"
+        )
+    ) {
+      alert(
+        "Vui lòng chọn file .vlearning.zip hoặc .zip."
+      );
+
+      input.value =
+        "";
+
+      return;
+    }
+
+    setImporting(
+      true
+    );
+
+    try {
+      const result =
+        await importProjectBackup(
+          file
+        );
+
+      logActivity({
+        type: "restore_project",
+        projectId: result.project.id,
+        projectTitle: result.project.title,
+        message: `Đã khôi phục dự án "${result.project.title}" từ file backup`,
+      });
+
+      refreshProjects();
+
+      if (
+        result.warnings.length >
+        0
+      ) {
+        alert(
+          [
+            "Đã nhập dự án.",
+            "",
+            `Tên: ${result.project.title}`,
+            "",
+            "Một số thành phần có cảnh báo:",
+            "",
+            ...result.warnings.map(
+              (warning) =>
+                `• ${warning}`
+            ),
+          ].join("\n")
+        );
+
+        return;
+      }
+
+      alert(
+        [
+          "Khôi phục dự án thành công!",
+          "",
+          `Tên: ${result.project.title}`,
+          "",
+          "Trang, quiz, video, điều kiện hoàn thành và ảnh đại diện đã được khôi phục.",
+        ].join("\n")
+      );
+    } catch (
+      error
+    ) {
+      console.error(
+        "Nhập file backup thất bại:",
+        error
+      );
+
+      alert(
+        error instanceof Error
+          ? `Không thể nhập dự án:\n${error.message}`
+          : "Không thể nhập dự án."
+      );
+    } finally {
+      input.value =
+        "";
+
+      setImporting(
+        false
+      );
+    }
+  }
+
+  /* =====================================================
+     DELETE PROJECT
+  ===================================================== */
+
+  function handleDelete(
+    entry:
+      ProjectLibraryEntry
+  ) {
+    if (
+      globalBusy
+    ) {
+      return;
+    }
+
+    const confirmed =
+      window.confirm(
+        [
+          `Bạn có chắc muốn xóa dự án "${entry.project.title}"?`,
+          "",
+          "Thao tác này sẽ xóa:",
+          "• Dự án",
+          "• Video",
+          "• Điều kiện hoàn thành",
+          "• Ảnh đại diện",
+          "",
+          "Không thể hoàn tác.",
+        ].join("\n")
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    deleteProjectFromLibrary(
+      entry.project.id
+    );
+
+    logActivity({
+      type: "delete_project",
+      projectId: entry.project.id,
+      projectTitle: entry.project.title,
+      message: `Đã xóa dự án "${entry.project.title}"`,
+    });
+
+    refreshProjects();
+  }
+
+  /* =====================================================
+     THUMBNAIL
+  ===================================================== */
+
+  async function handleThumbnailChange(
+    entry:
+      ProjectLibraryEntry,
+    event:
+      ChangeEvent<HTMLInputElement>
+  ) {
+    const input =
+      event.currentTarget;
+
+    const file =
+      input.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    if (
+      !file.type.startsWith(
+        "image/"
+      )
+    ) {
+      alert(
+        "Vui lòng chọn file ảnh."
+      );
+
+      input.value =
+        "";
+
+      return;
+    }
+
+    if (
+      file.size >
+      5 * 1024 * 1024
+    ) {
+      alert(
+        "Ảnh đại diện tối đa 5 MB."
+      );
+
+      input.value =
+        "";
+
+      return;
+    }
+
+    setThumbnailBusyId(
+      entry.project.id
+    );
+
+    try {
+      await saveProjectThumbnail(
+        entry.project.id,
+        file
+      );
+
+      const dataUrl =
+        await blobToDataUrl(
+          file
+        );
+
+      setThumbnails(
+        (current) => ({
+          ...current,
+
+          [entry.project.id]:
+            dataUrl,
+        })
+      );
+
+      saveProjectToLibrary(
+        entry.project
+      );
+
+      refreshProjects();
+    } catch (
+      error
+    ) {
+      console.error(
+        "Không lưu được ảnh đại diện:",
+        error
+      );
+
+      alert(
+        "Không thể lưu ảnh đại diện."
+      );
+    } finally {
+      input.value =
+        "";
+
+      setThumbnailBusyId(
+        null
+      );
+    }
+  }
+
+  async function handleDeleteThumbnail(
+    entry:
+      ProjectLibraryEntry
+  ) {
+    if (
+      globalBusy
+    ) {
+      return;
+    }
+
+    const confirmed =
+      window.confirm(
+        `Xóa ảnh đại diện của "${entry.project.title}"?`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setThumbnailBusyId(
+      entry.project.id
+    );
+
+    try {
+      await deleteProjectThumbnail(
+        entry.project.id
+      );
+
+      setThumbnails(
+        (current) => {
+          const next = {
+            ...current,
+          };
+
+          delete next[
+            entry.project.id
+          ];
+
+          return next;
+        }
+      );
+
+      saveProjectToLibrary(
+        entry.project
+      );
+
+      refreshProjects();
+    } catch (
+      error
+    ) {
+      console.error(
+        "Không xóa được ảnh đại diện:",
+        error
+      );
+
+      alert(
+        "Không thể xóa ảnh đại diện."
+      );
+    } finally {
+      setThumbnailBusyId(
+        null
+      );
+    }
+  }
+
+  /* =====================================================
+     UI - V1.1A3 SIMPLE REFERENCE HOME
+  ===================================================== */
+
+  return (
+    <main className="min-h-screen bg-[#031426] text-white">
+
+      {/* ===================================================
+          LEFT SIDEBAR - MATCH REFERENCE
+      =================================================== */}
+
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[224px] border-r border-[#17385c] bg-[#0a2849] xl:flex xl:flex-col">
+
+        {/* Guest card */}
+
+        <div className="p-4">
+
+          <div className="overflow-hidden rounded-2xl border border-blue-800/70 bg-[#1a477d] shadow-lg">
+
+            <div className="p-4">
+
+              <div className="flex flex-col items-center text-center">
+
+                <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-white/5 text-slate-200">
+                  <User
+                    size={20}
+                  />
+                </div>
+
+                <div className="mt-3 text-sm font-black text-slate-200">
+                  Khách truy cập
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    window.alert(
+                      "Tính năng tài khoản PRO chưa được tích hợp trong bản local."
+                    )
+                  }
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-sky-500 to-cyan-400 px-3 py-2.5 text-xs font-black text-white shadow-[0_8px_22px_rgba(14,165,233,0.28)] transition hover:brightness-110"
+                >
+                  <User
+                    size={15}
+                  />
+                  ĐĂNG NHẬP PRO
+                </button>
+
+              </div>
+
+            </div>
+
+            <div className="border-t border-blue-800/80 p-2">
+
+              <button
+                type="button"
+                onClick={() =>
+                  window.alert(
+                    "Bản local đang chạy trực tiếp trên máy tính này."
+                  )
+                }
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs font-bold text-slate-300 transition hover:bg-white/5"
+              >
+                <MonitorDown
+                  size={16}
+                  className="text-slate-400"
+                />
+                TẢI CÀI PC
+              </button>
+
+              <button
+                type="button"
+                className="flex w-full cursor-default items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs font-bold text-slate-300"
+              >
+                <Palette
+                  size={16}
+                  className="text-slate-400"
+                />
+                <span className="truncate">
+                  Giao diện: Đại dương
+                </span>
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+
+        {/* Main navigation */}
+
+        <div className="border-t border-[#17385c] px-2 py-4">
+
+          <button
+            type="button"
+            className="flex w-full items-center gap-3 rounded-xl bg-cyan-500/15 px-4 py-3 text-left text-sm font-black text-cyan-300"
+          >
+            <FolderOpen
+              size={20}
+            />
+            Dự án của tôi
+          </button>
+
+        </div>
+
+        <nav className="flex-1 space-y-1 px-2">
+
+          <button
+            type="button"
+            onClick={() =>
+              window.alert(
+                "Hướng dẫn sử dụng đang được hoàn thiện."
+              )
+            }
+            className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold text-slate-400 transition hover:bg-white/5 hover:text-white"
+          >
+            <BookOpen
+              size={19}
+            />
+            Hướng dẫn
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              window.alert(
+                "Trò chơi tương tác sẽ được bổ sung ở phiên bản sau."
+              )
+            }
+            className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold text-slate-400 transition hover:bg-white/5 hover:text-white"
+          >
+            <Gamepad2
+              size={19}
+              className="text-amber-400"
+            />
+            Trò chơi
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              window.alert(
+                "AI kịch bản sẽ được bổ sung ở phiên bản sau."
+              )
+            }
+            className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold text-slate-400 transition hover:bg-white/5 hover:text-white"
+          >
+            <Sparkles
+              size={19}
+              className="text-fuchsia-400"
+            />
+            AI kịch bản
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              window.alert(
+                "Cài đặt AI sẽ được bổ sung ở phiên bản sau."
+              )
+            }
+            className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold text-slate-400 transition hover:bg-white/5 hover:text-white"
+          >
+            <Settings
+              size={19}
+              className="text-cyan-400"
+            />
+            Cài đặt AI
+          </button>
+
+        </nav>
+
+        {/* Bottom links */}
+
+        <div className="border-t border-[#17385c] px-2 py-3">
+
+          <div className="flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-400">
+            <Globe2
+              size={18}
+              className="text-cyan-300"
+            />
+            Tiếng Việt
+          </div>
+
+          <div className="flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-500">
+            <Shield
+              size={18}
+              className="text-cyan-300"
+            />
+            Quyền riêng tư
+          </div>
+
+          <div className="flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-500">
+            <FileText
+              size={18}
+              className="text-fuchsia-300"
+            />
+            Điều khoản dịch vụ
+          </div>
+
+          <button
+            type="button"
+            onClick={() =>
+              window.alert(
+                "Bản local không yêu cầu đăng nhập để sử dụng."
+              )
+            }
+            className="mt-2 flex w-full items-center gap-3 rounded-xl bg-cyan-500/10 px-4 py-3 text-left text-sm font-black text-cyan-300 transition hover:bg-cyan-500/15"
+          >
+            <LogOut
+              size={18}
+            />
+            Đăng nhập
+          </button>
+
+        </div>
+
+      </aside>
+
+      {/* ===================================================
+          MAIN CONTENT
+      =================================================== */}
+
+      <div className="xl:pl-[224px]">
+
+        <div className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 xl:px-12">
+
+          <input
+            ref={
+              importInputRef
+            }
+            type="file"
+            accept=".zip,.vlearning.zip,application/zip"
+            className="hidden"
+            onChange={
+              handleImportBackup
+            }
+          />
+
+          {/* Mobile compact header */}
+
+          <div className="mb-5 flex items-center justify-between xl:hidden">
+
+            <div>
+              <div className="text-xl font-black text-cyan-300">
+                VLEARNING STUDIO
+              </div>
+              <div className="mt-1 text-[11px] text-slate-400">
+                Bài giảng tương tác • SCORM
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={
+                handleCreate
+              }
+              disabled={
+                globalBusy
+              }
+              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-600 px-3 py-2 text-xs font-black disabled:opacity-50"
+            >
+              <Plus
+                size={16}
+              />
+              Tạo mới
+            </button>
+
+          </div>
+
+          {/* =================================================
+              SIMPLE HERO - EXACT CONTENT REQUESTED
+          ================================================= */}
+
+          <section className="rounded-[28px] border border-blue-700/40 bg-gradient-to-r from-[#103b68] via-[#153b6c] to-[#1d3264] shadow-[0_22px_70px_rgba(0,0,0,0.22)]">
+
+            <div className="px-7 py-9 lg:px-10 lg:py-11">
+
+              <div className="flex items-center gap-3">
+
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-cyan-300/25 bg-cyan-400/10 text-cyan-300">
+                  <BookOpen
+                    size={25}
+                  />
+                </div>
+
+                <h1 className="text-4xl font-black tracking-tight sm:text-5xl">
+                  VLEARNING STUDIO
+                </h1>
+
+              </div>
+
+              <p className="mt-5 max-w-4xl text-base leading-7 text-slate-300 sm:text-lg">
+                Nền tảng thiết kế{" "}
+                <span className="font-black text-white">
+                  bài giảng tương tác
+                </span>
+                , xuất bản{" "}
+                <span className="font-black text-amber-400">
+                  SCORM
+                </span>
+                .
+              </p>
+
+            </div>
+
+          </section>
+
+          {/* =================================================
+              CREATE NEW
+          ================================================= */}
+
+          <section className="mt-9">
+
+            <div className="flex items-center gap-3">
+              <span className="h-8 w-1.5 rounded-full bg-cyan-400" />
+              <h2 className="text-xl font-black tracking-tight">
+                TẠO MỚI DỰ ÁN
+              </h2>
+            </div>
+
+            <div className="mt-5 grid gap-5 xl:grid-cols-3">
+
+              <button
+                type="button"
+                onClick={
+                  handleCreate
+                }
+                disabled={
+                  globalBusy
+                }
+                className="group relative overflow-hidden rounded-[24px] border border-blue-500/60 bg-gradient-to-br from-[#10466e] via-[#27397c] to-[#45246c] p-6 text-left shadow-[0_18px_55px_rgba(0,0,0,0.22)] transition hover:-translate-y-1 hover:border-cyan-400/70 disabled:opacity-50"
+              >
+
+                <div className="absolute inset-0 opacity-[0.08] [background-image:radial-gradient(circle_at_1px_1px,white_1px,transparent_0)] [background-size:20px_20px]" />
+
+                <div className="relative">
+
+                  <div className="flex items-center justify-between gap-3">
+
+                    <span className="rounded-full border border-cyan-300/25 bg-cyan-400/15 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-cyan-200">
+                      ● Bài giảng đơn
+                    </span>
+
+                    <span className="flex items-center gap-1 rounded-full bg-white px-4 py-2 text-xs font-black text-slate-900 shadow-lg">
+                      Bấm để tạo
+                      <ChevronRight
+                        size={15}
+                      />
+                    </span>
+
+                  </div>
+
+                  <div className="mt-7 flex items-center gap-5">
+
+                    <div className="flex h-[86px] w-[86px] shrink-0 items-center justify-center rounded-2xl border border-cyan-300/30 bg-gradient-to-br from-cyan-500/20 to-purple-500/20 text-cyan-200">
+                      <Play
+                        size={42}
+                      />
+                    </div>
+
+                    <div className="text-[26px] font-black leading-[1.06]">
+                      BÀI GIẢNG TƯƠNG
+                      <br />
+                      TÁC ĐƠN
+                    </div>
+
+                  </div>
+
+                </div>
+
+              </button>
+
+              <div className="relative overflow-hidden rounded-[24px] border border-emerald-500/45 bg-gradient-to-br from-[#07505a] via-[#075c65] to-[#075a73] p-6 opacity-80">
+
+                <div className="absolute inset-0 opacity-[0.08] [background-image:radial-gradient(circle_at_1px_1px,white_1px,transparent_0)] [background-size:20px_20px]" />
+
+                <div className="relative">
+
+                  <div className="flex items-center justify-between gap-3">
+
+                    <span className="rounded-full border border-emerald-300/25 bg-emerald-400/15 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-emerald-200">
+                      ● Lộ trình đa bài
+                    </span>
+
+                    <span className="rounded-full bg-white px-4 py-2 text-xs font-black text-slate-900">
+                      Sắp có
+                    </span>
+
+                  </div>
+
+                  <div className="mt-7 flex items-center gap-5">
+
+                    <div className="flex h-[86px] w-[86px] shrink-0 items-center justify-center rounded-2xl border border-emerald-300/30 bg-emerald-400/10 text-emerald-200">
+                      <Layers3
+                        size={42}
+                      />
+                    </div>
+
+                    <div className="text-[26px] font-black leading-[1.06]">
+                      KHÓA HỌC HUB
+                    </div>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+              <div className="relative overflow-hidden rounded-[24px] border border-amber-500/45 bg-gradient-to-br from-[#624318] via-[#702f28] to-[#64264b] p-6 opacity-80">
+
+                <div className="absolute inset-0 opacity-[0.08] [background-image:radial-gradient(circle_at_1px_1px,white_1px,transparent_0)] [background-size:20px_20px]" />
+
+                <div className="relative">
+
+                  <div className="flex items-center justify-between gap-3">
+
+                    <span className="rounded-full border border-amber-300/25 bg-amber-400/15 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-amber-200">
+                      ● Gamification
+                    </span>
+
+                    <span className="rounded-full bg-white px-4 py-2 text-xs font-black text-slate-900">
+                      Sắp có
+                    </span>
+
+                  </div>
+
+                  <div className="mt-7 flex items-center gap-5">
+
+                    <div className="flex h-[86px] w-[86px] shrink-0 items-center justify-center rounded-2xl border border-amber-300/30 bg-amber-400/10 text-amber-200">
+                      <Gamepad2
+                        size={42}
+                      />
+                    </div>
+
+                    <div className="text-[26px] font-black leading-[1.06]">
+                      TRÒ CHƠI TƯƠNG
+                      <br />
+                      TÁC
+                    </div>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+            </div>
+
+          </section>
+
+          {/* =================================================
+              PROJECT LIBRARY
+          ================================================= */}
+
+          <section className="mt-10 pb-12">
+
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+
+              <div className="flex items-center gap-3">
+                <BookOpen
+                  size={24}
+                  className="text-cyan-300"
+                />
+                <h2 className="text-xl font-black">
+                  Bài giảng mới nhất
+                </h2>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    importInputRef.current?.click()
+                  }
+                  disabled={
+                    globalBusy
+                  }
+                  className="flex items-center gap-2 rounded-lg bg-blue-700/70 px-3 py-2 text-xs font-bold text-cyan-100 transition hover:bg-blue-600/80 disabled:opacity-50"
+                >
+                  {importing ? (
+                    <Loader2
+                      size={15}
+                      className="animate-spin"
+                    />
+                  ) : (
+                    <Upload
+                      size={15}
+                    />
+                  )}
+                  {importing
+                    ? "Đang nhập..."
+                    : "Nhập dự án"}
+                </button>
+
+                <a
+                  href="#all-projects"
+                  className="flex items-center gap-1 rounded-lg border border-cyan-700/50 bg-cyan-950/30 px-3 py-2 text-xs font-black text-cyan-300"
+                >
+                  XEM TẤT CẢ
+                  <ChevronRight
+                    size={14}
+                  />
+                </a>
+
+              </div>
+
+            </div>
+
+            {projects.length >
+              0 && (
+
+              <div
+                id="all-projects"
+                className="mt-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"
+              >
+
+                <div className="relative w-full lg:max-w-md">
+
+                  <Search
+                    size={17}
+                    className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500"
+                  />
+
+                  <input
+                    type="text"
+                    value={
+                      searchQuery
+                    }
+                    onChange={(
+                      event
+                    ) =>
+                      setSearchQuery(
+                        event.target.value
+                      )
+                    }
+                    placeholder="Tìm kiếm bài giảng..."
+                    className="w-full rounded-xl border border-blue-800/80 bg-[#0b2a4c] py-3 pl-10 pr-10 text-sm text-white outline-none placeholder:text-slate-600 focus:border-cyan-500"
+                  />
+
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSearchQuery(
+                          ""
+                        )
+                      }
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-slate-500 hover:bg-white/5 hover:text-white"
+                    >
+                      <X
+                        size={15}
+                      />
+                    </button>
+                  )}
+
+                </div>
+
+                <div className="flex items-center gap-2">
+
+                  <select
+                    value={
+                      sortMode
+                    }
+                    onChange={(
+                      event
+                    ) =>
+                      setSortMode(
+                        event.target.value as SortMode
+                      )
+                    }
+                    className="rounded-xl border border-blue-800/80 bg-[#0b2a4c] px-4 py-3 text-sm font-bold text-white outline-none focus:border-cyan-500"
+                  >
+                    <option value="updated-desc">
+                      Mới cập nhật
+                    </option>
+                    <option value="updated-asc">
+                      Cũ nhất
+                    </option>
+                    <option value="title-asc">
+                      Tên A → Z
+                    </option>
+                    <option value="title-desc">
+                      Tên Z → A
+                    </option>
+                  </select>
+
+                  <div className="rounded-xl bg-[#0b2a4c] px-4 py-3 text-xs font-bold text-slate-400">
+                    {visibleProjects.length} dự án
+                  </div>
+
+                </div>
+
+              </div>
+
+            )}
+
+            {projects.length ===
+            0 ? (
+
+              <div className="mt-6 rounded-[24px] border border-dashed border-blue-700/60 bg-[#0b2a4c] p-12 text-center">
+
+                <FolderOpen
+                  size={48}
+                  className="mx-auto text-cyan-300"
+                />
+
+                <h3 className="mt-4 text-2xl font-black">
+                  Chưa có bài giảng
+                </h3>
+
+                <p className="mt-2 text-slate-400">
+                  Tạo bài giảng đầu tiên hoặc nhập dự án đã sao lưu.
+                </p>
+
+              </div>
+
+            ) : visibleProjects.length ===
+              0 ? (
+
+              <div className="mt-6 rounded-[24px] border border-dashed border-blue-700/60 bg-[#0b2a4c] p-12 text-center">
+                <Search
+                  size={44}
+                  className="mx-auto text-cyan-300"
+                />
+                <h3 className="mt-4 text-xl font-black">
+                  Không tìm thấy bài giảng
+                </h3>
+              </div>
+
+            ) : (
+
+              <div className="mt-6 grid gap-5 md:grid-cols-2 2xl:grid-cols-3">
+
+                {visibleProjects.map(
+                  (entry) => {
+                    const project =
+                      entry.project;
+
+                    const quizCount =
+                      getProjectQuizCount(
+                        project
+                      );
+
+                    const thumbnail =
+                      thumbnails[
+                        project.id
+                      ];
+
+                    const isDuplicating =
+                      duplicatingId ===
+                      project.id;
+
+                    const isThumbnailBusy =
+                      thumbnailBusyId ===
+                      project.id;
+
+                    const isBackupBusy =
+                      backupBusyId ===
+                      project.id;
+
+                    return (
+                      <article
+                        key={
+                          project.id
+                        }
+                        className="group overflow-hidden rounded-[20px] border border-blue-800/70 bg-[#0d315a] shadow-[0_14px_45px_rgba(0,0,0,0.2)] transition hover:-translate-y-1 hover:border-cyan-500/50"
+                      >
+
+                        <div className="relative h-48 overflow-hidden bg-gradient-to-br from-[#1b4b8a] via-[#20447d] to-[#17335f]">
+
+                          {thumbnail ? (
+                            <img
+                              src={
+                                thumbnail
+                              }
+                              alt={`Ảnh đại diện ${project.title}`}
+                              className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
+                            />
+                          ) : (
+                            <div className="flex h-full items-center justify-center">
+                              <Play
+                                size={42}
+                                className="text-white/15"
+                              />
+                            </div>
+                          )}
+
+                          <div className="absolute left-4 top-4 rounded-lg border border-cyan-300/30 bg-sky-500/20 px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-cyan-200 backdrop-blur">
+                            {project.pages.length} TRANG
+                          </div>
+
+                          <div className="absolute inset-x-0 bottom-0 flex justify-end gap-2 bg-gradient-to-t from-black/75 via-black/20 to-transparent p-3 pt-12">
+
+                            <input
+                              id={`thumbnail-${project.id}`}
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp,image/gif"
+                              className="hidden"
+                              disabled={
+                                globalBusy
+                              }
+                              onChange={(
+                                event
+                              ) =>
+                                void handleThumbnailChange(
+                                  entry,
+                                  event
+                                )
+                              }
+                            />
+
+                            <label
+                              htmlFor={`thumbnail-${project.id}`}
+                              className={`flex cursor-pointer items-center gap-1.5 rounded-lg bg-black/55 px-3 py-2 text-[11px] font-black backdrop-blur transition hover:bg-black/75 ${
+                                globalBusy
+                                  ? "pointer-events-none opacity-50"
+                                  : ""
+                              }`}
+                            >
+                              {isThumbnailBusy ? (
+                                <Loader2
+                                  size={13}
+                                  className="animate-spin"
+                                />
+                              ) : (
+                                <ImagePlus
+                                  size={13}
+                                />
+                              )}
+                              {thumbnail
+                                ? "Đổi ảnh"
+                                : "Thêm ảnh"}
+                            </label>
+
+                            {thumbnail && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  void handleDeleteThumbnail(
+                                    entry
+                                  )
+                                }
+                                disabled={
+                                  globalBusy
+                                }
+                                className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-950/75 text-red-200 backdrop-blur hover:bg-red-900 disabled:opacity-50"
+                              >
+                                <ImageOff
+                                  size={14}
+                                />
+                              </button>
+                            )}
+
+                          </div>
+
+                        </div>
+
+                        <div className="p-5">
+
+                          <div className="text-[10px] font-black uppercase tracking-[0.15em] text-cyan-300">
+                            Bài giảng
+                          </div>
+
+                          <h3 className="mt-2 line-clamp-2 min-h-[52px] text-xl font-black leading-snug">
+                            {project.title}
+                          </h3>
+
+                          <div className="mt-4 grid grid-cols-2 gap-2">
+
+                            <div className="rounded-xl bg-[#0a294b] p-3">
+                              <div className="flex items-center gap-2 text-[10px] font-bold uppercase text-slate-500">
+                                <Layers3
+                                  size={13}
+                                />
+                                Số trang
+                              </div>
+                              <div className="mt-1 text-xl font-black text-cyan-300">
+                                {project.pages.length}
+                              </div>
+                            </div>
+
+                            <div className="rounded-xl bg-[#0a294b] p-3">
+                              <div className="flex items-center gap-2 text-[10px] font-bold uppercase text-slate-500">
+                                <FileQuestion
+                                  size={13}
+                                />
+                                Câu hỏi
+                              </div>
+                              <div className="mt-1 text-xl font-black text-fuchsia-300">
+                                {quizCount}
+                              </div>
+                            </div>
+
+                          </div>
+
+                          <div className="mt-4 flex items-center gap-2 text-[11px] text-slate-500">
+                            <Clock3
+                              size={13}
+                            />
+                            Cập nhật:{" "}
+                            {formatUpdatedAt(
+                              entry.updatedAt
+                            )}
+                          </div>
+
+                          <div className="mt-5 flex items-center gap-2">
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleOpen(
+                                  entry
+                                )
+                              }
+                              disabled={
+                                globalBusy
+                              }
+                              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-black transition hover:bg-blue-500 disabled:opacity-50"
+                            >
+                              <FolderOpen
+                                size={17}
+                              />
+                              Mở dự án
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void handleDuplicate(
+                                  entry
+                                )
+                              }
+                              disabled={
+                                globalBusy
+                              }
+                              title="Nhân bản"
+                              className="flex h-11 w-11 items-center justify-center rounded-xl bg-purple-950/60 text-purple-200 transition hover:bg-purple-900 disabled:opacity-50"
+                            >
+                              {isDuplicating ? (
+                                <Loader2
+                                  size={17}
+                                  className="animate-spin"
+                                />
+                              ) : (
+                                <Copy
+                                  size={17}
+                                />
+                              )}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void handleBackup(
+                                  entry
+                                )
+                              }
+                              disabled={
+                                globalBusy
+                              }
+                              title="Sao lưu"
+                              className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-950/60 text-emerald-200 transition hover:bg-emerald-900 disabled:opacity-50"
+                            >
+                              {isBackupBusy ? (
+                                <Loader2
+                                  size={17}
+                                  className="animate-spin"
+                                />
+                              ) : (
+                                <Download
+                                  size={17}
+                                />
+                              )}
+                            </button>
+
+                          </div>
+
+                          <div className="mt-2 grid grid-cols-2 gap-2">
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleRename(
+                                  entry
+                                )
+                              }
+                              disabled={
+                                globalBusy
+                              }
+                              className="flex items-center justify-center gap-2 rounded-xl border border-blue-800 bg-[#12365f] px-3 py-2.5 text-xs font-bold text-slate-300 hover:text-white disabled:opacity-50"
+                            >
+                              <Pencil
+                                size={14}
+                              />
+                              Đổi tên
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleDelete(
+                                  entry
+                                )
+                              }
+                              disabled={
+                                globalBusy
+                              }
+                              className="flex items-center justify-center gap-2 rounded-xl border border-red-900 bg-red-950/25 px-3 py-2.5 text-xs font-bold text-red-300 hover:bg-red-950/50 disabled:opacity-50"
+                            >
+                              <Trash2
+                                size={14}
+                              />
+                              Xóa
+                            </button>
+
+                          </div>
+
+                        </div>
+
+                      </article>
+                    );
+                  }
+                )}
+
+              </div>
+
+            )}
+
+          </section>
+
+        </div>
+
+      </div>
+
+    </main>
+  );
+}
