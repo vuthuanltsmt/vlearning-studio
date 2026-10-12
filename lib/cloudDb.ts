@@ -1,28 +1,18 @@
-import {
-  PrismaClient,
-} from "@/generated/cloud-prisma";
+import { db } from "@/lib/db";
 
-const globalForCloudPrisma =
-  globalThis as unknown as {
-    cloudPrisma:
-      | PrismaClient
-      | undefined;
-  };
+/**
+ * Cloud Project dùng chung Prisma Client với:
+ * - User
+ * - Session
+ * - CloudProject
+ *
+ * Tất cả đều nằm trong cùng Neon PostgreSQL.
+ */
+export const cloudDb = db;
 
-export const cloudDb =
-  globalForCloudPrisma.cloudPrisma ??
-  new PrismaClient();
-
-if (
-  process.env.NODE_ENV !==
-  "production"
-) {
-  globalForCloudPrisma.cloudPrisma =
-    cloudDb;
-}
-
+/**
+ * Kiểm tra database PostgreSQL đã được cấu hình hay chưa.
+ */
 export function cloudDatabaseConfigured() {
-  return Boolean(
-    process.env.CLOUD_DATABASE_URL?.trim()
-  );
+  return Boolean(process.env.DATABASE_URL?.trim());
 }

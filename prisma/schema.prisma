@@ -3,8 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./vlearning.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -22,7 +22,8 @@ model User {
   lastLoginAt      DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
-  sessions         Session[]
+
+  sessions Session[]
 }
 
 model Session {
@@ -31,8 +32,24 @@ model Session {
   tokenHash String   @unique
   expiresAt DateTime
   createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+model CloudProject {
+  id              String    @id @default(cuid())
+  ownerUserId     String
+  projectId       String
+  title           String
+  snapshotJson    String
+  clientUpdatedAt DateTime?
+  version         Int       @default(1)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([ownerUserId, projectId])
+  @@index([ownerUserId, updatedAt])
 }
