@@ -104,6 +104,10 @@ import {
 } from "@/lib/permissions";
 
 import {
+  roleHomeFor,
+} from "@/lib/roleHome";
+
+import {
   getCloudProjectClient,
   getCloudStatusClient,
   listCloudProjectsClient,
@@ -4448,6 +4452,12 @@ function AccountPanel({
       setMessage(
         "Đăng nhập máy chủ thành công."
       );
+
+      window.location.assign(
+        roleHomeFor(
+          user.accessRole
+        )
+      );
     } catch (
       authError
     ) {
@@ -4523,6 +4533,12 @@ function AccountPanel({
       );
       setMessage(
         "Đã tạo tài khoản trên máy chủ và đăng nhập."
+      );
+
+      window.location.assign(
+        roleHomeFor(
+          user.accessRole
+        )
       );
     } catch (
       authError
