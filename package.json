@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "desktop": "electron desktop/main.cjs",
+    "desktop:build": "electron-builder --win nsis --x64"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
@@ -23,6 +25,8 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
     "eslint": "^9",
     "eslint-config-next": "16.3.8",
     "prisma": "^6.19.3",
@@ -31,5 +35,6 @@
   },
   "allowScripts": {
     "unrs-resolver@1.12.2": true
-  }
+  },
+  "main": "desktop/main.cjs"
 }

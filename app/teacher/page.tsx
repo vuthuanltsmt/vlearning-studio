@@ -10,6 +10,11 @@ export default async function TeacherPage() {
   if (!canAuthor(user.accessRole)) redirect(roleHomeFor(user.accessRole));
 
   const cards = [
+    {
+      href: "/teacher/publish",
+      title: "Xuất bản bài giảng",
+      text: "Chọn dự án Cloud để phát hành hoặc thu hồi khỏi cổng học viên.",
+    },
     { href: "/projects", title: "Dự án của tôi", text: "Tạo, mở, sao lưu và đồng bộ bài giảng với Cloud." },
     { href: "/editor/demo", title: "Trình biên soạn", text: "Thiết kế trang học, video và câu hỏi tương tác." },
     { href: "/preview/demo", title: "Xem trước bài học", text: "Kiểm tra trải nghiệm học viên trước khi phát hành." },

@@ -42,3 +42,25 @@ next-env.d.ts
 
 # Large local SCORM media
 public/scorm-test/media/*.mp4
+.vercel
+.env*
+
+dist-desktop/
+
+# Electron desktop build output
+dist-desktop/
+
+# Generated Prisma Cloud client - regenerated during build
+generated/cloud-prisma/
+
+# Local backup files
+*.bak
+
+# Temporary setup helpers
+scripts/setup-copyright-vlearning.cjs
+scripts/setup-publish-workflow.cjs
+scripts/setup-role-portals.cjs
+
+.env
+.env.local
+.env*.local

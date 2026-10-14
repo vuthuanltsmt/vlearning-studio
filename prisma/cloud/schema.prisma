@@ -1,11 +1,41 @@
 generator client {
   provider = "prisma-client-js"
-  output   = "../../generated/cloud-prisma"
 }
 
 datasource db {
   provider = "postgresql"
-  url = env("DATABASE_URL")
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String    @id @default(cuid())
+  email            String    @unique
+  displayName      String
+  role             String    @default("Giáo viên")
+  organization     String    @default("")
+  accessRole       String    @default("TEACHER")
+  isActive         Boolean   @default(true)
+  passwordHash     String
+  passwordSalt     String
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime?
+  lastLoginAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  sessions         Session[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model CloudProject {

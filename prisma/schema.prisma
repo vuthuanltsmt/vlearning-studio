@@ -47,8 +47,12 @@ model CloudProject {
   snapshotJson    String
   clientUpdatedAt DateTime?
   version         Int       @default(1)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+
+  isPublished Boolean   @default(false)
+  publicSlug  String?   @unique
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@unique([ownerUserId, projectId])
   @@index([ownerUserId, updatedAt])
