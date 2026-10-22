@@ -44,6 +44,10 @@ import {
 } from "@/stores/editorStore";
 
 import {
+  saveVideo,
+} from "@/lib/videoDb";
+
+import {
   createEmptyDraft,
   createInitialClassificationSelections,
   createInitialOrderingOrder,
@@ -402,8 +406,12 @@ export default function EditorPage() {
      VIDEO UPLOAD
   ======================================================= */
 
-  function handleVideoUpload(
+  async function handleVideoUpload(
+
+
     file: File
+
+
   ) {
     if (!page) {
       return;
@@ -422,6 +430,54 @@ export default function EditorPage() {
         oldUrl
       );
     }
+
+    try {
+
+
+      await saveVideo(
+
+
+        page.id,
+
+
+        file
+
+
+      );
+
+
+    } catch (error) {
+
+
+      console.error(
+
+
+        "Không thể lưu video vào IndexedDB:",
+
+
+        error
+
+
+      );
+
+
+
+      alert(
+
+
+        "Không thể lưu file video vào bộ nhớ trình duyệt. Vui lòng thử lại."
+
+
+      );
+
+
+
+      return;
+
+
+    }
+
+
 
     const url =
       URL.createObjectURL(
