@@ -9,6 +9,7 @@ import {
   Gamepad2,
   Globe2,
   LogIn,
+  Landmark,
   MonitorDown,
   Palette,
   Settings,
@@ -21,6 +22,7 @@ import {
 
 import {
   useEffect,
+  useRef,
   useState,
 } from "react";
 
@@ -80,6 +82,17 @@ export default function LeftSidebar({
       null
     );
 
+  const avatarInputRef =
+    useRef<HTMLInputElement | null>(
+      null
+    );
+
+  const [
+    avatarUrl,
+    setAvatarUrl,
+  ] =
+    useState("");
+
   useEffect(() => {
     async function refreshAuth() {
       setSession(
@@ -119,6 +132,146 @@ export default function LeftSidebar({
   }, [
     currentUser,
   ]);
+
+  useEffect(() => {
+    if (!session?.email) {
+      setAvatarUrl("");
+      return;
+    }
+
+    try {
+      const saved =
+        localStorage.getItem(
+          `vlearning-teacher-avatar:${session.email.toLowerCase()}`
+        );
+
+      setAvatarUrl(
+        saved ?? ""
+      );
+    } catch {
+      setAvatarUrl("");
+    }
+  }, [
+    session?.email,
+  ]);
+
+  function handleAvatarFile(
+    file: File
+  ) {
+    if (!session?.email) {
+      return;
+    }
+
+    if (
+      !file.type.startsWith(
+        "image/"
+      )
+    ) {
+      window.alert(
+        "Vui lòng chọn file ảnh."
+      );
+      return;
+    }
+
+    const reader =
+      new FileReader();
+
+    reader.onload =
+      () => {
+        if (
+          typeof reader.result !==
+          "string"
+        ) {
+          return;
+        }
+
+        const image =
+          new Image();
+
+        image.onload =
+          () => {
+            const canvas =
+              document.createElement(
+                "canvas"
+              );
+
+            const size =
+              256;
+
+            canvas.width =
+              size;
+            canvas.height =
+              size;
+
+            const context =
+              canvas.getContext(
+                "2d"
+              );
+
+            if (!context) {
+              return;
+            }
+
+            const side =
+              Math.min(
+                image.width,
+                image.height
+              );
+
+            const sx =
+              (
+                image.width -
+                side
+              ) / 2;
+
+            const sy =
+              (
+                image.height -
+                side
+              ) / 2;
+
+            context.drawImage(
+              image,
+              sx,
+              sy,
+              side,
+              side,
+              0,
+              0,
+              size,
+              size
+            );
+
+            const compact =
+              canvas.toDataURL(
+                "image/jpeg",
+                0.86
+              );
+
+            try {
+              localStorage.setItem(
+                `vlearning-teacher-avatar:${session.email.toLowerCase()}`,
+                compact
+              );
+
+              setAvatarUrl(
+                compact
+              );
+            } catch {
+              window.alert(
+                "Không thể lưu ảnh đại diện trên trình duyệt."
+              );
+            }
+          };
+
+        image.src =
+          reader.result;
+      };
+
+    reader.readAsDataURL(
+      file
+    );
+  }
 
   const authorAllowed =
     canAuthor(
@@ -212,9 +365,58 @@ export default function LeftSidebar({
           <div className={`overflow-hidden rounded-2xl border border-blue-800/70 bg-[#1a477d] shadow-lg ${collapsed ? "xl:px-2 xl:py-3" : ""}`}>
             <div className={collapsed ? "p-4 xl:p-0" : "p-4"}>
               <div className="flex flex-col items-center text-center">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-white/5 text-slate-200">
-                  <User size={20} />
-                </div>
+                <input
+                  ref={
+                    avatarInputRef
+                  }
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(
+                    event
+                  ) => {
+                    const file =
+                      event.target.files?.[
+                        0
+                      ];
+
+                    if (file) {
+                      handleAvatarFile(
+                        file
+                      );
+                    }
+
+                    event.currentTarget.value =
+                      "";
+                  }}
+                />
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    avatarInputRef.current?.click()
+                  }
+                  title="Đổi ảnh đại diện"
+                  className="group relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border border-white/25 bg-white/5 text-slate-200 shadow-md transition hover:border-cyan-300/70"
+                >
+                  {avatarUrl ? (
+                    <img
+                      src={
+                        avatarUrl
+                      }
+                      alt="Ảnh đại diện giáo viên"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <User
+                      size={24}
+                    />
+                  )}
+
+                  <span className="absolute inset-x-0 bottom-0 hidden bg-black/55 py-1 text-[8px] font-bold text-white group-hover:block">
+                    Đổi ảnh
+                  </span>
+                </button>
 
                 <div className={collapsed ? "xl:hidden" : ""}>
                   <div className="mt-3 text-sm font-black text-slate-200">
@@ -247,6 +449,24 @@ export default function LeftSidebar({
                       ? "TÀI KHOẢN"
                       : "ĐĂNG NHẬP"}
                   </button>
+
+                  {session && (
+                    <div className="mt-2 space-y-1 text-center">
+                      <div className="text-[9px] font-semibold text-slate-300/80">
+                        Bản quyền Vũ Trọng Thuấn
+                      </div>
+
+                      <div className="flex items-center justify-center gap-1 text-[9px] text-cyan-200/80">
+                        <Landmark
+                          size={11}
+                          aria-hidden="true"
+                        />
+                        <span>
+                          Ngân hàng
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
