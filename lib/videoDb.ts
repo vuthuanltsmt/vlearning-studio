@@ -8,7 +8,7 @@ const VIDEO_STORE =
   "videos";
 
 /* =========================================================
-   MỞ DATABASE
+   OPEN DATABASE
 ========================================================= */
 
 function openDatabase(): Promise<IDBDatabase> {
@@ -22,15 +22,13 @@ function openDatabase(): Promise<IDBDatabase> {
 
       request.onerror =
         () => {
-          reject(
+          console.error(
+            "[VIDEO DB] Không mở được IndexedDB:",
             request.error
           );
-        };
 
-      request.onsuccess =
-        () => {
-          resolve(
-            request.result
+          reject(
+            request.error
           );
         };
 
@@ -49,49 +47,11 @@ function openDatabase(): Promise<IDBDatabase> {
             );
           }
         };
-    }
-  );
-}
-
-/* =========================================================
-   LƯU VIDEO
-========================================================= */
-
-export async function saveVideo(
-  pageId: string,
-  file: File
-) {
-  const db =
-    await openDatabase();
-
-  return new Promise<void>(
-    (resolve, reject) => {
-      const transaction =
-        db.transaction(
-          VIDEO_STORE,
-          "readwrite"
-        );
-
-      const store =
-        transaction.objectStore(
-          VIDEO_STORE
-        );
-
-      const request =
-        store.put(
-          file,
-          pageId
-        );
 
       request.onsuccess =
         () => {
-          resolve();
-        };
-
-      request.onerror =
-        () => {
-          reject(
-            request.error
+          resolve(
+            request.result
           );
         };
     }
@@ -99,7 +59,107 @@ export async function saveVideo(
 }
 
 /* =========================================================
-   ĐỌC VIDEO
+   SAVE VIDEO
+
+   Quan trọng:
+   Chỉ resolve khi transaction.oncomplete.
+   Không resolve sớm tại request.onsuccess.
+========================================================= */
+
+export async function saveVideo(
+  pageId: string,
+  file: File
+): Promise<void> {
+  const db =
+    await openDatabase();
+
+  try {
+    await new Promise<void>(
+      (
+        resolve,
+        reject
+      ) => {
+        const transaction =
+          db.transaction(
+            VIDEO_STORE,
+            "readwrite"
+          );
+
+        const store =
+          transaction.objectStore(
+            VIDEO_STORE
+          );
+
+        const request =
+          store.put(
+            file,
+            pageId
+          );
+
+        request.onerror =
+          () => {
+            console.error(
+              "[VIDEO DB] store.put lỗi:",
+              request.error
+            );
+          };
+
+        transaction.oncomplete =
+          () => {
+            console.log(
+              "[VIDEO DB] ✅ Đã lưu video:",
+              {
+                pageId,
+                fileName:
+                  file.name,
+                fileSize:
+                  file.size,
+                fileType:
+                  file.type,
+              }
+            );
+
+            resolve();
+          };
+
+        transaction.onerror =
+          () => {
+            console.error(
+              "[VIDEO DB] ❌ Transaction lỗi:",
+              transaction.error
+            );
+
+            reject(
+              transaction.error ??
+                new Error(
+                  "Không thể lưu video."
+                )
+            );
+          };
+
+        transaction.onabort =
+          () => {
+            console.error(
+              "[VIDEO DB] ❌ Transaction bị hủy:",
+              transaction.error
+            );
+
+            reject(
+              transaction.error ??
+                new Error(
+                  "Transaction lưu video bị hủy."
+                )
+            );
+          };
+      }
+    );
+  } finally {
+    db.close();
+  }
+}
+
+/* =========================================================
+   GET VIDEO
 ========================================================= */
 
 export async function getVideo(
@@ -108,81 +168,159 @@ export async function getVideo(
   const db =
     await openDatabase();
 
-  return new Promise(
-    (resolve, reject) => {
-      const transaction =
-        db.transaction(
-          VIDEO_STORE,
-          "readonly"
-        );
+  try {
+    return await new Promise<
+      File | null
+    >(
+      (
+        resolve,
+        reject
+      ) => {
+        const transaction =
+          db.transaction(
+            VIDEO_STORE,
+            "readonly"
+          );
 
-      const store =
-        transaction.objectStore(
-          VIDEO_STORE
-        );
+        const store =
+          transaction.objectStore(
+            VIDEO_STORE
+          );
 
-      const request =
-        store.get(
-          pageId
-        );
+        const request =
+          store.get(
+            pageId
+          );
 
-      request.onsuccess =
-        () => {
-          resolve(
-            request.result ??
+        request.onsuccess =
+          () => {
+            const result =
+              request.result;
+
+            if (
+              result instanceof
+              File
+            ) {
+              resolve(
+                result
+              );
+
+              return;
+            }
+
+            if (
+              result instanceof
+              Blob
+            ) {
+              resolve(
+                new File(
+                  [result],
+                  "video.mp4",
+                  {
+                    type:
+                      result.type ||
+                      "video/mp4",
+                  }
+                )
+              );
+
+              return;
+            }
+
+            resolve(
               null
-          );
-        };
+            );
+          };
 
-      request.onerror =
-        () => {
-          reject(
-            request.error
-          );
-        };
-    }
-  );
+        request.onerror =
+          () => {
+            console.error(
+              "[VIDEO DB] Không đọc được video:",
+              request.error
+            );
+
+            reject(
+              request.error
+            );
+          };
+      }
+    );
+  } finally {
+    db.close();
+  }
 }
 
 /* =========================================================
-   XÓA VIDEO
+   DELETE VIDEO
 ========================================================= */
 
 export async function deleteVideo(
   pageId: string
-) {
+): Promise<void> {
   const db =
     await openDatabase();
 
-  return new Promise<void>(
-    (resolve, reject) => {
-      const transaction =
-        db.transaction(
-          VIDEO_STORE,
-          "readwrite"
-        );
+  try {
+    await new Promise<void>(
+      (
+        resolve,
+        reject
+      ) => {
+        const transaction =
+          db.transaction(
+            VIDEO_STORE,
+            "readwrite"
+          );
 
-      const store =
-        transaction.objectStore(
-          VIDEO_STORE
-        );
+        const store =
+          transaction.objectStore(
+            VIDEO_STORE
+          );
 
-      const request =
         store.delete(
           pageId
         );
 
-      request.onsuccess =
-        () => {
-          resolve();
-        };
+        transaction.oncomplete =
+          () => {
+            resolve();
+          };
 
-      request.onerror =
-        () => {
-          reject(
-            request.error
-          );
-        };
-    }
+        transaction.onerror =
+          () => {
+            reject(
+              transaction.error
+            );
+          };
+
+        transaction.onabort =
+          () => {
+            reject(
+              transaction.error
+            );
+          };
+      }
+    );
+  } finally {
+    db.close();
+  }
+}
+
+/* =========================================================
+   DEBUG / VERIFY VIDEO
+
+   Dùng để kiểm tra sau khi lưu.
+========================================================= */
+
+export async function hasVideo(
+  pageId: string
+): Promise<boolean> {
+  const file =
+    await getVideo(
+      pageId
+    );
+
+  return Boolean(
+    file
   );
 }
