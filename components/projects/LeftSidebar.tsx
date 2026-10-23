@@ -465,6 +465,22 @@ export default function LeftSidebar({
                           Ngân hàng
                         </span>
                       </div>
+
+                      <div className="mt-3 flex flex-col items-center">
+                        <div className="rounded-xl bg-white p-2 shadow-lg">
+                          <img
+                            src="/agribank-qr-vutrongthuan.jpg"
+                            alt="QR ngân hàng Agribank"
+                            width={160}
+                            height={160}
+                            className="h-[160px] w-[160px] object-contain"
+                          />
+                        </div>
+
+                        <div className="mt-1 text-[9px] font-semibold text-slate-300/80">
+                          Quét QR ngân hàng
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
