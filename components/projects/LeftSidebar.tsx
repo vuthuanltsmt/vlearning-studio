@@ -471,9 +471,9 @@ export default function LeftSidebar({
                           <img
                             src="/agribank-qr-vutrongthuan.jpg"
                             alt="QR ngân hàng Agribank"
-                            width={160}
-                            height={160}
-                            className="h-[160px] w-[160px] object-contain"
+                            width={96}
+                            height={96}
+                            className="h-[96px] w-[96px] object-contain"
                           />
                         </div>
 
