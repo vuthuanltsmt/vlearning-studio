@@ -3,10 +3,6 @@
 import JSZip from "jszip";
 
 import {
-  convertPptxToSvg,
-} from "pptx-glimpse";
-
-import {
   setActiveProject,
 } from "@/lib/projectLibrary";
 
@@ -22,6 +18,29 @@ import type {
   LessonPage,
   ProjectDocument,
 } from "@/types/lesson";
+
+type StartResponse = {
+  ok: boolean;
+  error?: string;
+  jobId?: string;
+  upload?: {
+    url: string;
+    parameters: Record<
+      string,
+      string
+    >;
+  };
+};
+
+type StatusResponse = {
+  ok: boolean;
+  error?: string;
+  status?: string;
+  files?: Array<{
+    index: number;
+    filename: string;
+  }>;
+};
 
 function createId() {
   if (
@@ -48,6 +67,19 @@ function fileTitle(
     )
     .trim() ||
     "Bài giảng PowerPoint";
+}
+
+function sleep(
+  milliseconds: number
+) {
+  return new Promise<void>(
+    (resolve) => {
+      window.setTimeout(
+        resolve,
+        milliseconds
+      );
+    }
+  );
 }
 
 async function getSlideTitles(
@@ -169,6 +201,215 @@ async function getSlideTitles(
   return titles;
 }
 
+async function createConversionJob() {
+  const response =
+    await fetch(
+      "/api/pptx/start",
+      {
+        method:
+          "POST",
+        credentials:
+          "same-origin",
+        headers: {
+          "Content-Type":
+            "application/json",
+        },
+        body:
+          JSON.stringify({}),
+      }
+    );
+
+  const payload =
+    await response.json()
+      .catch(
+        () =>
+          null
+      ) as
+      StartResponse |
+      null;
+
+  if (
+    !response.ok ||
+    !payload?.ok ||
+    !payload.jobId ||
+    !payload.upload?.url
+  ) {
+    throw new Error(
+      payload?.error ||
+      "Không tạo được tác vụ chuyển đổi PowerPoint."
+    );
+  }
+
+  return {
+    jobId:
+      payload.jobId,
+    upload:
+      payload.upload,
+  };
+}
+
+async function uploadToCloudConvert(
+  file: File,
+  upload: {
+    url: string;
+    parameters: Record<
+      string,
+      string
+    >;
+  }
+) {
+  const form =
+    new FormData();
+
+  Object.entries(
+    upload.parameters
+  ).forEach(
+    (
+      [
+        key,
+        value,
+      ]
+    ) => {
+      form.append(
+        key,
+        value
+      );
+    }
+  );
+
+  form.append(
+    "file",
+    file,
+    file.name
+  );
+
+  const response =
+    await fetch(
+      upload.url,
+      {
+        method:
+          "POST",
+        body:
+          form,
+      }
+    );
+
+  if (
+    !response.ok
+  ) {
+    throw new Error(
+      "Không upload được PowerPoint lên CloudConvert."
+    );
+  }
+}
+
+async function waitForConversion(
+  jobId: string
+) {
+  const maxAttempts =
+    120;
+
+  for (
+    let attempt = 0;
+    attempt <
+    maxAttempts;
+    attempt++
+  ) {
+    const response =
+      await fetch(
+        `/api/pptx/status?jobId=${encodeURIComponent(
+          jobId
+        )}`,
+        {
+          credentials:
+            "same-origin",
+          cache:
+            "no-store",
+        }
+      );
+
+    const payload =
+      await response.json()
+        .catch(
+          () =>
+            null
+        ) as
+        StatusResponse |
+        null;
+
+    if (
+      !response.ok ||
+      !payload?.ok
+    ) {
+      throw new Error(
+        payload?.error ||
+        "Không đọc được trạng thái chuyển đổi PowerPoint."
+      );
+    }
+
+    if (
+      payload.status ===
+      "finished"
+    ) {
+      if (
+        !payload.files ||
+        payload.files.length <
+          1
+      ) {
+        throw new Error(
+          "CloudConvert hoàn tất nhưng không trả về ảnh slide."
+        );
+      }
+
+      return payload.files;
+    }
+
+    await sleep(
+      1500
+    );
+  }
+
+  throw new Error(
+    "Chuyển đổi PowerPoint mất quá nhiều thời gian. Vui lòng thử lại."
+  );
+}
+
+async function downloadSlide(
+  jobId: string,
+  index: number
+) {
+  const response =
+    await fetch(
+      `/api/pptx/file?jobId=${encodeURIComponent(
+        jobId
+      )}&index=${index}`,
+      {
+        credentials:
+          "same-origin",
+        cache:
+          "no-store",
+      }
+    );
+
+  if (
+    !response.ok
+  ) {
+    const payload =
+      await response.json()
+        .catch(
+          () =>
+            null
+        );
+
+    throw new Error(
+      payload?.error ||
+      `Không tải được ảnh slide ${index + 1}.`
+    );
+  }
+
+  return await response.blob();
+}
+
 export async function importPptxAsProject(
   file: File
 ): Promise<ProjectDocument> {
@@ -184,46 +425,29 @@ export async function importPptxAsProject(
     );
   }
 
-  const [
-    bytes,
-    titles,
-  ] =
-    await Promise.all([
+  const titlesPromise =
+    getSlideTitles(
       file
-        .arrayBuffer()
-        .then(
-          (buffer) =>
-            new Uint8Array(
-              buffer
-            )
-        ),
-
-      getSlideTitles(
-        file
-      ),
-    ]);
-
-  const report =
-    await convertPptxToSvg(
-      bytes,
-      {
-        textOutput:
-          "text",
-
-        logLevel:
-          "off",
-      }
     );
 
-  if (
-    !report.slides ||
-    report.slides.length <
-      1
-  ) {
-    throw new Error(
-      "Không render được slide từ file PPTX."
+  const {
+    jobId,
+    upload,
+  } =
+    await createConversionJob();
+
+  await uploadToCloudConvert(
+    file,
+    upload
+  );
+
+  const files =
+    await waitForConversion(
+      jobId
     );
-  }
+
+  const titles =
+    await titlesPromise;
 
   const pages:
     LessonPage[] =
@@ -236,31 +460,13 @@ export async function importPptxAsProject(
   for (
     let index = 0;
     index <
-    report.slides.length;
+    files.length;
     index++
   ) {
-    const rendered =
-      report.slides[
-        index
-      ];
-
-    if (
-      !rendered?.svg
-    ) {
-      throw new Error(
-        `Không render được slide ${index + 1}.`
-      );
-    }
-
     const blob =
-      new Blob(
-        [
-          rendered.svg,
-        ],
-        {
-          type:
-            "image/svg+xml",
-        }
+      await downloadSlide(
+        jobId,
+        index
       );
 
     const pageId =
@@ -291,7 +497,9 @@ export async function importPptxAsProject(
         "",
 
       slideImageName:
-        `slide-${index + 1}.svg`,
+        files[index]
+          ?.filename ||
+        `slide-${index + 1}.png`,
 
       duration:
         10,
@@ -337,16 +545,6 @@ export async function importPptxAsProject(
         error
       );
     }
-  }
-
-  if (
-    report.diagnostics
-      ?.length
-  ) {
-    console.info(
-      "PPTX diagnostics:",
-      report.diagnostics
-    );
   }
 
   return project;
