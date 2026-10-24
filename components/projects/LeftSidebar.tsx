@@ -350,7 +350,7 @@ export default function LeftSidebar({
           type="button"
           onClick={onToggle}
           title={collapsed ? "Mở rộng thanh bên" : "Thu gọn thanh bên"}
-          className="absolute -right-4 top-[34%] z-50 hidden h-16 w-8 items-center justify-center rounded-r-2xl border border-l-0 border-cyan-400/60 bg-gradient-to-b from-cyan-400 to-purple-600 text-white shadow-[0_0_20px_rgba(34,211,238,0.35)] xl:flex"
+          className="absolute -right-4 top-24 z-50 hidden h-16 w-8 items-center justify-center rounded-r-2xl border border-l-0 border-cyan-400/60 bg-gradient-to-b from-cyan-400 to-purple-600 text-white shadow-[0_0_20px_rgba(34,211,238,0.35)] xl:flex"
         >
           {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
         </button>
