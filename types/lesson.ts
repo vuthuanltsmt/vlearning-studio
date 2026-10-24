@@ -110,6 +110,10 @@ export type LessonPage = {
   // URL tạm để phát video trong trình duyệt
   videoUrl?: string;
 
+  // Ảnh slide tĩnh được nhập từ PowerPoint.
+  // File thật được lưu trong IndexedDB theo page.id.
+  slideImageName?: string;
+
   // Thời lượng video tính bằng giây
   duration: number;
 

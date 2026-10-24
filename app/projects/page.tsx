@@ -67,6 +67,10 @@ import {
 } from "@/lib/projectBackup";
 
 import {
+  importPptxAsProject,
+} from "@/lib/pptxImport";
+
+import {
   logActivity,
 } from "@/lib/activityLog";
 
@@ -5721,6 +5725,11 @@ export default function ProjectsPage() {
       null
     );
 
+  const pptxInputRef =
+    useRef<HTMLInputElement>(
+      null
+    );
+
   const [
     projects,
     setProjects,
@@ -5770,6 +5779,12 @@ export default function ProjectsPage() {
   const [
     importing,
     setImporting,
+  ] =
+    useState(false);
+
+  const [
+    importingPptx,
+    setImportingPptx,
   ] =
     useState(false);
 
@@ -6333,6 +6348,7 @@ export default function ProjectsPage() {
     backupBusyId !==
       null ||
     importing ||
+    importingPptx ||
     cloudBusy;
 
   /* =====================================================
@@ -6903,6 +6919,102 @@ export default function ProjectsPage() {
   }
 
   /* =====================================================
+     IMPORT PPTX
+  ===================================================== */
+
+  async function handleImportPptx(
+    event:
+      ChangeEvent<HTMLInputElement>
+  ) {
+    const input =
+      event.currentTarget;
+
+    const file =
+      input.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    if (
+      !file.name
+        .toLowerCase()
+        .endsWith(
+          ".pptx"
+        )
+    ) {
+      alert(
+        "Vui lòng chọn file PowerPoint .pptx."
+      );
+
+      input.value =
+        "";
+
+      return;
+    }
+
+    setImportingPptx(
+      true
+    );
+
+    try {
+      const project =
+        await importPptxAsProject(
+          file
+        );
+
+      logActivity({
+        type:
+          "create_project",
+        projectId:
+          project.id,
+        projectTitle:
+          project.title,
+        message:
+          `Đã nhập PowerPoint "${project.title}" gồm ${project.pages.length} slide`,
+      });
+
+      refreshProjects();
+
+      alert(
+        [
+          "Nhập PowerPoint thành công!",
+          "",
+          `Tên: ${project.title}`,
+          `Số slide: ${project.pages.length}`,
+          "",
+          "Mỗi slide đã được tạo thành một trang trong bài giảng.",
+        ].join(
+          "\n"
+        )
+      );
+
+      window.location.href =
+        "/editor/demo";
+    } catch (
+      error
+    ) {
+      console.error(
+        "Nhập PPTX thất bại:",
+        error
+      );
+
+      alert(
+        error instanceof Error
+          ? `Không thể nhập PowerPoint:\n${error.message}`
+          : "Không thể nhập PowerPoint."
+      );
+    } finally {
+      input.value =
+        "";
+
+      setImportingPptx(
+        false
+      );
+    }
+  }
+
+  /* =====================================================
      DELETE PROJECT
   ===================================================== */
 
@@ -7165,6 +7277,18 @@ export default function ProjectsPage() {
             className="hidden"
             onChange={
               handleImportBackup
+            }
+          />
+
+          <input
+            ref={
+              pptxInputRef
+            }
+            type="file"
+            accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            className="hidden"
+            onChange={
+              handleImportPptx
             }
           />
 
@@ -7480,6 +7604,31 @@ export default function ProjectsPage() {
                   {importing
                     ? "Đang nhập..."
                     : "Nhập dự án"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    pptxInputRef.current?.click()
+                  }
+                  disabled={
+                    globalBusy
+                  }
+                  className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-200 transition hover:bg-emerald-500/20 disabled:opacity-50"
+                >
+                  {importingPptx ? (
+                    <Loader2
+                      size={15}
+                      className="animate-spin"
+                    />
+                  ) : (
+                    <Upload
+                      size={15}
+                    />
+                  )}
+                  {importingPptx
+                    ? "Đang đọc PPTX..."
+                    : "Nhập PPTX"}
                 </button>
 
                 <a

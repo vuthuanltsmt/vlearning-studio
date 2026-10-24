@@ -44,6 +44,10 @@ import {
 } from "@/lib/videoDb";
 
 import {
+  getSlideImage,
+} from "@/lib/slideImageDb";
+
+import {
   DEFAULT_COMPLETION_SETTINGS,
   loadCompletionSettings,
 } from "@/lib/completionSettings";
@@ -219,6 +223,14 @@ function getLearnerProgressKey(
 }
 
 export function PreviewPlayer() {
+  const [
+    slideImageUrl,
+    setSlideImageUrl,
+  ] =
+    useState<string | null>(
+      null
+    );
+
   /* =====================================================
      STORE
   ===================================================== */
@@ -1792,6 +1804,87 @@ export function PreviewPlayer() {
   }, [
     hydrated,
     page?.id,
+  ]);
+
+  /* =====================================================
+     LOAD PPTX SLIDE IMAGE
+  ===================================================== */
+
+  useEffect(() => {
+    if (
+      !hydrated ||
+      !page
+    ) {
+      return;
+    }
+
+    let cancelled =
+      false;
+
+    let objectUrl:
+      string | null =
+      null;
+
+    setSlideImageUrl(
+      null
+    );
+
+    if (
+      !page.slideImageName
+    ) {
+      return;
+    }
+
+    async function loadSlideImage() {
+      try {
+        const blob =
+          await getSlideImage(
+            page.id
+          );
+
+        if (
+          cancelled ||
+          !blob
+        ) {
+          return;
+        }
+
+        objectUrl =
+          URL.createObjectURL(
+            blob
+          );
+
+        setSlideImageUrl(
+          objectUrl
+        );
+      } catch (
+        error
+      ) {
+        console.error(
+          "Không tải được ảnh slide Preview:",
+          error
+        );
+      }
+    }
+
+    void loadSlideImage();
+
+    return () => {
+      cancelled =
+        true;
+
+      if (
+        objectUrl
+      ) {
+        URL.revokeObjectURL(
+          objectUrl
+        );
+      }
+    };
+  }, [
+    hydrated,
+    page?.id,
+    page?.slideImageName,
   ]);
 
   /* =====================================================
@@ -7151,12 +7244,24 @@ ${logoHtml}
                 }
               />
 
+            ) : slideImageUrl ? (
+
+              <img
+                src={
+                  slideImageUrl
+                }
+                alt={
+                  page.title
+                }
+                className="h-full max-h-full w-full bg-black object-contain"
+              />
+
             ) : (
 
               <div className="flex h-full w-full flex-col items-center justify-center text-center">
 
                 <div className="text-xl font-bold">
-                  Trang này chưa có video
+                  Trang này chưa có video hoặc slide
                 </div>
 
               </div>

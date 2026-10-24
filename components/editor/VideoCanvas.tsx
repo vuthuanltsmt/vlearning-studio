@@ -4,10 +4,19 @@ import {
   Upload,
 } from "lucide-react";
 
+import {
+  useEffect,
+  useState,
+} from "react";
+
 import type {
   ChangeEvent,
   RefObject,
 } from "react";
+
+import {
+  getSlideImage,
+} from "@/lib/slideImageDb";
 
 import {
   getQuizClassificationCategories,
@@ -147,6 +156,80 @@ export function VideoCanvas({
   onSubmitClassificationAnswer,
   onContinue,
 }: Props) {
+  const [
+    slideImageUrl,
+    setSlideImageUrl,
+  ] =
+    useState<string | null>(
+      null
+    );
+
+  useEffect(() => {
+    let cancelled =
+      false;
+
+    let objectUrl:
+      string | null =
+      null;
+
+    setSlideImageUrl(
+      null
+    );
+
+    if (
+      !page.slideImageName
+    ) {
+      return;
+    }
+
+    void getSlideImage(
+      page.id
+    )
+      .then(
+        (blob) => {
+          if (
+            cancelled ||
+            !blob
+          ) {
+            return;
+          }
+
+          objectUrl =
+            URL.createObjectURL(
+              blob
+            );
+
+          setSlideImageUrl(
+            objectUrl
+          );
+        }
+      )
+      .catch(
+        (error) => {
+          console.error(
+            "Không tải được ảnh slide:",
+            error
+          );
+        }
+      );
+
+    return () => {
+      cancelled =
+        true;
+
+      if (
+        objectUrl
+      ) {
+        URL.revokeObjectURL(
+          objectUrl
+        );
+      }
+    };
+  }, [
+    page.id,
+    page.slideImageName,
+  ]);
+
   const activeQuizType =
     activeQuiz
       ? getQuizType(
@@ -227,7 +310,7 @@ export function VideoCanvas({
 
         <div className="relative aspect-video w-full overflow-hidden rounded-2xl border border-blue-500 bg-[#17396e] shadow-2xl">
 
-          {!page.videoUrl ? (
+          {!page.videoUrl && !slideImageUrl ? (
 
             /* =============================================
                CHƯA CÓ VIDEO
@@ -270,7 +353,8 @@ export function VideoCanvas({
 
             <>
 
-              <video
+              {page.videoUrl ? (
+                <video
                 ref={
                   videoRef
                 }
@@ -294,6 +378,18 @@ export function VideoCanvas({
                   onPause
                 }
               />
+              ) : (
+                <img
+                  src={
+                    slideImageUrl ??
+                    ""
+                  }
+                  alt={
+                    page.title
+                  }
+                  className="h-full w-full bg-black object-contain"
+                />
+              )}
 
               {/* ===========================================
                   CÂU HỎI XUẤT HIỆN TRÊN VIDEO
