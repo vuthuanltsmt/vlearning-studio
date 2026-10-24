@@ -801,9 +801,25 @@ async function renderSlideToSvg(
           "uint8array"
         );
 
+      /*
+       * JSZip trả về Uint8Array<ArrayBufferLike>.
+       * TypeScript DOM BlobPart yêu cầu ArrayBuffer chuẩn.
+       * Copy dữ liệu sang buffer mới để tránh SharedArrayBuffer type mismatch.
+       */
+      const imageBytes =
+        new Uint8Array(
+          bytes.byteLength
+        );
+
+      imageBytes.set(
+        bytes
+      );
+
       const blob =
         new Blob(
-          [bytes],
+          [
+            imageBytes.buffer,
+          ],
           {
             type:
               mimeFromPath(
