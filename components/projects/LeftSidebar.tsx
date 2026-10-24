@@ -363,7 +363,7 @@ export default function LeftSidebar({
           }`}
         >
           <div className={`overflow-hidden rounded-2xl border border-blue-800/70 bg-[#1a477d] shadow-lg ${collapsed ? "xl:px-2 xl:py-3" : ""}`}>
-            <div className={collapsed ? "p-4 xl:p-0" : "p-4"}>
+            <div className={collapsed ? "p-3 xl:p-0" : "p-3"}>
               <div className="flex flex-col items-center text-center">
                 <input
                   ref={
@@ -397,7 +397,7 @@ export default function LeftSidebar({
                     avatarInputRef.current?.click()
                   }
                   title="Đổi ảnh đại diện"
-                  className="group relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border border-white/25 bg-white/5 text-slate-200 shadow-md transition hover:border-cyan-300/70"
+                  className="group relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-full border border-white/25 bg-white/5 text-slate-200 shadow-md transition hover:border-cyan-300/70"
                 >
                   {avatarUrl ? (
                     <img
@@ -419,19 +419,19 @@ export default function LeftSidebar({
                 </button>
 
                 <div className={collapsed ? "xl:hidden" : ""}>
-                  <div className="mt-2 text-sm font-black text-slate-200">
+                  <div className="mt-1.5 text-sm font-black text-slate-200">
                     {session
                       ? session.displayName
                       : "Khách truy cập"}
                   </div>
 
                   {session && (
-                    <div className="mt-1 max-w-[180px] truncate text-[10px] text-slate-300/70">
+                    <div className="mt-0.5 max-w-[180px] truncate text-[10px] text-slate-300/70">
                       {session.email}
                     </div>
                   )}
                   {session && (
-                    <div className="mt-2 inline-flex rounded-full bg-cyan-500/10 px-2.5 py-1 text-[9px] font-black text-cyan-200">
+                    <div className="mt-1 inline-flex rounded-full bg-cyan-500/10 px-2 py-0.5 text-[9px] font-black text-cyan-200">
                       {
                         ACCESS_ROLE_LABELS[
                           session.accessRole
@@ -442,7 +442,7 @@ export default function LeftSidebar({
                   <button
                     type="button"
                     onClick={() => go("account")}
-                    className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-sky-500 to-cyan-400 px-3 py-2 text-xs font-black text-white"
+                    className="mt-1.5 flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-sky-500 to-cyan-400 px-3 py-1.5 text-xs font-black text-white"
                   >
                     <User size={15} />
                     {session
@@ -451,7 +451,7 @@ export default function LeftSidebar({
                   </button>
 
                   {session && (
-                    <div className="mt-2 space-y-1 text-center">
+                    <div className="mt-1.5 space-y-0.5 text-center">
                       <div className="text-[9px] font-semibold text-slate-300/80">
                         Bản quyền Vũ Trọng Thuấn
                       </div>
@@ -466,18 +466,18 @@ export default function LeftSidebar({
                         </span>
                       </div>
 
-                      <div className="mt-2 flex flex-col items-center">
-                        <div className="rounded-lg bg-white p-1.5 shadow-lg">
+                      <div className="mt-1.5 flex flex-col items-center">
+                        <div className="rounded-lg bg-white p-1 shadow-lg">
                           <img
                             src="/agribank-qr-vutrongthuan.jpg"
                             alt="QR ngân hàng Agribank"
-                            width={40}
-                            height={40}
-                            className="h-[40px] w-[40px] object-contain"
+                            width={36}
+                            height={36}
+                            className="h-[36px] w-[36px] object-contain"
                           />
                         </div>
 
-                        <div className="mt-0.5 text-[9px] font-semibold text-slate-300/80">
+                        <div className="mt-0 text-[9px] font-semibold text-slate-300/80">
                           Quét QR ngân hàng
                         </div>
                       </div>
@@ -487,11 +487,11 @@ export default function LeftSidebar({
               </div>
             </div>
 
-            <div className={`border-t border-blue-800/80 p-2 ${collapsed ? "xl:hidden" : ""}`}>
+            <div className={`border-t border-blue-800/80 p-1.5 ${collapsed ? "xl:hidden" : ""}`}>
               <button
                 type="button"
                 onClick={() => go("install")}
-                className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-xs font-bold text-slate-300 hover:bg-white/5"
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-1.5 text-left text-xs font-bold text-slate-300 hover:bg-white/5"
               >
                 <MonitorDown size={16} className="text-slate-400" />
                 TẢI CÀI PC
@@ -514,7 +514,7 @@ export default function LeftSidebar({
                   Giao diện: Đại dương
                 </button>
               ) : (
-                <div className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-xs font-bold text-slate-500">
+                <div className="flex w-full items-center gap-3 rounded-lg px-3 py-1.5 text-left text-xs font-bold text-slate-500">
                   <Palette
                     size={16}
                     className="text-slate-500"
