@@ -14,6 +14,10 @@ import {
   saveSlideImage,
 } from "@/lib/slideImageDb";
 
+import {
+  saveVideo,
+} from "@/lib/videoDb";
+
 import type {
   LessonPage,
   ProjectDocument,
@@ -82,9 +86,105 @@ function sleep(
   );
 }
 
-async function getSlideTitles(
-  file: File
+type EmbeddedVideo = {
+  fileName: string;
+  file: File;
+};
+
+type PptxInspection = {
+  titles: string[];
+  videosBySlide:
+    Map<
+      number,
+      EmbeddedVideo[]
+    >;
+};
+
+const VIDEO_EXTENSIONS =
+  new Set([
+    "mp4",
+    "mov",
+    "m4v",
+    "webm",
+    "avi",
+    "wmv",
+    "mpeg",
+    "mpg",
+  ]);
+
+function mediaMimeType(
+  fileName: string
 ) {
+  const extension =
+    fileName
+      .split(".")
+      .pop()
+      ?.toLowerCase();
+
+  switch (
+    extension
+  ) {
+    case "webm":
+      return "video/webm";
+
+    case "mov":
+      return "video/quicktime";
+
+    case "m4v":
+      return "video/x-m4v";
+
+    case "avi":
+      return "video/x-msvideo";
+
+    case "wmv":
+      return "video/x-ms-wmv";
+
+    case "mpeg":
+    case "mpg":
+      return "video/mpeg";
+
+    case "mp4":
+    default:
+      return "video/mp4";
+  }
+}
+
+function normalizeSlideMediaTarget(
+  target: string
+) {
+  const normalized =
+    target
+      .replace(
+        /\\/g,
+        "/"
+      )
+      .replace(
+        /^\.\.\//,
+        ""
+      );
+
+  if (
+    normalized.startsWith(
+      "ppt/"
+    )
+  ) {
+    return normalized;
+  }
+
+  if (
+    normalized.startsWith(
+      "media/"
+    )
+  ) {
+    return `ppt/${normalized}`;
+  }
+
+  return `ppt/slides/${normalized}`;
+}
+
+async function inspectPptx(
+  file: File
+): Promise<PptxInspection> {
   const zip =
     await JSZip.loadAsync(
       file
@@ -132,12 +232,22 @@ async function getSlideTitles(
     string[] =
       [];
 
+  const videosBySlide =
+    new Map<
+      number,
+      EmbeddedVideo[]
+    >();
+
   for (
     let index = 0;
     index <
     slideNames.length;
     index++
   ) {
+    const slideNumber =
+      index +
+      1;
+
     const slideFile =
       zip.file(
         slideNames[index]
@@ -145,60 +255,206 @@ async function getSlideTitles(
 
     if (!slideFile) {
       titles.push(
-        `Trang ${index + 1}`
+        `Trang ${slideNumber}`
+      );
+    } else {
+      try {
+        const xml =
+          await slideFile.async(
+            "string"
+          );
+
+        const documentXml =
+          new DOMParser().parseFromString(
+            xml,
+            "application/xml"
+          );
+
+        const texts =
+          Array.from(
+            documentXml.getElementsByTagName(
+              "*"
+            )
+          )
+            .filter(
+              (node) =>
+                node.localName ===
+                "t"
+            )
+            .map(
+              (node) =>
+                String(
+                  node.textContent ??
+                  ""
+                ).trim()
+            )
+            .filter(Boolean);
+
+        titles.push(
+          texts[0]
+            ? texts[0].slice(
+                0,
+                100
+              )
+            : `Trang ${slideNumber}`
+        );
+      } catch {
+        titles.push(
+          `Trang ${slideNumber}`
+        );
+      }
+    }
+
+    const relsFile =
+      zip.file(
+        `ppt/slides/_rels/slide${slideNumber}.xml.rels`
       );
 
+    if (!relsFile) {
       continue;
     }
 
     try {
-      const xml =
-        await slideFile.async(
+      const relsXml =
+        await relsFile.async(
           "string"
         );
 
-      const documentXml =
+      const relsDocument =
         new DOMParser().parseFromString(
-          xml,
+          relsXml,
           "application/xml"
         );
 
-      const texts =
+      const relationships =
         Array.from(
-          documentXml.getElementsByTagName(
+          relsDocument.getElementsByTagName(
             "*"
           )
-        )
-          .filter(
-            (node) =>
-              node.localName ===
-              "t"
-          )
-          .map(
-            (node) =>
-              String(
-                node.textContent ??
-                ""
-              ).trim()
-          )
-          .filter(Boolean);
+        ).filter(
+          (node) =>
+            node.localName ===
+            "Relationship"
+        );
 
-      titles.push(
-        texts[0]
-          ? texts[0].slice(
-              0,
-              100
-            )
-          : `Trang ${index + 1}`
-      );
-    } catch {
-      titles.push(
-        `Trang ${index + 1}`
+      const videos:
+        EmbeddedVideo[] =
+        [];
+
+      const seenPaths =
+        new Set<string>();
+
+      for (
+        const relationship of
+        relationships
+      ) {
+        const target =
+          relationship.getAttribute(
+            "Target"
+          ) ??
+          "";
+
+        if (!target) {
+          continue;
+        }
+
+        const mediaPath =
+          normalizeSlideMediaTarget(
+            target
+          );
+
+        const extension =
+          mediaPath
+            .split(".")
+            .pop()
+            ?.toLowerCase() ??
+          "";
+
+        if (
+          !VIDEO_EXTENSIONS.has(
+            extension
+          ) ||
+          seenPaths.has(
+            mediaPath
+          )
+        ) {
+          continue;
+        }
+
+        const mediaFile =
+          zip.file(
+            mediaPath
+          );
+
+        if (!mediaFile) {
+          continue;
+        }
+
+        const bytes =
+          await mediaFile.async(
+            "uint8array"
+          );
+
+        const safeBytes =
+          new Uint8Array(
+            bytes.byteLength
+          );
+
+        safeBytes.set(
+          bytes
+        );
+
+        const fileName =
+          mediaPath
+            .split("/")
+            .pop() ??
+          `slide-${slideNumber}-video.${extension || "mp4"}`;
+
+        videos.push({
+          fileName,
+          file:
+            new File(
+              [
+                safeBytes.buffer,
+              ],
+              fileName,
+              {
+                type:
+                  mediaMimeType(
+                    fileName
+                  ),
+              }
+            ),
+        });
+
+        seenPaths.add(
+          mediaPath
+        );
+      }
+
+      if (
+        videos.length >
+        0
+      ) {
+        videosBySlide.set(
+          index,
+          videos
+        );
+      }
+    } catch (
+      error
+    ) {
+      console.warn(
+        `Không đọc được video nhúng của slide ${slideNumber}:`,
+        error
       );
     }
   }
 
-  return titles;
+  return {
+    titles,
+    videosBySlide,
+  };
 }
 
 async function createConversionJob() {
@@ -425,8 +681,8 @@ export async function importPptxAsProject(
     );
   }
 
-  const titlesPromise =
-    getSlideTitles(
+  const inspectionPromise =
+    inspectPptx(
       file
     );
 
@@ -446,8 +702,11 @@ export async function importPptxAsProject(
       jobId
     );
 
+  const inspection =
+    await inspectionPromise;
+
   const titles =
-    await titlesPromise;
+    inspection.titles;
 
   const pages:
     LessonPage[] =
@@ -485,6 +744,53 @@ export async function importPptxAsProject(
         blob;
     }
 
+    const embeddedVideos =
+      inspection.videosBySlide.get(
+        index
+      ) ??
+      [];
+
+    const embeddedVideo =
+      embeddedVideos[0] ??
+      null;
+
+    if (
+      embeddedVideos.length >
+      1
+    ) {
+      console.warn(
+        `Slide ${index + 1} có ${embeddedVideos.length} video. VLEARNING hiện chỉ tự gắn video đầu tiên.`
+      );
+    }
+
+    let videoUrl:
+      string |
+      undefined =
+      undefined;
+
+    if (
+      embeddedVideo
+    ) {
+      try {
+        await saveVideo(
+          pageId,
+          embeddedVideo.file
+        );
+
+        videoUrl =
+          URL.createObjectURL(
+            embeddedVideo.file
+          );
+      } catch (
+        error
+      ) {
+        console.error(
+          `Không lưu được video nhúng của slide ${index + 1}:`,
+          error
+        );
+      }
+    }
+
     pages.push({
       id:
         pageId,
@@ -494,7 +800,11 @@ export async function importPptxAsProject(
         `Trang ${index + 1}`,
 
       videoName:
+        embeddedVideo
+          ?.fileName ??
         "",
+
+      videoUrl,
 
       slideImageName:
         files[index]
