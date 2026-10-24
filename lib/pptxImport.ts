@@ -634,22 +634,37 @@ async function downloadSlide(
   jobId: string,
   index: number
 ) {
-  const response =
-    await fetch(
-      `/api/pptx/file?jobId=${encodeURIComponent(
-        jobId
-      )}&index=${index}`,
-      {
-        credentials:
-          "same-origin",
-        cache:
-          "no-store",
-      }
-    );
+  const maxAttempts =
+    3;
 
-  if (
-    !response.ok
+  let lastMessage =
+    `Không tải được ảnh slide ${index + 1}.`;
+
+  for (
+    let attempt = 0;
+    attempt <
+    maxAttempts;
+    attempt++
   ) {
+    const response =
+      await fetch(
+        `/api/pptx/file?jobId=${encodeURIComponent(
+          jobId
+        )}&index=${index}`,
+        {
+          credentials:
+            "same-origin",
+          cache:
+            "no-store",
+        }
+      );
+
+    if (
+      response.ok
+    ) {
+      return await response.blob();
+    }
+
     const payload =
       await response.json()
         .catch(
@@ -657,13 +672,28 @@ async function downloadSlide(
             null
         );
 
-    throw new Error(
+    lastMessage =
       payload?.error ||
-      `Không tải được ảnh slide ${index + 1}.`
-    );
+      lastMessage;
+
+    if (
+      attempt <
+      maxAttempts -
+        1
+    ) {
+      await sleep(
+        900 *
+          (
+            attempt +
+            1
+          )
+      );
+    }
   }
 
-  return await response.blob();
+  throw new Error(
+    lastMessage
+  );
 }
 
 export async function importPptxAsProject(
