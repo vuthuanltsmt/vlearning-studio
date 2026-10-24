@@ -5318,15 +5318,14 @@ function AccountPanel({
                     : "Đăng nhập"}
                 </button>
 
-                <details className="mt-5 rounded-xl border border-blue-900 bg-[#071d35] p-4">
-                  <summary className="cursor-pointer text-xs font-black text-cyan-300">
+                <div className="mt-4 text-right">
+                  <a
+                    href="/forgot-password"
+                    className="text-sm font-bold text-cyan-300 transition hover:text-cyan-200"
+                  >
                     Quên mật khẩu?
-                  </summary>
-
-                  <p className="mt-3 text-xs leading-6 text-slate-500">
-                    Backend A15 chưa cấu hình dịch vụ gửi email, nên chưa thể gửi liên kết đặt lại mật khẩu. Chức năng này cần SMTP hoặc nhà cung cấp email giao dịch ở bước triển khai cloud.
-                  </p>
-                </details>
+                  </a>
+                </div>
               </form>
             ) : (
               <form

@@ -1353,3 +1353,285 @@ export async function cleanupExpiredSessions() {
     }
   );
 }
+
+
+const PASSWORD_RESET_MINUTES =
+  30;
+
+export async function createPasswordResetRequest(
+  emailInput: string
+) {
+  const email =
+    normalizeEmail(
+      emailInput
+    );
+
+  if (
+    !validateEmail(
+      email
+    )
+  ) {
+    return null;
+  }
+
+  const user =
+    await db.user.findUnique(
+      {
+        where: {
+          email,
+        },
+        select: {
+          id:
+            true,
+          email:
+            true,
+          displayName:
+            true,
+          isActive:
+            true,
+        },
+      }
+    );
+
+  if (
+    !user ||
+    !user.isActive
+  ) {
+    return null;
+  }
+
+  const token =
+    randomBytes(
+      32
+    ).toString(
+      "base64url"
+    );
+
+  const tokenHash =
+    sha256(
+      token
+    );
+
+  const expiresAt =
+    new Date(
+      Date.now() +
+        PASSWORD_RESET_MINUTES *
+          60 *
+          1000
+    );
+
+  await db.$transaction([
+    db.passwordResetToken.deleteMany(
+      {
+        where: {
+          userId:
+            user.id,
+        },
+      }
+    ),
+
+    db.passwordResetToken.create(
+      {
+        data: {
+          userId:
+            user.id,
+          tokenHash,
+          expiresAt,
+        },
+      }
+    ),
+  ]);
+
+  return {
+    token,
+    email:
+      user.email,
+    displayName:
+      user.displayName,
+    expiresAt,
+  };
+}
+
+export async function resetServerPassword(
+  input: {
+    token: string;
+    newPassword: string;
+  }
+) {
+  const token =
+    input.token.trim();
+
+  if (
+    token.length <
+    20
+  ) {
+    throw new AuthError(
+      "Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.",
+      400
+    );
+  }
+
+  const problems =
+    validatePassword(
+      input.newPassword
+    );
+
+  if (
+    problems.length >
+    0
+  ) {
+    throw new AuthError(
+      `Mật khẩu mới cần ${problems.join(
+        ", "
+      )}.`
+    );
+  }
+
+  const tokenHash =
+    sha256(
+      token
+    );
+
+  const reset =
+    await db.passwordResetToken.findUnique(
+      {
+        where: {
+          tokenHash,
+        },
+        include: {
+          user:
+            true,
+        },
+      }
+    );
+
+  if (
+    !reset ||
+    reset.usedAt ||
+    reset.expiresAt.getTime() <=
+      Date.now() ||
+    !reset.user.isActive
+  ) {
+    throw new AuthError(
+      "Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.",
+      400
+    );
+  }
+
+  const salt =
+    randomBytes(
+      16
+    ).toString(
+      "hex"
+    );
+
+  const passwordHash =
+    await hashPassword(
+      input.newPassword,
+      salt
+    );
+
+  const now =
+    new Date();
+
+  await db.$transaction(
+    async (
+      transaction
+    ) => {
+      const consumed =
+        await transaction.passwordResetToken.updateMany(
+          {
+            where: {
+              id:
+                reset.id,
+              usedAt:
+                null,
+              expiresAt: {
+                gt:
+                  now,
+              },
+            },
+            data: {
+              usedAt:
+                now,
+            },
+          }
+        );
+
+      if (
+        consumed.count !==
+        1
+      ) {
+        throw new AuthError(
+          "Liên kết đặt lại mật khẩu đã được sử dụng hoặc đã hết hạn.",
+          400
+        );
+      }
+
+      await transaction.user.update(
+        {
+          where: {
+            id:
+              reset.userId,
+          },
+          data: {
+            passwordSalt:
+              salt,
+            passwordHash,
+            failedLoginCount:
+              0,
+            lockedUntil:
+              null,
+          },
+        }
+      );
+
+      await transaction.session.deleteMany(
+        {
+          where: {
+            userId:
+              reset.userId,
+          },
+        }
+      );
+
+      await transaction.passwordResetToken.deleteMany(
+        {
+          where: {
+            userId:
+              reset.userId,
+            id: {
+              not:
+                reset.id,
+            },
+          },
+        }
+      );
+    }
+  );
+
+  await clearSessionCookie();
+}
+
+export async function cleanupExpiredPasswordResetTokens() {
+  await db.passwordResetToken.deleteMany(
+    {
+      where: {
+        OR: [
+          {
+            expiresAt: {
+              lte:
+                new Date(),
+            },
+          },
+          {
+            usedAt: {
+              not:
+                null,
+            },
+          },
+        ],
+      },
+    }
+  );
+}
