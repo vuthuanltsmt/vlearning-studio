@@ -5,6 +5,10 @@ import {
 } from "@/lib/videoDb";
 
 import {
+  getSlideImage,
+} from "@/lib/slideImageDb";
+
+import {
   loadCompletionSettings,
 } from "@/lib/completionSettings";
 
@@ -43,6 +47,7 @@ type ExportPage =
     "videoUrl"
   > & {
     videoSrc: string | null;
+    slideSrc: string | null;
     games: PageGame[];
   };
 
@@ -157,6 +162,37 @@ function getVideoExtension(
 
     default:
       return ".mp4";
+  }
+}
+
+function getSlideExtension(
+  blob: Blob,
+  fileName?: string
+) {
+  const nameMatch =
+    fileName?.match(
+      /\.[a-zA-Z0-9]{1,8}$/
+    );
+
+  if (nameMatch) {
+    return nameMatch[0]
+      .toLowerCase();
+  }
+
+  switch (
+    blob.type
+  ) {
+    case "image/jpeg":
+      return ".jpg";
+
+    case "image/webp":
+      return ".webp";
+
+    case "image/svg+xml":
+      return ".svg";
+
+    default:
+      return ".png";
   }
 }
 
@@ -739,6 +775,14 @@ button:disabled {
   .course-intro-title {
     font-size: 32px;
   }
+}
+
+.slide-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+  display: block;
 }
 
 .player {
@@ -10919,9 +10963,21 @@ function makePlayerJs() {
             ) +
             '"></video>'
           )
-        : (
-            '<div class="no-video">Trang này chưa có video</div>'
-          );
+        : page.slideSrc
+          ? (
+              '<img class="slide-image" src="' +
+              escapeHtml(
+                page.slideSrc
+              ) +
+              '" alt="' +
+              escapeHtml(
+                page.title
+              ) +
+              '" />'
+            )
+          : (
+              '<div class="no-video">Trang này chưa có video hoặc slide</div>'
+            );
 
     var notice =
       state.completionNotice
@@ -11868,6 +11924,11 @@ async function buildExportCourse(
         page.id
       );
 
+    const slideImage =
+      await getSlideImage(
+        page.id
+      );
+
     const linkedGames =
       loadGamesForPage(
         project.id,
@@ -11877,6 +11938,43 @@ async function buildExportCourse(
     let videoSrc:
       string | null =
       null;
+
+    let slideSrc:
+      string | null =
+      null;
+
+    if (
+      slideImage
+    ) {
+      const extension =
+        getSlideExtension(
+          slideImage,
+          page.slideImageName
+        );
+
+      const slidePath =
+        `slides/page-${
+          index + 1
+        }${extension}`;
+
+      zip.file(
+        slidePath,
+        slideImage,
+        {
+          binary:
+            true,
+          compression:
+            "STORE",
+        }
+      );
+
+      slideSrc =
+        slidePath;
+
+      mediaFiles.push(
+        slidePath
+      );
+    }
 
     if (videoFile) {
       const extension =
@@ -11935,6 +12033,9 @@ async function buildExportCourse(
       videoName:
         page.videoName,
 
+      slideImageName:
+        page.slideImageName,
+
       duration:
         page.duration,
 
@@ -11970,6 +12071,7 @@ async function buildExportCourse(
         ),
 
       videoSrc,
+      slideSrc,
     });
   }
 
