@@ -397,7 +397,7 @@ export default function LeftSidebar({
                     avatarInputRef.current?.click()
                   }
                   title="Đổi ảnh đại diện"
-                  className="group relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border border-white/25 bg-white/5 text-slate-200 shadow-md transition hover:border-cyan-300/70"
+                  className="group relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border border-white/25 bg-white/5 text-slate-200 shadow-md transition hover:border-cyan-300/70"
                 >
                   {avatarUrl ? (
                     <img
@@ -419,7 +419,7 @@ export default function LeftSidebar({
                 </button>
 
                 <div className={collapsed ? "xl:hidden" : ""}>
-                  <div className="mt-3 text-sm font-black text-slate-200">
+                  <div className="mt-2 text-sm font-black text-slate-200">
                     {session
                       ? session.displayName
                       : "Khách truy cập"}
@@ -442,7 +442,7 @@ export default function LeftSidebar({
                   <button
                     type="button"
                     onClick={() => go("account")}
-                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-sky-500 to-cyan-400 px-3 py-2.5 text-xs font-black text-white"
+                    className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-sky-500 to-cyan-400 px-3 py-2 text-xs font-black text-white"
                   >
                     <User size={15} />
                     {session
@@ -466,14 +466,14 @@ export default function LeftSidebar({
                         </span>
                       </div>
 
-                      <div className="mt-3 flex flex-col items-center">
+                      <div className="mt-2 flex flex-col items-center">
                         <div className="rounded-xl bg-white p-2 shadow-lg">
                           <img
                             src="/agribank-qr-vutrongthuan.jpg"
                             alt="QR ngân hàng Agribank"
-                            width={56}
-                            height={56}
-                            className="h-[56px] w-[56px] object-contain"
+                            width={48}
+                            height={48}
+                            className="h-[48px] w-[48px] object-contain"
                           />
                         </div>
 
@@ -491,7 +491,7 @@ export default function LeftSidebar({
               <button
                 type="button"
                 onClick={() => go("install")}
-                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs font-bold text-slate-300 hover:bg-white/5"
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-xs font-bold text-slate-300 hover:bg-white/5"
               >
                 <MonitorDown size={16} className="text-slate-400" />
                 TẢI CÀI PC
@@ -514,7 +514,7 @@ export default function LeftSidebar({
                   Giao diện: Đại dương
                 </button>
               ) : (
-                <div className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs font-bold text-slate-500">
+                <div className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-xs font-bold text-slate-500">
                   <Palette
                     size={16}
                     className="text-slate-500"
@@ -526,31 +526,32 @@ export default function LeftSidebar({
           </div>
         </div>
 
-        {authorAllowed && (
-          <div className="shrink-0 border-t border-[#17385c] px-2 py-2">
-            <button
-              type="button"
-              onClick={() =>
-                go(
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-[#17385c] [scrollbar-gutter:stable]">
+          {authorAllowed && (
+            <div className="px-2 pt-2">
+              <button
+                type="button"
+                onClick={() =>
+                  go(
+                    "projects"
+                  )
+                }
+                className={`${menuBase} ${menuSpacing} ${stateClass(
                   "projects"
-                )
-              }
-              className={`${menuBase} ${menuSpacing} ${stateClass(
-                "projects"
-              )}`}
-            >
-              <FolderOpen
-                size={20}
-                className="shrink-0"
-              />
-              <span className={labelClass}>
-                Dự án của tôi
-              </span>
-            </button>
-          </div>
-        )}
+                )}`}
+              >
+                <FolderOpen
+                  size={20}
+                  className="shrink-0"
+                />
+                <span className={labelClass}>
+                  Dự án của tôi
+                </span>
+              </button>
+            </div>
+          )}
 
-        <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain px-2 py-2 [scrollbar-gutter:stable]">
+        <nav className="space-y-1 px-2 py-2">
           <button
             type="button"
             onClick={() =>
@@ -657,6 +658,7 @@ export default function LeftSidebar({
             </button>
           )}
         </nav>
+        </div>
 
         <div className="shrink-0 border-t border-[#17385c] bg-[#08233f]/95 px-2 py-2 backdrop-blur">
           <button
