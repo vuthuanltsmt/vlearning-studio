@@ -50,78 +50,116 @@ export async function GET(
       );
     }
 
-    const job =
-      await getPptxJob(
-        jobId
-      );
+    const maxAttempts =
+      4;
 
-    assertJobOwner(
-      job,
-      user.id
-    );
+    let lastStatus =
+      0;
 
-    if (
-      job.status !==
-      "finished"
+    for (
+      let attempt = 0;
+      attempt <
+      maxAttempts;
+      attempt++
     ) {
-      throw new AuthError(
-        "Tác vụ chưa hoàn tất.",
-        409
-      );
-    }
+      const job =
+        await getPptxJob(
+          jobId
+        );
 
-    const files =
-      exportedPngFiles(
-        job
-      );
-
-    const file =
-      files[index];
-
-    if (
-      !file?.url
-    ) {
-      throw new AuthError(
-        "Không tìm thấy ảnh slide.",
-        404
-      );
-    }
-
-    const response =
-      await fetch(
-        file.url,
-        {
-          cache:
-            "no-store",
-        }
+      assertJobOwner(
+        job,
+        user.id
       );
 
-    if (
-      !response.ok
-    ) {
-      throw new Error(
-        "Không tải được ảnh slide từ CloudConvert."
-      );
-    }
-
-    const bytes =
-      await response.arrayBuffer();
-
-    return new NextResponse(
-      bytes,
-      {
-        status:
-          200,
-        headers: {
-          "Content-Type":
-            response.headers.get(
-              "content-type"
-            ) ??
-            "image/png",
-          "Cache-Control":
-            "private, no-store",
-        },
+      if (
+        job.status !==
+        "finished"
+      ) {
+        throw new AuthError(
+          "Tác vụ chưa hoàn tất.",
+          409
+        );
       }
+
+      const files =
+        exportedPngFiles(
+          job
+        );
+
+      const file =
+        files[index];
+
+      if (
+        !file?.url
+      ) {
+        throw new AuthError(
+          `Không tìm thấy ảnh slide ${index + 1}.`,
+          404
+        );
+      }
+
+      const response =
+        await fetch(
+          file.url,
+          {
+            cache:
+              "no-store",
+          }
+        );
+
+      lastStatus =
+        response.status;
+
+      if (
+        response.ok
+      ) {
+        const bytes =
+          await response.arrayBuffer();
+
+        return new NextResponse(
+          bytes,
+          {
+            status:
+              200,
+            headers: {
+              "Content-Type":
+                response.headers.get(
+                  "content-type"
+                ) ??
+                "image/png",
+              "Cache-Control":
+                "private, no-store",
+            },
+          }
+        );
+      }
+
+      console.warn(
+        `[PPTX] Slide ${index + 1} download attempt ${attempt + 1}/${maxAttempts} failed with HTTP ${response.status}.`
+      );
+
+      if (
+        attempt <
+        maxAttempts -
+          1
+      ) {
+        await new Promise(
+          (resolve) =>
+            setTimeout(
+              resolve,
+              750 *
+                (
+                  attempt +
+                  1
+                )
+            )
+        );
+      }
+    }
+
+    throw new Error(
+      `Không tải được ảnh slide ${index + 1} từ CloudConvert (HTTP ${lastStatus || "unknown"}).`
     );
   } catch (
     error
@@ -154,7 +192,9 @@ export async function GET(
         ok:
           false,
         error:
-          "Không tải được ảnh slide.",
+          error instanceof Error
+            ? error.message
+            : "Không tải được ảnh slide.",
       },
       {
         status:
