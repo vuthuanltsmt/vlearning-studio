@@ -19,44 +19,11 @@ import type {
   ProjectDocument,
 } from "@/types/lesson";
 
-type PptxViewerInstance = {
-  loadFile: (
-    file: File
-  ) => Promise<void>;
-  render:
-    () => Promise<void>;
-  nextSlide:
-    () => Promise<void>;
-  getSlideCount:
-    () => number;
-};
+const DEFAULT_SLIDE_CX =
+  12192000;
 
-type PptxViewerConstructor =
-  new (
-    options: {
-      canvas:
-        HTMLCanvasElement;
-    }
-  ) =>
-    PptxViewerInstance;
-
-declare global {
-  interface Window {
-    JSZip?: typeof JSZip;
-    PptxViewJS?: {
-      PPTXViewer:
-        PptxViewerConstructor;
-    };
-  }
-}
-
-const PPTX_VIEWER_SRC =
-  "https://cdn.jsdelivr.net/npm/pptxviewjs@1.1.9/dist/PptxViewJS.min.js";
-
-let viewerLoader:
-  Promise<PptxViewerConstructor> |
-  null =
-    null;
+const DEFAULT_SLIDE_CY =
+  6858000;
 
 function createId() {
   if (
@@ -85,92 +52,824 @@ function fileTitle(
     "Bài giảng PowerPoint";
 }
 
-function loadPptxViewer() {
-  if (
-    window.PptxViewJS
-      ?.PPTXViewer
-  ) {
-    return Promise.resolve(
-      window.PptxViewJS
-        .PPTXViewer
+function escapeXml(
+  value: string
+) {
+  return value
+    .replace(
+      /&/g,
+      "&amp;"
+    )
+    .replace(
+      /</g,
+      "&lt;"
+    )
+    .replace(
+      />/g,
+      "&gt;"
+    )
+    .replace(
+      /"/g,
+      "&quot;"
+    )
+    .replace(
+      /'/g,
+      "&apos;"
     );
+}
+
+function getDirectChildrenByLocalName(
+  element: Element,
+  localName: string
+) {
+  return Array.from(
+    element.children
+  ).filter(
+    (child) =>
+      child.localName ===
+      localName
+  );
+}
+
+function firstDescendant(
+  element: Element,
+  localName: string
+) {
+  return Array.from(
+    element.getElementsByTagName(
+      "*"
+    )
+  ).find(
+    (child) =>
+      child.localName ===
+      localName
+  ) ?? null;
+}
+
+function attrNumber(
+  element:
+    Element |
+    null,
+  name: string,
+  fallback = 0
+) {
+  if (!element) {
+    return fallback;
   }
 
-  if (
-    viewerLoader
+  const value =
+    Number(
+      element.getAttribute(
+        name
+      )
+    );
+
+  return Number.isFinite(
+    value
+  )
+    ? value
+    : fallback;
+}
+
+async function getSlideSize(
+  zip: JSZip
+) {
+  const file =
+    zip.file(
+      "ppt/presentation.xml"
+    );
+
+  if (!file) {
+    return {
+      cx:
+        DEFAULT_SLIDE_CX,
+      cy:
+        DEFAULT_SLIDE_CY,
+    };
+  }
+
+  try {
+    const xml =
+      await file.async(
+        "string"
+      );
+
+    const documentXml =
+      new DOMParser().parseFromString(
+        xml,
+        "application/xml"
+      );
+
+    const size =
+      Array.from(
+        documentXml.getElementsByTagName(
+          "*"
+        )
+      ).find(
+        (node) =>
+          node.localName ===
+          "sldSz"
+      );
+
+    return {
+      cx:
+        attrNumber(
+          size ?? null,
+          "cx",
+          DEFAULT_SLIDE_CX
+        ),
+      cy:
+        attrNumber(
+          size ?? null,
+          "cy",
+          DEFAULT_SLIDE_CY
+        ),
+    };
+  } catch {
+    return {
+      cx:
+        DEFAULT_SLIDE_CX,
+      cy:
+        DEFAULT_SLIDE_CY,
+    };
+  }
+}
+
+function mimeFromPath(
+  path: string
+) {
+  const extension =
+    path
+      .split(".")
+      .pop()
+      ?.toLowerCase();
+
+  switch (
+    extension
   ) {
-    return viewerLoader;
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+
+    case "gif":
+      return "image/gif";
+
+    case "svg":
+      return "image/svg+xml";
+
+    case "webp":
+      return "image/webp";
+
+    default:
+      return "image/png";
   }
+}
 
-  viewerLoader =
-    new Promise(
-      (
-        resolve,
-        reject
-      ) => {
-        window.JSZip =
-          JSZip;
+async function blobToDataUrl(
+  blob: Blob
+) {
+  return await new Promise<
+    string
+  >(
+    (
+      resolve,
+      reject
+    ) => {
+      const reader =
+        new FileReader();
 
-        const script =
-          document.createElement(
-            "script"
-          );
-
-        script.src =
-          PPTX_VIEWER_SRC;
-
-        script.async =
-          true;
-
-        script.onload =
-          () => {
-            const Viewer =
-              window.PptxViewJS
-                ?.PPTXViewer;
-
-            if (
-              !Viewer
-            ) {
-              reject(
-                new Error(
-                  "Không khởi tạo được bộ đọc PowerPoint."
-                )
-              );
-
-              return;
-            }
-
+      reader.onload =
+        () => {
+          if (
+            typeof reader.result ===
+            "string"
+          ) {
             resolve(
-              Viewer
+              reader.result
             );
-          };
-
-        script.onerror =
-          () =>
+          } else {
             reject(
               new Error(
-                "Không tải được bộ đọc PowerPoint. Hãy kiểm tra kết nối Internet."
+                "Không đọc được ảnh trong PowerPoint."
               )
             );
+          }
+        };
 
-        document.head.appendChild(
-          script
-        );
+      reader.onerror =
+        () =>
+          reject(
+            reader.error ??
+              new Error(
+                "Không đọc được ảnh trong PowerPoint."
+              )
+          );
+
+      reader.readAsDataURL(
+        blob
+      );
+    }
+  );
+}
+
+async function getRelationships(
+  zip: JSZip,
+  slideNumber: number
+) {
+  const relsFile =
+    zip.file(
+      `ppt/slides/_rels/slide${slideNumber}.xml.rels`
+    );
+
+  const result =
+    new Map<
+      string,
+      string
+    >();
+
+  if (!relsFile) {
+    return result;
+  }
+
+  const xml =
+    await relsFile.async(
+      "string"
+    );
+
+  const documentXml =
+    new DOMParser().parseFromString(
+      xml,
+      "application/xml"
+    );
+
+  Array.from(
+    documentXml.getElementsByTagName(
+      "*"
+    )
+  )
+    .filter(
+      (node) =>
+        node.localName ===
+        "Relationship"
+    )
+    .forEach(
+      (node) => {
+        const id =
+          node.getAttribute(
+            "Id"
+          );
+
+        const target =
+          node.getAttribute(
+            "Target"
+          );
+
+        if (
+          id &&
+          target
+        ) {
+          const normalized =
+            target.startsWith(
+              "../"
+            )
+              ? `ppt/${target.slice(
+                  3
+                )}`
+              : `ppt/slides/${target}`;
+
+          result.set(
+            id,
+            normalized.replace(
+              /\\/g,
+              "/"
+            )
+          );
+        }
       }
     );
 
-  return viewerLoader;
+  return result;
 }
 
-async function extractSlideTitles(
-  file: File,
-  slideCount: number
+function readTextStyle(
+  shape: Element
 ) {
-  const zip =
-    await JSZip.loadAsync(
-      file
+  const runProperties =
+    Array.from(
+      shape.getElementsByTagName(
+        "*"
+      )
+    ).find(
+      (node) =>
+        node.localName ===
+          "rPr" ||
+        node.localName ===
+          "defRPr"
+    ) ?? null;
+
+  const sizeRaw =
+    attrNumber(
+      runProperties,
+      "sz",
+      2400
     );
 
+  const fontSize =
+    Math.max(
+      12,
+      Math.min(
+        54,
+        sizeRaw / 100
+      )
+    );
+
+  const colorNode =
+    runProperties
+      ? Array.from(
+          runProperties.getElementsByTagName(
+            "*"
+          )
+        ).find(
+          (node) =>
+            node.localName ===
+            "srgbClr"
+        )
+      : null;
+
+  const color =
+    colorNode?.getAttribute(
+      "val"
+    )
+      ? `#${colorNode.getAttribute(
+          "val"
+        )}`
+      : "#111827";
+
+  const bold =
+    runProperties
+      ?.getAttribute(
+        "b"
+      ) === "1";
+
+  return {
+    fontSize,
+    color,
+    bold,
+  };
+}
+
+function getShapeTransform(
+  shape: Element
+) {
+  const xfrm =
+    firstDescendant(
+      shape,
+      "xfrm"
+    );
+
+  const off =
+    xfrm
+      ? getDirectChildrenByLocalName(
+          xfrm,
+          "off"
+        )[0] ??
+        firstDescendant(
+          xfrm,
+          "off"
+        )
+      : null;
+
+  const ext =
+    xfrm
+      ? getDirectChildrenByLocalName(
+          xfrm,
+          "ext"
+        )[0] ??
+        firstDescendant(
+          xfrm,
+          "ext"
+        )
+      : null;
+
+  return {
+    x:
+      attrNumber(
+        off,
+        "x"
+      ),
+    y:
+      attrNumber(
+        off,
+        "y"
+      ),
+    cx:
+      attrNumber(
+        ext,
+        "cx"
+      ),
+    cy:
+      attrNumber(
+        ext,
+        "cy"
+      ),
+  };
+}
+
+async function renderSlideToSvg(
+  zip: JSZip,
+  slideNumber: number,
+  slideCx: number,
+  slideCy: number
+) {
+  const slideFile =
+    zip.file(
+      `ppt/slides/slide${slideNumber}.xml`
+    );
+
+  if (!slideFile) {
+    throw new Error(
+      `Không đọc được slide ${slideNumber}.`
+    );
+  }
+
+  const xml =
+    await slideFile.async(
+      "string"
+    );
+
+  const documentXml =
+    new DOMParser().parseFromString(
+      xml,
+      "application/xml"
+    );
+
+  const relationships =
+    await getRelationships(
+      zip,
+      slideNumber
+    );
+
+  const width =
+    1280;
+
+  const height =
+    Math.max(
+      1,
+      Math.round(
+        width *
+        slideCy /
+        slideCx
+      )
+    );
+
+  const scaleX =
+    width /
+    slideCx;
+
+  const scaleY =
+    height /
+    slideCy;
+
+  const pieces:
+    string[] = [
+      `<rect width="100%" height="100%" fill="#ffffff"/>`,
+  ];
+
+  const shapes =
+    Array.from(
+      documentXml.getElementsByTagName(
+        "*"
+      )
+    ).filter(
+      (node) =>
+        node.localName ===
+          "sp"
+    );
+
+  for (
+    const shape of
+    shapes
+  ) {
+    const transform =
+      getShapeTransform(
+        shape
+      );
+
+    const texts =
+      Array.from(
+        shape.getElementsByTagName(
+          "*"
+        )
+      )
+        .filter(
+          (node) =>
+            node.localName ===
+            "t"
+        )
+        .map(
+          (node) =>
+            String(
+              node.textContent ??
+              ""
+            )
+        )
+        .filter(
+          (value) =>
+            value.trim()
+              .length >
+            0
+        );
+
+    if (
+      texts.length ===
+        0 ||
+      transform.cx <=
+        0 ||
+      transform.cy <=
+        0
+    ) {
+      continue;
+    }
+
+    const style =
+      readTextStyle(
+        shape
+      );
+
+    const x =
+      transform.x *
+      scaleX;
+
+    const y =
+      transform.y *
+      scaleY;
+
+    const boxWidth =
+      transform.cx *
+      scaleX;
+
+    const boxHeight =
+      transform.cy *
+      scaleY;
+
+    const lineHeight =
+      style.fontSize *
+      1.2;
+
+    const maxChars =
+      Math.max(
+        8,
+        Math.floor(
+          boxWidth /
+          Math.max(
+            7,
+            style.fontSize *
+            0.55
+          )
+        )
+      );
+
+    const words =
+      texts
+        .join(" ")
+        .split(
+          /\s+/
+        )
+        .filter(Boolean);
+
+    const lines:
+      string[] =
+      [];
+
+    let current =
+      "";
+
+    for (
+      const word of
+      words
+    ) {
+      const next =
+        current
+          ? `${current} ${word}`
+          : word;
+
+      if (
+        next.length >
+          maxChars &&
+        current
+      ) {
+        lines.push(
+          current
+        );
+
+        current =
+          word;
+      } else {
+        current =
+          next;
+      }
+    }
+
+    if (
+      current
+    ) {
+      lines.push(
+        current
+      );
+    }
+
+    const maxLines =
+      Math.max(
+        1,
+        Math.floor(
+          boxHeight /
+          lineHeight
+        )
+      );
+
+    const visibleLines =
+      lines.slice(
+        0,
+        maxLines
+      );
+
+    visibleLines.forEach(
+      (
+        line,
+        lineIndex
+      ) => {
+        const textY =
+          y +
+          style.fontSize +
+          lineIndex *
+          lineHeight;
+
+        pieces.push(
+          `<text x="${x.toFixed(
+            2
+          )}" y="${textY.toFixed(
+            2
+          )}" font-family="Arial, Helvetica, sans-serif" font-size="${style.fontSize.toFixed(
+            1
+          )}" font-weight="${style.bold ? "700" : "400"}" fill="${escapeXml(
+            style.color
+          )}">${escapeXml(
+            line
+          )}</text>`
+        );
+      }
+    );
+  }
+
+  const pictures =
+    Array.from(
+      documentXml.getElementsByTagName(
+        "*"
+      )
+    ).filter(
+      (node) =>
+        node.localName ===
+          "pic"
+    );
+
+  for (
+    const picture of
+    pictures
+  ) {
+    const transform =
+      getShapeTransform(
+        picture
+      );
+
+    if (
+      transform.cx <=
+        0 ||
+      transform.cy <=
+        0
+    ) {
+      continue;
+    }
+
+    const blip =
+      Array.from(
+        picture.getElementsByTagName(
+          "*"
+        )
+      ).find(
+        (node) =>
+          node.localName ===
+          "blip"
+      );
+
+    if (!blip) {
+      continue;
+    }
+
+    const relId =
+      blip.getAttribute(
+        "r:embed"
+      ) ??
+      blip.getAttribute(
+        "embed"
+      );
+
+    if (!relId) {
+      continue;
+    }
+
+    const mediaPath =
+      relationships.get(
+        relId
+      );
+
+    if (!mediaPath) {
+      continue;
+    }
+
+    const mediaFile =
+      zip.file(
+        mediaPath
+      );
+
+    if (!mediaFile) {
+      continue;
+    }
+
+    try {
+      const bytes =
+        await mediaFile.async(
+          "uint8array"
+        );
+
+      const blob =
+        new Blob(
+          [bytes],
+          {
+            type:
+              mimeFromPath(
+                mediaPath
+              ),
+          }
+        );
+
+      const dataUrl =
+        await blobToDataUrl(
+          blob
+        );
+
+      pieces.push(
+        `<image href="${escapeXml(
+          dataUrl
+        )}" x="${(
+          transform.x *
+          scaleX
+        ).toFixed(
+          2
+        )}" y="${(
+          transform.y *
+          scaleY
+        ).toFixed(
+          2
+        )}" width="${(
+          transform.cx *
+          scaleX
+        ).toFixed(
+          2
+        )}" height="${(
+          transform.cy *
+          scaleY
+        ).toFixed(
+          2
+        )}" preserveAspectRatio="xMidYMid meet"/>`
+      );
+    } catch (
+      error
+    ) {
+      console.warn(
+        `Không đọc được ảnh của slide ${slideNumber}:`,
+        error
+      );
+    }
+  }
+
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${pieces.join(
+      ""
+    )}</svg>`;
+
+  return new Blob(
+    [svg],
+    {
+      type:
+        "image/svg+xml",
+    }
+  );
+}
+
+async function getSlideTitles(
+  zip: JSZip,
+  slideCount: number
+) {
   const titles:
     string[] =
       [];
@@ -181,12 +880,12 @@ async function extractSlideTitles(
     slideCount;
     index++
   ) {
-    const xmlFile =
+    const slideFile =
       zip.file(
         `ppt/slides/slide${index + 1}.xml`
       );
 
-    if (!xmlFile) {
+    if (!slideFile) {
       titles.push(
         `Trang ${index + 1}`
       );
@@ -195,7 +894,7 @@ async function extractSlideTitles(
 
     try {
       const xml =
-        await xmlFile.async(
+        await slideFile.async(
           "string"
         );
 
@@ -208,9 +907,14 @@ async function extractSlideTitles(
       const texts =
         Array.from(
           documentXml.getElementsByTagName(
-            "a:t"
+            "*"
           )
         )
+          .filter(
+            (node) =>
+              node.localName ===
+              "t"
+          )
           .map(
             (node) =>
               String(
@@ -238,34 +942,6 @@ async function extractSlideTitles(
   return titles;
 }
 
-function canvasToBlob(
-  canvas: HTMLCanvasElement
-) {
-  return new Promise<Blob>(
-    (
-      resolve,
-      reject
-    ) => {
-      canvas.toBlob(
-        (blob) => {
-          if (blob) {
-            resolve(
-              blob
-            );
-          } else {
-            reject(
-              new Error(
-                "Không tạo được ảnh từ slide."
-              )
-            );
-          }
-        },
-        "image/png"
-      );
-    }
-  );
-}
-
 export async function importPptxAsProject(
   file: File
 ): Promise<ProjectDocument> {
@@ -281,169 +957,174 @@ export async function importPptxAsProject(
     );
   }
 
-  const Viewer =
-    await loadPptxViewer();
-
-  const canvas =
-    document.createElement(
-      "canvas"
-    );
-
-  canvas.width =
-    1280;
-
-  canvas.height =
-    720;
-
-  canvas.style.position =
-    "fixed";
-
-  canvas.style.left =
-    "-10000px";
-
-  canvas.style.top =
-    "-10000px";
-
-  document.body.appendChild(
-    canvas
-  );
-
-  try {
-    const viewer =
-      new Viewer({
-        canvas,
-      });
-
-    await viewer.loadFile(
+  const zip =
+    await JSZip.loadAsync(
       file
     );
 
-    await viewer.render();
+  const slideFiles =
+    Object.keys(
+      zip.files
+    )
+      .filter(
+        (name) =>
+          /^ppt\/slides\/slide\d+\.xml$/.test(
+            name
+          )
+      )
+      .sort(
+        (
+          a,
+          b
+        ) => {
+          const aNumber =
+            Number(
+              a.match(
+                /slide(\d+)\.xml$/
+              )?.[1] ??
+              0
+            );
 
-    const slideCount =
-      viewer.getSlideCount();
+          const bNumber =
+            Number(
+              b.match(
+                /slide(\d+)\.xml$/
+              )?.[1] ??
+              0
+            );
 
-    if (
-      !slideCount ||
-      slideCount <
-        1
-    ) {
-      throw new Error(
-        "Không tìm thấy slide trong file PPTX."
-      );
-    }
-
-    const titles =
-      await extractSlideTitles(
-        file,
-        slideCount
-      );
-
-    const pages:
-      LessonPage[] =
-      [];
-
-    let firstSlideBlob:
-      Blob | null =
-      null;
-
-    for (
-      let index = 0;
-      index <
-      slideCount;
-      index++
-    ) {
-      if (
-        index >
-        0
-      ) {
-        await viewer.nextSlide();
-        await viewer.render();
-      }
-
-      const blob =
-        await canvasToBlob(
-          canvas
-        );
-
-      const pageId =
-        createId();
-
-      await saveSlideImage(
-        pageId,
-        blob
+          return (
+            aNumber -
+            bNumber
+          );
+        }
       );
 
-      if (
-        index ===
-        0
-      ) {
-        firstSlideBlob =
-          blob;
-      }
+  const slideCount =
+    slideFiles.length;
 
-      pages.push({
-        id:
-          pageId,
+  if (
+    slideCount <
+      1
+  ) {
+    throw new Error(
+      "Không tìm thấy slide trong file PPTX."
+    );
+  }
 
-        title:
-          titles[index] ||
-          `Trang ${index + 1}`,
+  const {
+    cx:
+      slideCx,
+    cy:
+      slideCy,
+  } =
+    await getSlideSize(
+      zip
+    );
 
-        videoName:
-          "",
+  const titles =
+    await getSlideTitles(
+      zip,
+      slideCount
+    );
 
-        slideImageName:
-          `slide-${index + 1}.png`,
+  const pages:
+    LessonPage[] =
+    [];
 
-        duration:
-          10,
+  let firstSlideBlob:
+    Blob | null =
+    null;
 
-        quizzes:
-          [],
-      });
-    }
+  for (
+    let index = 0;
+    index <
+    slideCount;
+    index++
+  ) {
+    const blob =
+      await renderSlideToSvg(
+        zip,
+        index + 1,
+        slideCx,
+        slideCy
+      );
 
-    const project:
-      ProjectDocument = {
-        id:
-          createId(),
+    const pageId =
+      createId();
 
-        title:
-          fileTitle(
-            file.name
-          ),
-
-        selectedPageId:
-          pages[0].id,
-
-        pages,
-      };
-
-    setActiveProject(
-      project
+    await saveSlideImage(
+      pageId,
+      blob
     );
 
     if (
-      firstSlideBlob
+      index ===
+      0
     ) {
-      try {
-        await saveProjectThumbnail(
-          project.id,
-          firstSlideBlob
-        );
-      } catch (
-        error
-      ) {
-        console.warn(
-          "Không tạo được thumbnail PPTX:",
-          error
-        );
-      }
+      firstSlideBlob =
+        blob;
     }
 
-    return project;
-  } finally {
-    canvas.remove();
+    pages.push({
+      id:
+        pageId,
+
+      title:
+        titles[index] ||
+        `Trang ${index + 1}`,
+
+      videoName:
+        "",
+
+      slideImageName:
+        `slide-${index + 1}.svg`,
+
+      duration:
+        10,
+
+      quizzes:
+        [],
+    });
   }
+
+  const project:
+    ProjectDocument = {
+      id:
+        createId(),
+
+      title:
+        fileTitle(
+          file.name
+        ),
+
+      selectedPageId:
+        pages[0].id,
+
+      pages,
+    };
+
+  setActiveProject(
+    project
+  );
+
+  if (
+    firstSlideBlob
+  ) {
+    try {
+      await saveProjectThumbnail(
+        project.id,
+        firstSlideBlob
+      );
+    } catch (
+      error
+    ) {
+      console.warn(
+        "Không tạo được thumbnail PPTX:",
+        error
+      );
+    }
+  }
+
+  return project;
 }
