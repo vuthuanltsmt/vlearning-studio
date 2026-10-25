@@ -4,6 +4,7 @@ import {
   BookOpen,
   ChevronLeft,
   ChevronRight,
+  FileSpreadsheet,
   FileText,
   FolderOpen,
   Gamepad2,
@@ -45,6 +46,7 @@ import {
 type StudioSection =
   | "projects"
   | "lesson-plan"
+  | "assessment"
   | "guide"
   | "games"
   | "script"
@@ -568,6 +570,26 @@ export default function LeftSidebar({
                 />
                 <span className={labelClass}>
                   Giáo án 5512
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  go(
+                    "assessment"
+                  )
+                }
+                className={`${menuBase} ${menuSpacing} mt-1 ${stateClass(
+                  "assessment"
+                )}`}
+              >
+                <FileSpreadsheet
+                  size={20}
+                  className="shrink-0 text-amber-300"
+                />
+                <span className={labelClass}>
+                  Ma trận & Đề 7991
                 </span>
               </button>
             </div>
