@@ -1,15 +1,21 @@
 "use client";
 
 import {
+  Eye,
+  EyeOff,
   FileDown,
   ImagePlus,
+  KeyRound,
   Loader2,
   RotateCcw,
+  Save,
+  ShieldCheck,
   Sparkles,
   Trash2,
 } from "lucide-react";
 
 import {
+  useEffect,
   useRef,
   useState,
 } from "react";
@@ -61,6 +67,9 @@ type SourceImage = {
   name: string;
   dataUrl: string;
 };
+
+const API_KEY_STORAGE =
+  "vlearning-openai-api-key-v1";
 
 function createId() {
   try {
@@ -470,6 +479,105 @@ export default function LessonPlan5512Panel({
   ] =
     useState("");
 
+  const [
+    apiKey,
+    setApiKey,
+  ] =
+    useState("");
+
+  const [
+    showApiKey,
+    setShowApiKey,
+  ] =
+    useState(false);
+
+  const [
+    keySaved,
+    setKeySaved,
+  ] =
+    useState(false);
+
+  useEffect(() => {
+    try {
+      const saved =
+        localStorage.getItem(
+          API_KEY_STORAGE
+        );
+
+      if (saved) {
+        setApiKey(
+          saved
+        );
+        setKeySaved(
+          true
+        );
+      }
+    } catch {
+      // localStorage may be unavailable.
+    }
+  }, []);
+
+  function saveApiKey() {
+    const value =
+      apiKey.trim();
+
+    if (
+      !value.startsWith(
+        "sk-"
+      ) ||
+      value.length <
+        20
+    ) {
+      setMessage(
+        "API Key chưa hợp lệ. Key OpenAI thường bắt đầu bằng sk-."
+      );
+      return;
+    }
+
+    try {
+      localStorage.setItem(
+        API_KEY_STORAGE,
+        value
+      );
+      setApiKey(
+        value
+      );
+      setKeySaved(
+        true
+      );
+      setMessage(
+        "Đã lưu API Key trên trình duyệt của thiết bị này."
+      );
+    } catch {
+      setMessage(
+        "Trình duyệt không cho phép lưu API Key."
+      );
+    }
+  }
+
+  function clearApiKey() {
+    try {
+      localStorage.removeItem(
+        API_KEY_STORAGE
+      );
+    } catch {
+      // Keep UI responsive.
+    }
+
+    setApiKey(
+      ""
+    );
+    setKeySaved(
+      false
+    );
+    setShowApiKey(
+      false
+    );
+    setMessage(
+      "Đã xóa API Key khỏi trình duyệt."
+    );
+  }
+
   async function addFiles(
     files:
       FileList |
@@ -537,6 +645,15 @@ export default function LessonPlan5512Panel({
 
   async function generate() {
     if (
+      !apiKey.trim()
+    ) {
+      setMessage(
+        "Hãy nhập và lưu API Key OpenAI cá nhân trước."
+      );
+      return;
+    }
+
+    if (
       images.length ===
       0
     ) {
@@ -569,6 +686,8 @@ export default function LessonPlan5512Panel({
             },
             body:
               JSON.stringify({
+                apiKey:
+                  apiKey.trim(),
                 images:
                   images.map(
                     (
@@ -923,11 +1042,131 @@ ${
         </p>
       </section>
 
+      <section className="mt-5 rounded-[22px] border border-cyan-500/25 bg-[#0c2b50] p-5">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-300">
+            <KeyRound
+              size={20}
+            />
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-lg font-black text-cyan-200">
+                1. API Key AI cá nhân
+              </h2>
+
+              {keySaved && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[10px] font-black text-emerald-300">
+                  <ShieldCheck
+                    size={12}
+                  />
+                  Đã lưu trên thiết bị
+                </span>
+              )}
+            </div>
+
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              Mỗi người dùng sử dụng API Key OpenAI của chính mình. Key chỉ được lưu trong trình duyệt này và gửi tới OpenAI khi tạo giáo án; VLearning không lưu key vào cơ sở dữ liệu.
+            </p>
+
+            <div className="mt-4 flex flex-col gap-2 lg:flex-row">
+              <div className="relative min-w-0 flex-1">
+                <input
+                  type={
+                    showApiKey
+                      ? "text"
+                      : "password"
+                  }
+                  value={
+                    apiKey
+                  }
+                  onChange={(
+                    event
+                  ) => {
+                    setApiKey(
+                      event.target.value
+                    );
+                    setKeySaved(
+                      false
+                    );
+                  }}
+                  placeholder="sk-..."
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="w-full rounded-xl border border-blue-800 bg-[#071f39] px-3 py-3 pr-11 font-mono text-xs text-slate-200 outline-none focus:border-cyan-500"
+                />
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowApiKey(
+                      (current) =>
+                        !current
+                    )
+                  }
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-cyan-300"
+                  title={
+                    showApiKey
+                      ? "Ẩn API Key"
+                      : "Hiện API Key"
+                  }
+                >
+                  {showApiKey ? (
+                    <EyeOff
+                      size={17}
+                    />
+                  ) : (
+                    <Eye
+                      size={17}
+                    />
+                  )}
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={
+                  saveApiKey
+                }
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-xs font-black hover:bg-emerald-500"
+              >
+                <Save
+                  size={15}
+                />
+                Lưu API Key
+              </button>
+
+              <button
+                type="button"
+                onClick={
+                  clearApiKey
+                }
+                disabled={
+                  !apiKey &&
+                  !keySaved
+                }
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-3 text-xs font-black text-red-300 disabled:opacity-40"
+              >
+                <Trash2
+                  size={15}
+                />
+                Xóa key
+              </button>
+            </div>
+
+            <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 text-[11px] leading-5 text-amber-100/80">
+              Không chia sẻ API Key cho người khác. ChatGPT Free/Plus/Pro không tự cấp credit API; nếu tài khoản API không có credit, OpenAI sẽ báo hết hạn mức.
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section className="mt-5 rounded-[22px] border border-blue-800/70 bg-[#0c2b50] p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-lg font-black text-cyan-200">
-              1. Đưa ảnh tài liệu vào
+              2. Đưa ảnh tài liệu vào
             </h2>
             <p className="mt-1 text-xs leading-5 text-slate-500">
               Tối đa 10 ảnh. Nên chụp rõ, đủ trang và theo đúng thứ tự nội dung bài học.
@@ -1091,6 +1330,7 @@ ${
             }
             disabled={
               busy ||
+              !apiKey.trim() ||
               images.length ===
                 0
             }
