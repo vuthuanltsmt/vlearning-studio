@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ClipboardCopy,
   ExternalLink,
   Eye,
   EyeOff,
@@ -71,6 +72,48 @@ type SourceImage = {
 
 const API_KEY_STORAGE =
   "vlearning-openai-api-key-v1";
+
+const FREE_CHATGPT_PROMPT =
+  `Bạn là chuyên gia giáo dục phổ thông Việt Nam.
+
+Hãy đọc toàn bộ ảnh SGK/tài liệu tôi tải lên và soạn MỘT KẾ HOẠCH BÀI DẠY HOÀN CHỈNH theo định hướng Công văn 5512/BGDĐT-GDTrH, đồng thời tích hợp năng lực số theo Thông tư 02/2025/TT-BGDĐT.
+
+Yêu cầu:
+1. Tự xác định môn học, lớp, tên bài/chủ đề, nội dung trọng tâm và số tiết hợp lý từ tài liệu.
+2. Không bịa tên trường hoặc giáo viên nếu tài liệu không có.
+3. Cấu trúc:
+I. MỤC TIÊU
+- Kiến thức
+- Năng lực chung
+- Năng lực đặc thù
+- Phẩm chất
+- Năng lực số
+
+II. THIẾT BỊ DẠY HỌC VÀ HỌC LIỆU
+
+III. TIẾN TRÌNH DẠY HỌC
+Gồm:
+- Hoạt động 1. Mở đầu
+- Hoạt động 2. Hình thành kiến thức mới
+- Hoạt động 3. Luyện tập
+- Hoạt động 4. Vận dụng
+
+Mỗi hoạt động phải có đủ:
+a) Mục tiêu
+b) Nội dung
+c) Sản phẩm
+d) Tổ chức thực hiện
+
+Trong phần tổ chức thực hiện phải trình bày rõ 4 bước:
+Bước 1. Chuyển giao nhiệm vụ
+Bước 2. Thực hiện nhiệm vụ
+Bước 3. Báo cáo, thảo luận
+Bước 4. Kết luận, nhận định
+
+4. Tích hợp năng lực số phù hợp vào từng hoạt động, dùng mã theo 6 miền/24 năng lực thành phần (1.1-1.3, 2.1-2.6, 3.1-3.4, 4.1-4.4, 5.1-5.4, 6.1-6.3) và nêu minh chứng cụ thể.
+5. Có phần đánh giá, hồ sơ dạy học và điều chỉnh sau bài dạy.
+6. Viết bằng tiếng Việt, chi tiết, có thể dùng ngay để dạy và có thể đưa vào Word.
+7. Không giải thích thêm ngoài giáo án.`;
 
 function createId() {
   try {
@@ -497,6 +540,37 @@ export default function LessonPlan5512Panel({
     setKeySaved,
   ] =
     useState(false);
+
+  const [
+    copiedPrompt,
+    setCopiedPrompt,
+  ] =
+    useState(false);
+
+  async function copyFreePrompt() {
+    try {
+      await navigator.clipboard.writeText(
+        FREE_CHATGPT_PROMPT
+      );
+      setCopiedPrompt(
+        true
+      );
+      setMessage(
+        "Đã sao chép prompt. Hãy mở ChatGPT Free, tải ảnh tài liệu và dán prompt."
+      );
+      window.setTimeout(
+        () =>
+          setCopiedPrompt(
+            false
+          ),
+        1800
+      );
+    } catch {
+      setMessage(
+        "Không thể tự sao chép. Hãy chọn và sao chép prompt thủ công."
+      );
+    }
+  }
 
   useEffect(() => {
     try {
@@ -1222,6 +1296,89 @@ ${
             </div>
           </div>
         </div>
+      </section>
+
+      <section className="mt-5 rounded-[22px] border border-emerald-500/25 bg-[#0c2b50] p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-3xl">
+            <div className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-300">
+              Chế độ miễn phí
+            </div>
+            <h2 className="mt-1 text-lg font-black text-white">
+              Dùng ChatGPT Free để soạn giáo án
+            </h2>
+            <p className="mt-2 text-xs leading-5 text-slate-400">
+              Không cần API Key. VLearning chuẩn bị sẵn prompt chuẩn 5512. Bạn mở ChatGPT Free, tải ảnh SGK/tài liệu vào, dán prompt và để ChatGPT soạn giáo án.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={
+                copyFreePrompt
+              }
+              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black hover:bg-emerald-500"
+            >
+              <ClipboardCopy
+                size={15}
+              />
+              {copiedPrompt
+                ? "Đã copy ✓"
+                : "Copy prompt 5512"}
+            </button>
+
+            <a
+              href="https://chatgpt.com/"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-xs font-black text-emerald-200 hover:bg-emerald-500/20"
+            >
+              Mở ChatGPT Free
+              <ExternalLink
+                size={14}
+              />
+            </a>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <div className="rounded-xl border border-blue-800 bg-[#071f39] p-3">
+            <div className="text-[10px] font-black uppercase text-emerald-300">
+              Bước 1
+            </div>
+            <div className="mt-1 text-xs leading-5 text-slate-300">
+              Bấm <b>Copy prompt 5512</b>.
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-blue-800 bg-[#071f39] p-3">
+            <div className="text-[10px] font-black uppercase text-emerald-300">
+              Bước 2
+            </div>
+            <div className="mt-1 text-xs leading-5 text-slate-300">
+              Bấm <b>Mở ChatGPT Free</b>, tải ảnh tài liệu lên và dán prompt.
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-blue-800 bg-[#071f39] p-3">
+            <div className="text-[10px] font-black uppercase text-emerald-300">
+              Bước 3
+            </div>
+            <div className="mt-1 text-xs leading-5 text-slate-300">
+              ChatGPT sẽ tạo giáo án hoàn chỉnh. Bạn có thể sao chép nội dung về Word hoặc dùng chế độ API tự động phía trên.
+            </div>
+          </div>
+        </div>
+
+        <details className="mt-4 rounded-xl border border-blue-800 bg-[#071f39] p-3">
+          <summary className="cursor-pointer text-xs font-black text-cyan-200">
+            Xem prompt 5512 dùng với ChatGPT Free
+          </summary>
+          <pre className="mt-3 whitespace-pre-wrap break-words text-[11px] leading-5 text-slate-400">
+            {FREE_CHATGPT_PROMPT}
+          </pre>
+        </details>
       </section>
 
       <section className="mt-5 rounded-[22px] border border-blue-800/70 bg-[#0c2b50] p-5">
