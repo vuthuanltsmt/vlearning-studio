@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ExternalLink,
   Eye,
   EyeOff,
   FileDown,
@@ -1155,8 +1156,69 @@ ${
               </button>
             </div>
 
+            <div className="mt-4 rounded-2xl border border-blue-700/50 bg-[#071f39] p-4">
+              <div className="text-sm font-black text-white">
+                Chưa có API Key? Lấy ngay theo 3 bước
+              </div>
+
+              <div className="mt-3 grid gap-3 md:grid-cols-3">
+                <div className="rounded-xl border border-blue-800 bg-[#0a294a] p-3">
+                  <div className="text-[10px] font-black uppercase tracking-wide text-cyan-300">
+                    Bước 1
+                  </div>
+                  <div className="mt-1 text-xs font-bold text-slate-200">
+                    Đăng nhập OpenAI Platform
+                  </div>
+                  <a
+                    href="https://platform.openai.com/api-keys"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-cyan-500/10 px-3 py-2 text-[11px] font-black text-cyan-200 hover:bg-cyan-500/20"
+                  >
+                    Mở trang tạo API Key
+                    <ExternalLink
+                      size={13}
+                    />
+                  </a>
+                </div>
+
+                <div className="rounded-xl border border-blue-800 bg-[#0a294a] p-3">
+                  <div className="text-[10px] font-black uppercase tracking-wide text-cyan-300">
+                    Bước 2
+                  </div>
+                  <div className="mt-1 text-xs leading-5 text-slate-300">
+                    Bấm <b>Create new secret key</b>, đặt tên ví dụ <b>VLEARNING</b>, sau đó sao chép key bắt đầu bằng <b>sk-</b>.
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-blue-800 bg-[#0a294a] p-3">
+                  <div className="text-[10px] font-black uppercase tracking-wide text-cyan-300">
+                    Bước 3
+                  </div>
+                  <div className="mt-1 text-xs leading-5 text-slate-300">
+                    Dán key vào ô phía trên rồi bấm <b>Lưu API Key</b>. Nếu báo hết credit, mở trang Billing để nạp số dư API.
+                  </div>
+                  <a
+                    href="https://platform.openai.com/settings/organization/billing/overview"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] font-black text-amber-200 hover:bg-amber-500/20"
+                  >
+                    Mở trang Billing
+                    <ExternalLink
+                      size={13}
+                    />
+                  </a>
+                </div>
+              </div>
+
+              <div className="mt-3 text-[11px] leading-5 text-slate-500">
+                Lưu ý: ChatGPT và OpenAI API dùng hệ thống thanh toán riêng. Một số tài khoản có thể có credit khuyến mại; nếu không, API cần có số dư để sử dụng.
+              </div>
+            </div>
+
             <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 text-[11px] leading-5 text-amber-100/80">
-              Không chia sẻ API Key cho người khác. ChatGPT Free/Plus/Pro không tự cấp credit API; nếu tài khoản API không có credit, OpenAI sẽ báo hết hạn mức.
+              Không chia sẻ API Key cho người khác. VLearning chỉ dùng key để tạo giáo án theo yêu cầu của người dùng.
             </div>
           </div>
         </div>
