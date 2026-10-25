@@ -99,6 +99,8 @@ import GuideCenter from "@/components/guide/GuideCenter";
 
 import LessonPlan5512Panel from "@/components/lesson-plan/LessonPlan5512Panel";
 
+import Assessment7991Panel from "@/components/assessment/Assessment7991Panel";
+
 import {
   SERVER_AUTH_EVENT,
 } from "@/lib/authClient";
@@ -240,6 +242,7 @@ function blobToDataUrl(
 type StudioSection =
   | "projects"
   | "lesson-plan"
+  | "assessment"
   | "guide"
   | "games"
   | "script"
@@ -5589,6 +5592,19 @@ function WorkspacePanel({
     );
   }
 
+  if (
+    section ===
+    "assessment"
+  ) {
+    return (
+      <Assessment7991Panel
+        onOpenMenu={
+          onOpenMenu
+        }
+      />
+    );
+  }
+
   if (section === "guide") {
     return (
       <GuidePanel
@@ -6279,6 +6295,7 @@ export default function ProjectsPage() {
         [
           "projects",
           "lesson-plan",
+          "assessment",
           "games",
           "script",
           "ai-settings",
