@@ -97,7 +97,6 @@ import AdminUsersPanel from "@/components/admin/UserAdminPanel";
 
 import GuideCenter from "@/components/guide/GuideCenter";
 
-import LessonPlan5512Panel from "@/components/lesson-plan/LessonPlan5512Panel";
 
 import {
   SERVER_AUTH_EVENT,
@@ -239,7 +238,6 @@ function blobToDataUrl(
 
 type StudioSection =
   | "projects"
-  | "lesson-plan"
   | "guide"
   | "games"
   | "script"
@@ -5576,19 +5574,6 @@ function WorkspacePanel({
   projects: ProjectLibraryEntry[];
   currentUser: ServerSessionUser | null;
 }) {
-  if (
-    section ===
-    "lesson-plan"
-  ) {
-    return (
-      <LessonPlan5512Panel
-        onOpenMenu={
-          onOpenMenu
-        }
-      />
-    );
-  }
-
   if (section === "guide") {
     return (
       <GuidePanel
@@ -6278,7 +6263,6 @@ export default function ProjectsPage() {
       StudioSection[] =
         [
           "projects",
-          "lesson-plan",
           "games",
           "script",
           "ai-settings",
