@@ -21,19 +21,6 @@ type ImageInput = {
   dataUrl: string;
 };
 
-function openAiKey() {
-  const value =
-    process.env.OPENAI_API_KEY?.trim();
-
-  if (!value) {
-    throw new Error(
-      "OPENAI_API_KEY chưa được cấu hình."
-    );
-  }
-
-  return value;
-}
-
 async function requireAuthor() {
   const user =
     await serverUserForGuard();
@@ -140,6 +127,25 @@ export async function POST(
 
     const body =
       await request.json();
+
+    const apiKey =
+      typeof body?.apiKey ===
+        "string"
+        ? body.apiKey.trim()
+        : "";
+
+    if (
+      apiKey.length <
+        20 ||
+      !apiKey.startsWith(
+        "sk-"
+      )
+    ) {
+      throw new AuthError(
+        "API Key OpenAI chưa hợp lệ. Hãy nhập API Key cá nhân của bạn.",
+        400
+      );
+    }
 
     const images =
       Array.isArray(
@@ -318,7 +324,7 @@ Hãy ưu tiên độ chính xác theo nội dung ảnh và tạo giáo án đủ
             "POST",
           headers: {
             Authorization:
-              `Bearer ${openAiKey()}`,
+              `Bearer ${apiKey}`,
             "Content-Type":
               "application/json",
           },
@@ -353,8 +359,8 @@ Hãy ưu tiên độ chính xác theo nội dung ảnh và tạo giáo án đủ
       !response.ok
     ) {
       console.error(
-        "[LESSON PLAN AI] OpenAI error:",
-        payload
+        "[LESSON PLAN AI] OpenAI request failed:",
+        response.status
       );
 
       throw new Error(
