@@ -11,7 +11,6 @@ import {
   LogIn,
   Landmark,
   MonitorDown,
-  NotebookPen,
   Palette,
   Settings,
   Shield,
@@ -44,7 +43,6 @@ import {
 
 type StudioSection =
   | "projects"
-  | "lesson-plan"
   | "guide"
   | "games"
   | "script"
@@ -551,25 +549,7 @@ export default function LeftSidebar({
                 </span>
               </button>
 
-              <button
-                type="button"
-                onClick={() =>
-                  go(
-                    "lesson-plan"
-                  )
-                }
-                className={`${menuBase} ${menuSpacing} mt-1 ${stateClass(
-                  "lesson-plan"
-                )}`}
-              >
-                <NotebookPen
-                  size={20}
-                  className="shrink-0 text-emerald-300"
-                />
-                <span className={labelClass}>
-                  Giáo án 5512
-                </span>
-              </button>
+
             </div>
           )}
 
