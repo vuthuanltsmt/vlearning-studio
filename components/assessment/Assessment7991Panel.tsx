@@ -415,11 +415,17 @@ function buildFreePrompt(
   return [
     "Bạn là chuyên gia kiểm tra, đánh giá giáo dục phổ thông Việt Nam.",
     "",
-    "Tôi sẽ tải kèm các tài liệu/bài học sau:",
+    "TÔI ĐÃ ĐÍNH KÈM NGAY TRONG TIN NHẮN NÀY các tài liệu/bài học sau:",
     sourceNames ||
-      "(Hãy đọc toàn bộ file tôi tải trong cuộc trò chuyện này.)",
+      "(Không có danh sách tài liệu.)",
     "",
-    "Hãy đọc toàn bộ tài liệu và tạo đúng theo tinh thần, cấu trúc Phụ lục Công văn 7991/BGDĐT-GDTrH ngày 17/12/2024.",
+    "QUY TẮC NGUỒN DỮ LIỆU BẮT BUỘC:",
+    "- Chỉ được sử dụng các tệp đính kèm NGAY TRONG TIN NHẮN HIỆN TẠI.",
+    "- Không được dùng nội dung, tài liệu, tệp hoặc suy luận từ các cuộc trò chuyện trước.",
+    "- Không được coi tên file trong prompt là bằng chứng rằng nội dung file đã được cung cấp.",
+    "- Nếu chưa nhìn thấy đầy đủ các tệp nêu trên trong tin nhắn hiện tại, hãy DỪNG và yêu cầu tôi tải đủ tệp; KHÔNG tạo JSON giả, KHÔNG tạo ma trận/đề từ trí nhớ hoặc lịch sử chat.",
+    "",
+    "Nếu và chỉ nếu đã đọc được đầy đủ các tệp đính kèm hiện tại, hãy đọc toàn bộ tài liệu và tạo đúng theo tinh thần, cấu trúc Phụ lục Công văn 7991/BGDĐT-GDTrH ngày 17/12/2024.",
     "",
     "PHẢI TẠO ĐỦ 6 PHẦN:",
     "1. Ma trận đề kiểm tra định kì.",
@@ -873,6 +879,28 @@ export default function Assessment7991Panel({
 
       if (
         !Array.isArray(
+          parsed?.matrix
+        ) ||
+        parsed.matrix.length === 0
+      ) {
+        throw new Error(
+          "Kết quả không có Ma trận 7991. Có thể ChatGPT chưa nhận được tài liệu nguồn."
+        );
+      }
+
+      if (
+        !Array.isArray(
+          parsed?.specification
+        ) ||
+        parsed.specification.length === 0
+      ) {
+        throw new Error(
+          "Kết quả không có Bản đặc tả. Hãy kiểm tra lại việc tải tài liệu lên ChatGPT."
+        );
+      }
+
+      if (
+        !Array.isArray(
           parsed?.versions
         ) ||
         parsed.versions.length <
@@ -881,6 +909,61 @@ export default function Assessment7991Panel({
         throw new Error(
           "Kết quả chưa có đủ 2 mã đề."
         );
+      }
+
+      for (
+        const version of
+        parsed.versions.slice(
+          0,
+          2
+        )
+      ) {
+        if (
+          !Array.isArray(
+            version?.sections
+          ) ||
+          version.sections.length ===
+            0
+        ) {
+          throw new Error(
+            "Mã " +
+              String(
+                version?.code ??
+                  ""
+              ) +
+              " chưa có nội dung đề."
+          );
+        }
+
+        const questionCount =
+          version.sections.reduce(
+            (
+              total: number,
+              section: any
+            ) =>
+              total +
+              (
+                Array.isArray(
+                  section?.questions
+                )
+                  ? section.questions.length
+                  : 0
+              ),
+            0
+          );
+
+        if (
+          questionCount === 0
+        ) {
+          throw new Error(
+            "Mã " +
+              String(
+                version?.code ??
+                  ""
+              ) +
+              " chưa có câu hỏi. Không nhập kết quả rỗng vào VLEARNING."
+          );
+        }
       }
 
       setResult(
@@ -1685,9 +1768,37 @@ export default function Assessment7991Panel({
               3. Dùng ChatGPT miễn phí
             </div>
 
-            <p className="mt-1 text-xs leading-5 text-slate-400">
-              Bước 1: sao chép yêu cầu. Bước 2: mở ChatGPT và tải cùng tài liệu ở trên. Bước 3: dán yêu cầu. Bước 4: sao chép JSON ChatGPT trả về và dán lại vào ô bên dưới.
+            <div className="mt-2 rounded-xl border border-amber-400/40 bg-amber-500/10 p-3 text-xs leading-5 text-amber-100">
+              <b>Lưu ý quan trọng:</b> tài liệu bạn chọn trong VLEARNING không tự chuyển sang ChatGPT. Sau khi mở ChatGPT, bạn phải tải lại đúng các file này vào chính tin nhắn ChatGPT trước khi dán yêu cầu.
+            </div>
+
+            <p className="mt-3 text-xs leading-5 text-slate-400">
+              Bước 1: mở ChatGPT. Bước 2: tải lại đúng {sources.length} file đã chọn ở VLEARNING vào ChatGPT. Bước 3: sao chép và dán yêu cầu 7991. Bước 4: chờ ChatGPT tạo đủ ma trận, đặc tả, Mã 01, đáp án Mã 01, Mã 02, đáp án Mã 02. Bước 5: sao chép toàn bộ JSON trả về và dán lại bên dưới.
             </p>
+
+            {sources.length > 0 && (
+              <div className="mt-3 rounded-xl border border-blue-800 bg-[#071f39] p-3">
+                <div className="text-[11px] font-black text-cyan-200">
+                  Các file phải tải lại lên ChatGPT:
+                </div>
+                <div className="mt-2 space-y-1 text-[11px] text-slate-300">
+                  {sources.map(
+                    (
+                      source,
+                      index
+                    ) => (
+                      <div
+                        key={
+                          source.id
+                        }
+                      >
+                        {index + 1}. {source.name}
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="mt-3 flex flex-wrap gap-2">
               <button
