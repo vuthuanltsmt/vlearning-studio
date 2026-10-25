@@ -395,11 +395,21 @@ export async function POST(
             "high",
         });
       } else {
+        const commaIndex =
+          source.dataUrl.indexOf(",");
+
+        const base64Data =
+          commaIndex >= 0
+            ? source.dataUrl.slice(
+                commaIndex + 1
+              )
+            : source.dataUrl;
+
         content.push({
           type:
             "input_file",
           file_data:
-            source.dataUrl,
+            base64Data,
           filename:
             source.name,
         });
