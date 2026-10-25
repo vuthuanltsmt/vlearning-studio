@@ -589,7 +589,7 @@ export default function LeftSidebar({
                   className="shrink-0 text-amber-300"
                 />
                 <span className={labelClass}>
-                  Ma trận & Đề 7991
+                  Ma trận & Đề 7991 • 2 mã
                 </span>
               </button>
             </div>
