@@ -1,357 +1,433 @@
 "use client";
 
 import {
-  BookOpenCheck,
   FileDown,
+  ImagePlus,
+  Loader2,
   RotateCcw,
-  Save,
+  Sparkles,
+  Trash2,
 } from "lucide-react";
 
 import {
-  useEffect,
-  useMemo,
+  useRef,
   useState,
 } from "react";
 
 type DigitalCompetency = {
-  id: string;
-  domain: string;
+  code: string;
   name: string;
+  evidence: string;
 };
 
-type LessonActivity = {
-  id:
-    | "opening"
-    | "knowledge"
-    | "practice"
-    | "application";
+type Activity = {
   title: string;
   objective: string;
   content: string;
   product: string;
-  organization: string;
-  digitalIds: string[];
+  organization: {
+    transfer: string;
+    perform: string;
+    report: string;
+    conclude: string;
+  };
+  digitalCompetencies:
+    DigitalCompetency[];
 };
 
-type LessonPlanDraft = {
+type LessonPlan = {
   school: string;
   teacher: string;
   subject: string;
   grade: string;
   lessonTitle: string;
   periods: string;
-  knowledgeObjectives: string;
-  competencies: string;
-  qualities: string;
+  objectives: {
+    knowledge: string;
+    generalCompetencies: string;
+    specificCompetencies: string;
+    qualities: string;
+    digitalCompetencies:
+      DigitalCompetency[];
+  };
   equipment: string;
-  digitalLevel: string;
-  activities: LessonActivity[];
+  activities: Activity[];
+  assessment: string;
+  notes: string;
 };
 
-const STORAGE_KEY =
-  "vlearning-lesson-plan-5512-v1";
+type SourceImage = {
+  id: string;
+  name: string;
+  dataUrl: string;
+};
 
-const DIGITAL_DOMAINS: Array<{
-  title: string;
-  items: DigitalCompetency[];
-}> = [
-  {
-    title:
-      "I. Khai thác dữ liệu và thông tin",
-    items: [
-      {
-        id: "1.1",
-        domain: "I",
-        name:
-          "Duyệt, tìm kiếm và lọc dữ liệu, thông tin và nội dung số",
-      },
-      {
-        id: "1.2",
-        domain: "I",
-        name:
-          "Đánh giá dữ liệu, thông tin và nội dung số",
-      },
-      {
-        id: "1.3",
-        domain: "I",
-        name:
-          "Quản lý dữ liệu, thông tin và nội dung số",
-      },
-    ],
-  },
-  {
-    title:
-      "II. Giao tiếp và hợp tác trong môi trường số",
-    items: [
-      {
-        id: "2.1",
-        domain: "II",
-        name:
-          "Tương tác thông qua công nghệ số",
-      },
-      {
-        id: "2.2",
-        domain: "II",
-        name:
-          "Chia sẻ thông tin, nội dung số thông qua công nghệ số",
-      },
-      {
-        id: "2.3",
-        domain: "II",
-        name:
-          "Tham gia với tư cách công dân thông qua công nghệ số",
-      },
-      {
-        id: "2.4",
-        domain: "II",
-        name:
-          "Hợp tác thông qua công nghệ số",
-      },
-      {
-        id: "2.5",
-        domain: "II",
-        name:
-          "Thực hiện quy tắc ứng xử trên mạng",
-      },
-      {
-        id: "2.6",
-        domain: "II",
-        name:
-          "Quản lý danh tính số",
-      },
-    ],
-  },
-  {
-    title:
-      "III. Sáng tạo nội dung số",
-    items: [
-      {
-        id: "3.1",
-        domain: "III",
-        name:
-          "Phát triển nội dung số",
-      },
-      {
-        id: "3.2",
-        domain: "III",
-        name:
-          "Tích hợp và tạo lập lại nội dung số",
-      },
-      {
-        id: "3.3",
-        domain: "III",
-        name:
-          "Thực thi bản quyền và giấy phép",
-      },
-      {
-        id: "3.4",
-        domain: "III",
-        name:
-          "Lập trình",
-      },
-    ],
-  },
-  {
-    title:
-      "IV. An toàn",
-    items: [
-      {
-        id: "4.1",
-        domain: "IV",
-        name:
-          "Bảo vệ thiết bị",
-      },
-      {
-        id: "4.2",
-        domain: "IV",
-        name:
-          "Bảo vệ dữ liệu cá nhân và quyền riêng tư",
-      },
-      {
-        id: "4.3",
-        domain: "IV",
-        name:
-          "Bảo vệ sức khỏe và an sinh số",
-      },
-      {
-        id: "4.4",
-        domain: "IV",
-        name:
-          "Bảo vệ môi trường",
-      },
-    ],
-  },
-  {
-    title:
-      "V. Giải quyết vấn đề",
-    items: [
-      {
-        id: "5.1",
-        domain: "V",
-        name:
-          "Giải quyết các vấn đề kỹ thuật",
-      },
-      {
-        id: "5.2",
-        domain: "V",
-        name:
-          "Xác định nhu cầu và giải pháp công nghệ",
-      },
-      {
-        id: "5.3",
-        domain: "V",
-        name:
-          "Sử dụng sáng tạo công nghệ số",
-      },
-      {
-        id: "5.4",
-        domain: "V",
-        name:
-          "Xác định khoảng cách về năng lực số",
-      },
-    ],
-  },
-  {
-    title:
-      "VI. Ứng dụng trí tuệ nhân tạo",
-    items: [
-      {
-        id: "6.1",
-        domain: "VI",
-        name:
-          "Hiểu biết về AI (trong đó có Gen AI)",
-      },
-      {
-        id: "6.2",
-        domain: "VI",
-        name:
-          "Sử dụng AI có đạo đức và trách nhiệm",
-      },
-      {
-        id: "6.3",
-        domain: "VI",
-        name:
-          "Đánh giá các công cụ AI",
-      },
-    ],
-  },
-];
-
-const ALL_DIGITAL =
-  DIGITAL_DOMAINS.flatMap(
-    (domain) =>
-      domain.items
-  );
-
-function defaultDraft():
-  LessonPlanDraft {
-  return {
-    school: "",
-    teacher: "",
-    subject: "",
-    grade: "",
-    lessonTitle: "",
-    periods: "1",
-    knowledgeObjectives: "",
-    competencies: "",
-    qualities: "",
-    equipment: "",
-    digitalLevel: "3",
-    activities: [
-      {
-        id: "opening",
-        title:
-          "Hoạt động 1. Mở đầu",
-        objective: "",
-        content: "",
-        product: "",
-        organization: "",
-        digitalIds: [],
-      },
-      {
-        id: "knowledge",
-        title:
-          "Hoạt động 2. Hình thành kiến thức mới",
-        objective: "",
-        content: "",
-        product: "",
-        organization: "",
-        digitalIds: [],
-      },
-      {
-        id: "practice",
-        title:
-          "Hoạt động 3. Luyện tập",
-        objective: "",
-        content: "",
-        product: "",
-        organization: "",
-        digitalIds: [],
-      },
-      {
-        id: "application",
-        title:
-          "Hoạt động 4. Vận dụng",
-        objective: "",
-        content: "",
-        product: "",
-        organization: "",
-        digitalIds: [],
-      },
-    ],
-  };
+function createId() {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `img-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
+  }
 }
 
 function escapeHtml(
   value: string
 ) {
-  return value
-    .replace(
-      /&/g,
-      "&amp;"
-    )
-    .replace(
-      /</g,
-      "&lt;"
-    )
-    .replace(
-      />/g,
-      "&gt;"
-    )
-    .replace(
-      /"/g,
-      "&quot;"
-    )
-    .replace(
-      /'/g,
-      "&#039;"
-    );
+  return String(
+    value ?? ""
+  )
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
-function textToHtml(
+function paragraphHtml(
   value: string
 ) {
-  return escapeHtml(
-    value.trim()
-  ).replace(
-    /\n/g,
-    "<br/>"
-  );
+  const safe =
+    escapeHtml(
+      value
+    )
+      .replace(
+        /\r?\n/g,
+        "<br/>"
+      );
+
+  return safe ||
+    "................................................................................................";
 }
 
-function competencyLabel(
-  id: string
+function competencyHtml(
+  items:
+    DigitalCompetency[]
 ) {
-  const item =
-    ALL_DIGITAL.find(
-      (entry) =>
-        entry.id ===
-        id
+  if (
+    !Array.isArray(
+      items
+    ) ||
+    items.length ===
+      0
+  ) {
+    return "Không tích hợp riêng trong hoạt động này.";
+  }
+
+  return items
+    .map(
+      (item) =>
+        `<b>${escapeHtml(
+          item.code
+        )} – ${escapeHtml(
+          item.name
+        )}</b>: ${escapeHtml(
+          item.evidence
+        )}`
+    )
+    .join(
+      "<br/>"
+    );
+}
+
+async function compressImage(
+  file: File
+): Promise<SourceImage> {
+  if (
+    !file.type.startsWith(
+      "image/"
+    )
+  ) {
+    throw new Error(
+      `${file.name} không phải file ảnh.`
+    );
+  }
+
+  if (
+    file.size >
+    15 *
+      1024 *
+      1024
+  ) {
+    throw new Error(
+      `${file.name} vượt quá 15 MB.`
+    );
+  }
+
+  const inputUrl =
+    URL.createObjectURL(
+      file
     );
 
-  return item
-    ? `${item.id}. ${item.name}`
-    : id;
+  try {
+    const image =
+      await new Promise<
+        HTMLImageElement
+      >(
+        (
+          resolve,
+          reject
+        ) => {
+          const img =
+            new Image();
+
+          img.onload =
+            () =>
+              resolve(
+                img
+              );
+
+          img.onerror =
+            () =>
+              reject(
+                new Error(
+                  `Không đọc được ảnh ${file.name}.`
+                )
+              );
+
+          img.src =
+            inputUrl;
+        }
+      );
+
+    const maxSide =
+      1800;
+
+    const ratio =
+      Math.min(
+        1,
+        maxSide /
+          Math.max(
+            image.width,
+            image.height
+          )
+      );
+
+    const width =
+      Math.max(
+        1,
+        Math.round(
+          image.width *
+          ratio
+        )
+      );
+
+    const height =
+      Math.max(
+        1,
+        Math.round(
+          image.height *
+          ratio
+        )
+      );
+
+    const canvas =
+      document.createElement(
+        "canvas"
+      );
+
+    canvas.width =
+      width;
+    canvas.height =
+      height;
+
+    const context =
+      canvas.getContext(
+        "2d"
+      );
+
+    if (!context) {
+      throw new Error(
+        "Không xử lý được ảnh."
+      );
+    }
+
+    context.drawImage(
+      image,
+      0,
+      0,
+      width,
+      height
+    );
+
+    const dataUrl =
+      canvas.toDataURL(
+        "image/jpeg",
+        0.82
+      );
+
+    return {
+      id:
+        createId(),
+      name:
+        file.name,
+      dataUrl,
+    };
+  } finally {
+    URL.revokeObjectURL(
+      inputUrl
+    );
+  }
+}
+
+function normalizePlan(
+  raw: any
+): LessonPlan {
+  const activities =
+    Array.isArray(
+      raw?.activities
+    )
+      ? raw.activities
+      : [];
+
+  return {
+    school:
+      String(
+        raw?.school ??
+        ""
+      ),
+    teacher:
+      String(
+        raw?.teacher ??
+        ""
+      ),
+    subject:
+      String(
+        raw?.subject ??
+        ""
+      ),
+    grade:
+      String(
+        raw?.grade ??
+        ""
+      ),
+    lessonTitle:
+      String(
+        raw?.lessonTitle ??
+        ""
+      ),
+    periods:
+      String(
+        raw?.periods ??
+        "1"
+      ),
+    objectives: {
+      knowledge:
+        String(
+          raw?.objectives
+            ?.knowledge ??
+          ""
+        ),
+      generalCompetencies:
+        String(
+          raw?.objectives
+            ?.generalCompetencies ??
+          ""
+        ),
+      specificCompetencies:
+        String(
+          raw?.objectives
+            ?.specificCompetencies ??
+          ""
+        ),
+      qualities:
+        String(
+          raw?.objectives
+            ?.qualities ??
+          ""
+        ),
+      digitalCompetencies:
+        Array.isArray(
+          raw?.objectives
+            ?.digitalCompetencies
+        )
+          ? raw.objectives
+              .digitalCompetencies
+          : [],
+    },
+    equipment:
+      String(
+        raw?.equipment ??
+        ""
+      ),
+    activities:
+      activities.map(
+        (
+          activity: any,
+          index: number
+        ) => ({
+          title:
+            String(
+              activity?.title ??
+              `Hoạt động ${index + 1}`
+            ),
+          objective:
+            String(
+              activity?.objective ??
+              ""
+            ),
+          content:
+            String(
+              activity?.content ??
+              ""
+            ),
+          product:
+            String(
+              activity?.product ??
+              ""
+            ),
+          organization: {
+            transfer:
+              String(
+                activity
+                  ?.organization
+                  ?.transfer ??
+                ""
+              ),
+            perform:
+              String(
+                activity
+                  ?.organization
+                  ?.perform ??
+                ""
+              ),
+            report:
+              String(
+                activity
+                  ?.organization
+                  ?.report ??
+                ""
+              ),
+            conclude:
+              String(
+                activity
+                  ?.organization
+                  ?.conclude ??
+                ""
+              ),
+          },
+          digitalCompetencies:
+            Array.isArray(
+              activity
+                ?.digitalCompetencies
+            )
+              ? activity
+                  .digitalCompetencies
+              : [],
+        })
+      ),
+    assessment:
+      String(
+        raw?.assessment ??
+        ""
+      ),
+    notes:
+      String(
+        raw?.notes ??
+        ""
+      ),
+  };
 }
 
 export default function LessonPlan5512Panel({
@@ -360,329 +436,401 @@ export default function LessonPlan5512Panel({
   onOpenMenu:
     () => void;
 }) {
-  const [
-    draft,
-    setDraft,
-  ] =
-    useState<LessonPlanDraft>(
-      defaultDraft
+  const inputRef =
+    useRef<HTMLInputElement>(
+      null
     );
 
   const [
-    savedFlash,
-    setSavedFlash,
+    images,
+    setImages,
+  ] =
+    useState<
+      SourceImage[]
+    >([]);
+
+  const [
+    plan,
+    setPlan,
+  ] =
+    useState<
+      LessonPlan |
+      null
+    >(null);
+
+  const [
+    busy,
+    setBusy,
   ] =
     useState(false);
 
-  useEffect(() => {
-    try {
-      const raw =
-        localStorage.getItem(
-          STORAGE_KEY
-        );
+  const [
+    message,
+    setMessage,
+  ] =
+    useState("");
 
-      if (raw) {
-        const parsed =
-          JSON.parse(
-            raw
-          ) as
-          Partial<LessonPlanDraft>;
-
-        setDraft({
-          ...defaultDraft(),
-          ...parsed,
-          activities:
-            Array.isArray(
-              parsed.activities
-            ) &&
-            parsed.activities.length ===
-              4
-              ? parsed.activities
-              : defaultDraft()
-                  .activities,
-        });
-      }
-    } catch {
-      // Giữ bản mặc định.
-    }
-  }, []);
-
-  const selectedDigitalIds =
-    useMemo(
-      () =>
-        Array.from(
-          new Set(
-            draft.activities.flatMap(
-              (activity) =>
-                activity.digitalIds
-            )
-          )
-        ),
-      [
-        draft.activities,
-      ]
-    );
-
-  function patch(
-    key:
-      Exclude<
-        keyof LessonPlanDraft,
-        "activities"
-      >,
-    value: string
+  async function addFiles(
+    files:
+      FileList |
+      File[]
   ) {
-    setDraft(
-      (current) => ({
-        ...current,
-        [key]:
-          value,
-      })
-    );
-  }
-
-  function patchActivity(
-    index: number,
-    field:
-      keyof Omit<
-        LessonActivity,
-        "id"
-      >,
-    value:
-      string |
-      string[]
-  ) {
-    setDraft(
-      (current) => ({
-        ...current,
-        activities:
-          current.activities.map(
-            (
-              activity,
-              activityIndex
-            ) =>
-              activityIndex ===
-              index
-                ? {
-                    ...activity,
-                    [field]:
-                      value,
-                  }
-                : activity
-          ),
-      })
-    );
-  }
-
-  function toggleDigital(
-    activityIndex: number,
-    id: string
-  ) {
-    const source =
-      draft.activities[
-        activityIndex
-      ].digitalIds;
-
-    patchActivity(
-      activityIndex,
-      "digitalIds",
-      source.includes(
-        id
-      )
-        ? source.filter(
-            (item) =>
-              item !==
-              id
-          )
-        : [
-            ...source,
-            id,
-          ]
-    );
-  }
-
-  function saveDraft() {
-    try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify(
-          draft
+    const list =
+      Array.from(
+        files
+      ).slice(
+        0,
+        Math.max(
+          0,
+          10 -
+            images.length
         )
       );
 
-      setSavedFlash(
-        true
-      );
-
-      window.setTimeout(
-        () =>
-          setSavedFlash(
-            false
-          ),
-        1500
-      );
-    } catch {
-      window.alert(
-        "Không thể lưu giáo án trên trình duyệt."
-      );
-    }
-  }
-
-  function resetDraft() {
     if (
-      !window.confirm(
-        "Xóa nội dung giáo án đang soạn và tạo lại mẫu trống?"
-      )
+      list.length ===
+      0
     ) {
       return;
     }
 
-    const next =
-      defaultDraft();
-
-    setDraft(
-      next
+    setMessage(
+      "Đang xử lý ảnh..."
     );
 
     try {
-      localStorage.removeItem(
-        STORAGE_KEY
+      const next:
+        SourceImage[] =
+        [];
+
+      for (
+        const file of
+        list
+      ) {
+        next.push(
+          await compressImage(
+            file
+          )
+        );
+      }
+
+      setImages(
+        (current) => [
+          ...current,
+          ...next,
+        ]
       );
-    } catch {
-      // Không ảnh hưởng thao tác reset.
+
+      setMessage(
+        ""
+      );
+    } catch (
+      error
+    ) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Không xử lý được ảnh."
+      );
     }
   }
 
-  function exportWord() {
-    const digitalSummary =
-      selectedDigitalIds.length
-        ? selectedDigitalIds
-            .map(
-              competencyLabel
-            )
-            .join(
-              "; "
-            )
-        : "Chưa lựa chọn";
+  async function generate() {
+    if (
+      images.length ===
+      0
+    ) {
+      setMessage(
+        "Hãy chọn ít nhất 1 ảnh tài liệu."
+      );
+      return;
+    }
 
-    const activityRows =
-      draft.activities
+    setBusy(
+      true
+    );
+
+    setMessage(
+      "AI đang đọc tài liệu và soạn giáo án hoàn chỉnh..."
+    );
+
+    try {
+      const response =
+        await fetch(
+          "/api/lesson-plan/generate",
+          {
+            method:
+              "POST",
+            credentials:
+              "same-origin",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body:
+              JSON.stringify({
+                images:
+                  images.map(
+                    (
+                      image
+                    ) => ({
+                      name:
+                        image.name,
+                      dataUrl:
+                        image.dataUrl,
+                    })
+                  ),
+              }),
+          }
+        );
+
+      const payload =
+        await response.json()
+          .catch(
+            () =>
+              null
+          );
+
+      if (
+        !response.ok ||
+        !payload?.ok
+      ) {
+        throw new Error(
+          payload?.error ||
+          "Không thể soạn giáo án."
+        );
+      }
+
+      setPlan(
+        normalizePlan(
+          payload.plan
+        )
+      );
+
+      setMessage(
+        "Đã soạn xong giáo án. Hãy kiểm tra bản xem trước trước khi xuất Word."
+      );
+    } catch (
+      error
+    ) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Không thể soạn giáo án."
+      );
+    } finally {
+      setBusy(
+        false
+      );
+    }
+  }
+
+  function resetAll() {
+    if (
+      images.length >
+        0 ||
+      plan
+    ) {
+      const confirmed =
+        window.confirm(
+          "Xóa ảnh tài liệu và giáo án hiện tại?"
+        );
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    setImages(
+      []
+    );
+    setPlan(
+      null
+    );
+    setMessage(
+      ""
+    );
+  }
+
+  function exportWord() {
+    if (!plan) {
+      return;
+    }
+
+    const activities =
+      plan.activities
         .map(
           (
-            activity,
-            index
+            activity
           ) => `
-          <h3>${escapeHtml(
-            activity.title
-          )}</h3>
-          <table>
-            <tr><td><b>a) Mục tiêu</b></td><td>${textToHtml(
+        <h3>${escapeHtml(
+          activity.title
+        )}</h3>
+        <table>
+          <tr>
+            <td class="label">a) Mục tiêu</td>
+            <td>${paragraphHtml(
               activity.objective
-            )}</td></tr>
-            <tr><td><b>b) Nội dung</b></td><td>${textToHtml(
+            )}</td>
+          </tr>
+          <tr>
+            <td class="label">b) Nội dung</td>
+            <td>${paragraphHtml(
               activity.content
-            )}</td></tr>
-            <tr><td><b>c) Sản phẩm</b></td><td>${textToHtml(
+            )}</td>
+          </tr>
+          <tr>
+            <td class="label">c) Sản phẩm</td>
+            <td>${paragraphHtml(
               activity.product
-            )}</td></tr>
-            <tr><td><b>d) Tổ chức thực hiện</b></td><td>${textToHtml(
-              activity.organization
-            )}</td></tr>
-            <tr><td><b>Năng lực số tích hợp</b></td><td>${
-              activity.digitalIds.length
-                ? activity.digitalIds
-                    .map(
-                      competencyLabel
-                    )
-                    .map(
-                      escapeHtml
-                    )
-                    .join(
-                      "<br/>"
-                    )
-                : "Không chọn"
-            }</td></tr>
-          </table>
-          ${
-            index <
-            draft.activities.length -
-              1
-              ? "<br/>"
-              : ""
-          }
-        `
+            )}</td>
+          </tr>
+          <tr>
+            <td class="label">d) Tổ chức thực hiện</td>
+            <td>
+              <b>Bước 1. Chuyển giao nhiệm vụ:</b><br/>
+              ${paragraphHtml(
+                activity.organization
+                  .transfer
+              )}<br/><br/>
+              <b>Bước 2. Thực hiện nhiệm vụ:</b><br/>
+              ${paragraphHtml(
+                activity.organization
+                  .perform
+              )}<br/><br/>
+              <b>Bước 3. Báo cáo, thảo luận:</b><br/>
+              ${paragraphHtml(
+                activity.organization
+                  .report
+              )}<br/><br/>
+              <b>Bước 4. Kết luận, nhận định:</b><br/>
+              ${paragraphHtml(
+                activity.organization
+                  .conclude
+              )}
+            </td>
+          </tr>
+          <tr>
+            <td class="label">Năng lực số tích hợp</td>
+            <td>${competencyHtml(
+              activity.digitalCompetencies
+            )}</td>
+          </tr>
+        </table>
+      `
         )
-        .join("");
+        .join(
+          ""
+        );
 
-    const html =
+    const documentHtml =
       `<!doctype html>
-      <html>
-      <head>
-        <meta charset="utf-8"/>
-        <style>
-          body{font-family:"Times New Roman",serif;font-size:13pt;line-height:1.35;color:#000}
-          h1{text-align:center;font-size:16pt;margin:10px 0 4px}
-          h2{font-size:14pt;margin:14px 0 6px}
-          h3{font-size:13pt;margin:12px 0 5px}
-          table{width:100%;border-collapse:collapse;margin:5px 0 10px}
-          td{border:1px solid #000;padding:6px;vertical-align:top}
-          td:first-child{width:28%}
-          .meta{text-align:center;margin-bottom:12px}
-        </style>
-      </head>
-      <body>
-        <div>TRƯỜNG: ${escapeHtml(
-          draft.school
-        )}</div>
-        <div>GIÁO VIÊN: ${escapeHtml(
-          draft.teacher
-        )}</div>
-        <h1>KẾ HOẠCH BÀI DẠY</h1>
-        <div class="meta"><b>TÊN BÀI DẠY: ${escapeHtml(
-          draft.lessonTitle
-        )}</b><br/>
-        Môn học/Hoạt động giáo dục: ${escapeHtml(
-          draft.subject
-        )}; Lớp: ${escapeHtml(
-          draft.grade
-        )}<br/>
-        Thời gian thực hiện: ${escapeHtml(
-          draft.periods
-        )} tiết</div>
+<html>
+<head>
+<meta charset="utf-8"/>
+<style>
+@page{size:A4;margin:2cm 2cm 2cm 3cm}
+body{font-family:"Times New Roman",serif;font-size:13pt;line-height:1.35;color:#000}
+.header-table{width:100%;border-collapse:collapse;margin-bottom:8px}
+.header-table td{border:0;padding:0;vertical-align:top}
+.center{text-align:center}
+h1{text-align:center;font-size:16pt;margin:14px 0 6px}
+h2{font-size:14pt;margin:14px 0 6px}
+h3{font-size:13pt;margin:12px 0 6px}
+p{margin:5px 0}
+table{width:100%;border-collapse:collapse;margin:6px 0 12px}
+td{border:1px solid #000;padding:6px;vertical-align:top}
+td.label{width:25%;font-weight:bold}
+.meta{text-align:center;margin-bottom:14px}
+</style>
+</head>
+<body>
+<table class="header-table">
+<tr>
+<td>
+<b>TRƯỜNG: ${escapeHtml(
+        plan.school ||
+        "................................"
+      )}</b><br/>
+Tổ: ................................
+</td>
+<td class="center">
+<b>Họ và tên giáo viên:</b><br/>
+${escapeHtml(
+        plan.teacher ||
+        "................................"
+      )}
+</td>
+</tr>
+</table>
 
-        <h2>I. MỤC TIÊU</h2>
-        <p><b>1. Về kiến thức:</b><br/>${textToHtml(
-          draft.knowledgeObjectives
-        )}</p>
-        <p><b>2. Về năng lực:</b><br/>${textToHtml(
-          draft.competencies
-        )}</p>
-        <p><b>3. Về phẩm chất:</b><br/>${textToHtml(
-          draft.qualities
-        )}</p>
-        <p><b>4. Năng lực số tích hợp:</b><br/>${escapeHtml(
-          digitalSummary
-        )}<br/><i>Mức/bậc dự kiến: Bậc ${escapeHtml(
-          draft.digitalLevel
-        )}</i></p>
+<h1>KẾ HOẠCH BÀI DẠY</h1>
 
-        <h2>II. THIẾT BỊ DẠY HỌC VÀ HỌC LIỆU</h2>
-        <p>${textToHtml(
-          draft.equipment
-        )}</p>
+<div class="meta">
+<b>TÊN BÀI DẠY: ${escapeHtml(
+        plan.lessonTitle
+      ).toUpperCase()}</b><br/>
+Môn học/Hoạt động giáo dục: ${escapeHtml(
+        plan.subject
+      )}; Lớp: ${escapeHtml(
+        plan.grade
+      )}<br/>
+Thời gian thực hiện: ${escapeHtml(
+        plan.periods
+      )} tiết
+</div>
 
-        <h2>III. TIẾN TRÌNH DẠY HỌC</h2>
-        ${activityRows}
+<h2>I. MỤC TIÊU</h2>
+<p><b>1. Về kiến thức</b><br/>${paragraphHtml(
+        plan.objectives
+          .knowledge
+      )}</p>
+<p><b>2. Về năng lực</b></p>
+<p><b>a) Năng lực chung:</b><br/>${paragraphHtml(
+        plan.objectives
+          .generalCompetencies
+      )}</p>
+<p><b>b) Năng lực đặc thù:</b><br/>${paragraphHtml(
+        plan.objectives
+          .specificCompetencies
+      )}</p>
+<p><b>3. Về phẩm chất</b><br/>${paragraphHtml(
+        plan.objectives
+          .qualities
+      )}</p>
+<p><b>4. Năng lực số tích hợp</b><br/>${competencyHtml(
+        plan.objectives
+          .digitalCompetencies
+      )}</p>
 
-        <h2>IV. HỒ SƠ DẠY HỌC KHÁC (NẾU CÓ)</h2>
-        <p>Phiếu học tập, công cụ đánh giá, học liệu số, sản phẩm học sinh và các minh chứng liên quan.</p>
-      </body>
-      </html>`;
+<h2>II. THIẾT BỊ DẠY HỌC VÀ HỌC LIỆU</h2>
+<p>${paragraphHtml(
+        plan.equipment
+      )}</p>
+
+<h2>III. TIẾN TRÌNH DẠY HỌC</h2>
+${activities}
+
+<h2>IV. ĐÁNH GIÁ VÀ HỒ SƠ DẠY HỌC</h2>
+<p>${paragraphHtml(
+        plan.assessment
+      )}</p>
+
+${
+        plan.notes
+          ? `<h2>V. GHI CHÚ/ĐIỀU CHỈNH SAU BÀI DẠY</h2><p>${paragraphHtml(
+              plan.notes
+            )}</p>`
+          : `<h2>V. GHI CHÚ/ĐIỀU CHỈNH SAU BÀI DẠY</h2><p>................................................................................................</p>`
+      }
+</body>
+</html>`;
 
     const blob =
       new Blob(
         [
           "\ufeff",
-          html,
+          documentHtml,
         ],
         {
           type:
@@ -700,9 +848,9 @@ export default function LessonPlan5512Panel({
         "a"
       );
 
-    const safeName =
+    const safeTitle =
       (
-        draft.lessonTitle ||
+        plan.lessonTitle ||
         "Giao-an-5512"
       )
         .normalize(
@@ -728,12 +876,11 @@ export default function LessonPlan5512Panel({
     anchor.href =
       url;
     anchor.download =
-      `${safeName || "Giao-an-5512"}.doc`;
+      `${safeTitle || "Giao-an-5512"}-5512.doc`;
 
     document.body.appendChild(
       anchor
     );
-
     anchor.click();
     anchor.remove();
 
@@ -748,601 +895,424 @@ export default function LessonPlan5512Panel({
 
   return (
     <div>
-      <div className="mb-5 flex items-center gap-3 xl:hidden">
+      <div className="mb-4 flex items-center gap-3 xl:hidden">
         <button
           type="button"
           onClick={
             onOpenMenu
           }
           className="flex h-11 w-11 items-center justify-center rounded-xl border border-cyan-500/25 bg-[#0b2a4c] text-cyan-300"
-          aria-label="Mở menu"
         >
           ☰
         </button>
 
-        <div>
-          <div className="text-lg font-black text-cyan-300">
-            VLEARNING STUDIO
-          </div>
-          <div className="text-[10px] text-slate-400">
-            Giáo án 5512
-          </div>
+        <div className="text-lg font-black text-cyan-300">
+          Giáo án 5512
         </div>
       </div>
 
-      <section className="rounded-[24px] border border-blue-700/40 bg-gradient-to-r from-[#103b68] via-[#153b6c] to-[#1d3264] px-6 py-6">
+      <section className="rounded-[24px] border border-blue-700/40 bg-gradient-to-r from-[#103b68] via-[#153b6c] to-[#1d3264] p-6">
+        <div className="text-[11px] font-black uppercase tracking-[0.16em] text-cyan-300">
+          AI Lesson Planner
+        </div>
+        <h1 className="mt-2 text-3xl font-black">
+          Giáo án 5512 tự động từ ảnh tài liệu
+        </h1>
+        <p className="mt-3 max-w-4xl text-sm leading-7 text-slate-300">
+          Chỉ cần tải ảnh SGK/tài liệu bài học. AI sẽ đọc nội dung, tự xây dựng mục tiêu, tiến trình dạy học, sản phẩm, tổ chức thực hiện và năng lực số; sau đó xuất thành giáo án Word hoàn chỉnh.
+        </p>
+      </section>
+
+      <section className="mt-5 rounded-[22px] border border-blue-800/70 bg-[#0c2b50] p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <div className="text-[11px] font-black uppercase tracking-[0.15em] text-cyan-300">
-              Kế hoạch bài dạy
-            </div>
-            <h1 className="mt-2 flex items-center gap-3 text-3xl font-black">
-              <BookOpenCheck
-                className="text-cyan-300"
-              />
-              Giáo án 5512 + Năng lực số
-            </h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
-              Soạn kế hoạch bài dạy theo cấu trúc Công văn 5512 và tích hợp Khung năng lực số cho người học theo Thông tư 02/2025/TT-BGDĐT.
+            <h2 className="text-lg font-black text-cyan-200">
+              1. Đưa ảnh tài liệu vào
+            </h2>
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              Tối đa 10 ảnh. Nên chụp rõ, đủ trang và theo đúng thứ tự nội dung bài học.
             </p>
           </div>
 
           <div className="flex flex-wrap gap-2">
+            <input
+              ref={
+                inputRef
+              }
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(
+                event
+              ) => {
+                if (
+                  event.target.files
+                ) {
+                  void addFiles(
+                    event.target.files
+                  );
+                }
+
+                event.currentTarget.value =
+                  "";
+              }}
+            />
+
+            <button
+              type="button"
+              onClick={() =>
+                inputRef.current?.click()
+              }
+              disabled={
+                busy ||
+                images.length >=
+                  10
+              }
+              className="inline-flex items-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-2.5 text-xs font-black text-cyan-200 disabled:opacity-50"
+            >
+              <ImagePlus
+                size={16}
+              />
+              Chọn ảnh tài liệu
+            </button>
+
             <button
               type="button"
               onClick={
-                resetDraft
+                resetAll
               }
-              className="inline-flex items-center gap-2 rounded-xl border border-blue-600 bg-[#0a294a] px-4 py-2.5 text-xs font-black text-slate-200"
+              disabled={
+                busy
+              }
+              className="inline-flex items-center gap-2 rounded-xl border border-blue-700 bg-[#08233f] px-4 py-2.5 text-xs font-black text-slate-300 disabled:opacity-50"
             >
               <RotateCcw
                 size={15}
               />
               Làm mới
             </button>
+          </div>
+        </div>
 
-            <button
-              type="button"
-              onClick={
-                saveDraft
-              }
-              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black hover:bg-emerald-500"
-            >
-              <Save
-                size={15}
+        {images.length ===
+        0 ? (
+          <button
+            type="button"
+            onClick={() =>
+              inputRef.current?.click()
+            }
+            className="mt-4 flex min-h-[210px] w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-blue-700 bg-[#071f39] px-5 text-center hover:border-cyan-500/50"
+          >
+            <ImagePlus
+              size={42}
+              className="text-cyan-300"
+            />
+            <div className="mt-3 text-sm font-black">
+              Bấm để chọn ảnh SGK hoặc tài liệu
+            </div>
+            <div className="mt-1 text-xs text-slate-500">
+              AI sẽ tự đọc nội dung, không cần điền các trường thông tin.
+            </div>
+          </button>
+        ) : (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
+            {images.map(
+              (
+                image,
+                index
+              ) => (
+                <div
+                  key={
+                    image.id
+                  }
+                  className="overflow-hidden rounded-xl border border-blue-800 bg-[#071f39]"
+                >
+                  <div className="aspect-[4/3] bg-black/30">
+                    <img
+                      src={
+                        image.dataUrl
+                      }
+                      alt={
+                        image.name
+                      }
+                      className="h-full w-full object-contain"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-2 p-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-[10px] font-bold text-slate-300">
+                        {index +
+                          1}
+                        .{" "}
+                        {
+                          image.name
+                        }
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setImages(
+                          (
+                            current
+                          ) =>
+                            current.filter(
+                              (
+                                item
+                              ) =>
+                                item.id !==
+                                image.id
+                            )
+                        )
+                      }
+                      disabled={
+                        busy
+                      }
+                      className="text-red-400 disabled:opacity-40"
+                      title="Xóa ảnh"
+                    >
+                      <Trash2
+                        size={14}
+                      />
+                    </button>
+                  </div>
+                </div>
+              )
+            )}
+          </div>
+        )}
+
+        <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <button
+            type="button"
+            onClick={
+              generate
+            }
+            disabled={
+              busy ||
+              images.length ===
+                0
+            }
+            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-600 px-6 py-3 text-sm font-black shadow-lg disabled:opacity-50"
+          >
+            {busy ? (
+              <Loader2
+                size={18}
+                className="animate-spin"
               />
-              {savedFlash
-                ? "Đã lưu ✓"
-                : "Lưu giáo án"}
-            </button>
+            ) : (
+              <Sparkles
+                size={18}
+              />
+            )}
+            {busy
+              ? "AI đang soạn giáo án..."
+              : "AI SOẠN GIÁO ÁN 5512"}
+          </button>
+
+          {message && (
+            <div className="text-xs leading-5 text-slate-400">
+              {message}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {plan && (
+        <section className="mt-5 rounded-[22px] border border-emerald-500/30 bg-[#f8fafc] p-5 text-slate-900 shadow-xl sm:p-8">
+          <div className="mb-5 flex flex-col gap-3 border-b border-slate-300 pb-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-xs font-black uppercase tracking-[0.14em] text-emerald-700">
+                Bản xem trước
+              </div>
+              <h2 className="mt-1 text-2xl font-black">
+                Giáo án đã soạn hoàn chỉnh
+              </h2>
+            </div>
 
             <button
               type="button"
               onClick={
                 exportWord
               }
-              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-2.5 text-xs font-black"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-700 px-5 py-3 text-sm font-black text-white hover:bg-blue-600"
             >
               <FileDown
-                size={15}
+                size={17}
               />
-              Xuất Word
+              Xuất Word hoàn chỉnh
             </button>
           </div>
-        </div>
-      </section>
 
-      <div className="mt-5 grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
-        <div className="space-y-5">
-          <section className="rounded-[22px] border border-blue-800/70 bg-[#0c2b50] p-5">
-            <h2 className="text-lg font-black text-cyan-200">
-              1. Thông tin bài dạy
-            </h2>
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {[
-                [
-                  "school",
-                  "Trường",
-                ],
-                [
-                  "teacher",
-                  "Giáo viên",
-                ],
-                [
-                  "subject",
-                  "Môn học/HĐGD",
-                ],
-                [
-                  "grade",
-                  "Lớp",
-                ],
-                [
-                  "lessonTitle",
-                  "Tên bài dạy",
-                ],
-                [
-                  "periods",
-                  "Số tiết",
-                ],
-              ].map(
-                (
-                  [
-                    key,
-                    label,
-                  ]
-                ) => (
-                  <label
-                    key={
-                      key
-                    }
-                    className={
-                      key ===
-                      "lessonTitle"
-                        ? "sm:col-span-2"
-                        : ""
-                    }
-                  >
-                    <span className="text-xs font-bold text-slate-400">
-                      {label}
-                    </span>
-                    <input
-                      value={
-                        draft[
-                          key as
-                            keyof Pick<
-                              LessonPlanDraft,
-                              "school" |
-                              "teacher" |
-                              "subject" |
-                              "grade" |
-                              "lessonTitle" |
-                              "periods"
-                            >
-                        ] as string
-                      }
-                      onChange={(
-                        event
-                      ) =>
-                        patch(
-                          key as
-                            Exclude<
-                              keyof LessonPlanDraft,
-                              "activities"
-                            >,
-                          event.target.value
-                        )
-                      }
-                      className="mt-1.5 w-full rounded-xl border border-blue-800 bg-[#071f39] px-3 py-2.5 text-sm outline-none focus:border-cyan-500"
-                    />
-                  </label>
-                )
-              )}
-            </div>
-          </section>
-
-          <section className="rounded-[22px] border border-blue-800/70 bg-[#0c2b50] p-5">
-            <h2 className="text-lg font-black text-cyan-200">
-              2. Mục tiêu và học liệu
-            </h2>
-
-            {[
-              [
-                "knowledgeObjectives",
-                "Kiến thức",
-              ],
-              [
-                "competencies",
-                "Năng lực chung và năng lực đặc thù",
-              ],
-              [
-                "qualities",
-                "Phẩm chất",
-              ],
-              [
-                "equipment",
-                "Thiết bị dạy học và học liệu",
-              ],
-            ].map(
-              (
-                [
-                  key,
-                  label,
-                ]
-              ) => (
-                <label
-                  key={
-                    key
-                  }
-                  className="mt-4 block"
-                >
-                  <span className="text-xs font-bold text-slate-400">
-                    {label}
-                  </span>
-                  <textarea
-                    rows={
-                      3
-                    }
-                    value={
-                      draft[
-                        key as
-                          "knowledgeObjectives" |
-                          "competencies" |
-                          "qualities" |
-                          "equipment"
-                      ]
-                    }
-                    onChange={(
-                      event
-                    ) =>
-                      patch(
-                        key as
-                          "knowledgeObjectives" |
-                          "competencies" |
-                          "qualities" |
-                          "equipment",
-                        event.target.value
-                      )
-                    }
-                    className="mt-1.5 w-full resize-y rounded-xl border border-blue-800 bg-[#071f39] px-3 py-2.5 text-sm leading-6 outline-none focus:border-cyan-500"
-                  />
-                </label>
-              )
-            )}
-          </section>
-
-          <section className="rounded-[22px] border border-blue-800/70 bg-[#0c2b50] p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="mx-auto max-w-[920px] font-serif text-[15px] leading-7">
+            <div className="grid grid-cols-2 gap-6 text-sm">
               <div>
-                <h2 className="text-lg font-black text-cyan-200">
-                  3. Tiến trình dạy học
-                </h2>
-                <p className="mt-1 text-xs text-slate-500">
-                  Mỗi hoạt động gồm mục tiêu, nội dung, sản phẩm và tổ chức thực hiện.
-                </p>
+                <b>TRƯỜNG:</b>{" "}
+                {plan.school ||
+                  "........................"}
               </div>
-
-              <label className="text-xs font-bold text-slate-400">
-                Bậc NLS dự kiến
-                <select
-                  value={
-                    draft.digitalLevel
-                  }
-                  onChange={(
-                    event
-                  ) =>
-                    patch(
-                      "digitalLevel",
-                      event.target.value
-                    )
-                  }
-                  className="ml-2 rounded-lg border border-blue-800 bg-[#071f39] px-2 py-1.5 text-white"
-                >
-                  {Array.from(
-                    {
-                      length:
-                        8,
-                    },
-                    (
-                      _,
-                      index
-                    ) =>
-                      index +
-                      1
-                  ).map(
-                    (
-                      level
-                    ) => (
-                      <option
-                        key={
-                          level
-                        }
-                        value={
-                          String(
-                            level
-                          )
-                        }
-                      >
-                        Bậc {level}
-                      </option>
-                    )
-                  )}
-                </select>
-              </label>
+              <div className="text-center">
+                <b>Họ và tên giáo viên:</b>{" "}
+                {plan.teacher ||
+                  "........................"}
+              </div>
             </div>
 
-            <div className="mt-4 space-y-4">
-              {draft.activities.map(
-                (
-                  activity,
-                  index
-                ) => (
-                  <div
-                    key={
-                      activity.id
-                    }
-                    className="rounded-2xl border border-blue-800 bg-[#08233f] p-4"
-                  >
-                    <input
-                      value={
-                        activity.title
-                      }
-                      onChange={(
-                        event
-                      ) =>
-                        patchActivity(
-                          index,
-                          "title",
-                          event.target.value
-                        )
-                      }
-                      className="w-full bg-transparent text-base font-black text-amber-200 outline-none"
-                    />
+            <h1 className="mt-6 text-center text-xl font-black">
+              KẾ HOẠCH BÀI DẠY
+            </h1>
 
-                    <div className="mt-3 grid gap-3">
-                      {[
-                        [
-                          "objective",
-                          "a) Mục tiêu",
-                        ],
-                        [
-                          "content",
-                          "b) Nội dung",
-                        ],
-                        [
-                          "product",
-                          "c) Sản phẩm",
-                        ],
-                        [
-                          "organization",
-                          "d) Tổ chức thực hiện",
-                        ],
-                      ].map(
-                        (
-                          [
-                            field,
-                            label,
-                          ]
-                        ) => (
-                          <label
-                            key={
-                              field
-                            }
-                          >
-                            <span className="text-[11px] font-black uppercase tracking-wide text-slate-500">
-                              {label}
-                            </span>
-                            <textarea
-                              rows={
-                                field ===
-                                "organization"
-                                  ? 4
-                                  : 2
-                              }
-                              value={
-                                activity[
-                                  field as
-                                    "objective" |
-                                    "content" |
-                                    "product" |
-                                    "organization"
-                                ]
-                              }
-                              onChange={(
-                                event
-                              ) =>
-                                patchActivity(
-                                  index,
-                                  field as
-                                    "objective" |
-                                    "content" |
-                                    "product" |
-                                    "organization",
-                                  event.target.value
-                                )
-                              }
-                              className="mt-1 w-full resize-y rounded-xl border border-blue-900 bg-[#061a31] px-3 py-2 text-sm leading-6 outline-none focus:border-cyan-500"
-                            />
-                          </label>
-                        )
-                      )}
-                    </div>
-
-                    <div className="mt-3">
-                      <div className="text-[11px] font-black uppercase tracking-wide text-cyan-300">
-                        Năng lực số tích hợp trong hoạt động
-                      </div>
-
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {activity.digitalIds.length ===
-                        0 ? (
-                          <span className="text-xs text-slate-500">
-                            Chưa lựa chọn.
-                          </span>
-                        ) : (
-                          activity.digitalIds.map(
-                            (
-                              id
-                            ) => (
-                              <button
-                                key={
-                                  id
-                                }
-                                type="button"
-                                onClick={() =>
-                                  toggleDigital(
-                                    index,
-                                    id
-                                  )
-                                }
-                                className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-bold text-cyan-200"
-                                title="Bấm để bỏ chọn"
-                              >
-                                {id} ×
-                              </button>
-                            )
-                          )
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )
-              )}
+            <div className="mt-2 text-center">
+              <div className="font-black">
+                TÊN BÀI DẠY:{" "}
+                {plan.lessonTitle}
+              </div>
+              <div>
+                Môn học/HĐGD:{" "}
+                {plan.subject} •
+                Lớp:{" "}
+                {plan.grade}
+              </div>
+              <div>
+                Thời gian thực hiện:{" "}
+                {plan.periods} tiết
+              </div>
             </div>
-          </section>
-        </div>
 
-        <div className="space-y-5">
-          <section className="rounded-[22px] border border-blue-800/70 bg-[#0c2b50] p-5">
-            <h2 className="text-lg font-black text-cyan-200">
-              Thư viện năng lực số
+            <h2 className="mt-6 font-black">
+              I. MỤC TIÊU
             </h2>
-            <p className="mt-1 text-xs leading-5 text-slate-500">
-              Chọn năng lực cho từng hoạt động. Khung gồm 6 miền và 24 năng lực thành phần.
+            <p>
+              <b>1. Về kiến thức:</b><br/>
+              {
+                plan.objectives
+                  .knowledge
+              }
+            </p>
+            <p>
+              <b>2. Về năng lực</b><br/>
+              <b>a) Năng lực chung:</b>{" "}
+              {
+                plan.objectives
+                  .generalCompetencies
+              }<br/>
+              <b>b) Năng lực đặc thù:</b>{" "}
+              {
+                plan.objectives
+                  .specificCompetencies
+              }
+            </p>
+            <p>
+              <b>3. Về phẩm chất:</b><br/>
+              {
+                plan.objectives
+                  .qualities
+              }
+            </p>
+            <p>
+              <b>4. Năng lực số:</b><br/>
+              {
+                plan.objectives
+                  .digitalCompetencies
+                  .map(
+                    (
+                      item
+                    ) =>
+                      `${item.code} – ${item.name}: ${item.evidence}`
+                  )
+                  .join(
+                    "; "
+                  )
+              }
             </p>
 
-            <div className="mt-4 space-y-4">
-              {DIGITAL_DOMAINS.map(
-                (
-                  domain
-                ) => (
-                  <div
-                    key={
-                      domain.title
-                    }
-                    className="rounded-xl border border-blue-900 bg-[#08233f] p-3"
-                  >
-                    <div className="text-xs font-black text-amber-200">
-                      {
-                        domain.title
-                      }
-                    </div>
+            <h2 className="mt-6 font-black">
+              II. THIẾT BỊ DẠY HỌC VÀ HỌC LIỆU
+            </h2>
+            <p>
+              {plan.equipment}
+            </p>
 
-                    <div className="mt-2 space-y-2">
-                      {domain.items.map(
-                        (
-                          item
-                        ) => (
-                          <div
-                            key={
-                              item.id
-                            }
-                            className="rounded-lg border border-blue-900/80 bg-[#061a31] p-2.5"
-                          >
-                            <div className="text-xs font-bold text-slate-200">
-                              <span className="mr-1 text-cyan-300">
-                                {item.id}
-                              </span>
-                              {item.name}
-                            </div>
-
-                            <div className="mt-2 flex flex-wrap gap-1.5">
-                              {draft.activities.map(
-                                (
-                                  activity,
-                                  activityIndex
-                                ) => {
-                                  const selected =
-                                    activity.digitalIds.includes(
-                                      item.id
-                                    );
-
-                                  return (
-                                    <button
-                                      key={
-                                        activity.id
-                                      }
-                                      type="button"
-                                      onClick={() =>
-                                        toggleDigital(
-                                          activityIndex,
-                                          item.id
-                                        )
-                                      }
-                                      className={
-                                        selected
-                                          ? "rounded-md bg-emerald-600 px-2 py-1 text-[9px] font-black text-white"
-                                          : "rounded-md border border-blue-800 px-2 py-1 text-[9px] font-bold text-slate-400 hover:border-cyan-500/50 hover:text-cyan-200"
-                                      }
-                                    >
-                                      HĐ{
-                                        activityIndex +
-                                        1
-                                      }
-                                    </button>
-                                  );
-                                }
-                              )}
-                            </div>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  </div>
-                )
-              )}
-            </div>
-          </section>
-
-          <section className="rounded-[22px] border border-emerald-500/20 bg-emerald-500/5 p-5">
-            <h2 className="text-base font-black text-emerald-200">
-              Tóm tắt giáo án
+            <h2 className="mt-6 font-black">
+              III. TIẾN TRÌNH DẠY HỌC
             </h2>
 
-            <div className="mt-3 space-y-2 text-xs leading-5 text-slate-300">
-              <div>
-                <b>Bài:</b>{" "}
-                {draft.lessonTitle ||
-                  "Chưa nhập"}
-              </div>
-              <div>
-                <b>Môn/Lớp:</b>{" "}
-                {draft.subject ||
-                  "—"}{" "}
-                /{" "}
-                {draft.grade ||
-                  "—"}
-              </div>
-              <div>
-                <b>Thời lượng:</b>{" "}
-                {draft.periods ||
-                  "—"}{" "}
-                tiết
-              </div>
-              <div>
-                <b>Năng lực số:</b>{" "}
-                {
-                  selectedDigitalIds.length
-                }{" "}
-                thành phần • Bậc{" "}
-                {
-                  draft.digitalLevel
-                }
-              </div>
-            </div>
+            {plan.activities.map(
+              (
+                activity,
+                index
+              ) => (
+                <div
+                  key={
+                    `${activity.title}-${index}`
+                  }
+                  className="mt-5"
+                >
+                  <h3 className="font-black">
+                    {activity.title}
+                  </h3>
+                  <p>
+                    <b>a) Mục tiêu:</b>{" "}
+                    {activity.objective}
+                  </p>
+                  <p>
+                    <b>b) Nội dung:</b>{" "}
+                    {activity.content}
+                  </p>
+                  <p>
+                    <b>c) Sản phẩm:</b>{" "}
+                    {activity.product}
+                  </p>
+                  <div>
+                    <b>d) Tổ chức thực hiện:</b>
+                    <div className="ml-5">
+                      <p><b>Bước 1. Chuyển giao nhiệm vụ:</b> {activity.organization.transfer}</p>
+                      <p><b>Bước 2. Thực hiện nhiệm vụ:</b> {activity.organization.perform}</p>
+                      <p><b>Bước 3. Báo cáo, thảo luận:</b> {activity.organization.report}</p>
+                      <p><b>Bước 4. Kết luận, nhận định:</b> {activity.organization.conclude}</p>
+                    </div>
+                  </div>
 
-            {selectedDigitalIds.length >
-              0 && (
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {selectedDigitalIds.map(
-                  (
-                    id
-                  ) => (
-                    <span
-                      key={
-                        id
+                  {activity.digitalCompetencies.length >
+                    0 && (
+                    <p>
+                      <b>Năng lực số tích hợp:</b>{" "}
+                      {
+                        activity.digitalCompetencies
+                          .map(
+                            (
+                              item
+                            ) =>
+                              `${item.code} – ${item.name}: ${item.evidence}`
+                          )
+                          .join(
+                            "; "
+                          )
                       }
-                      className="rounded-full bg-cyan-500/10 px-2 py-1 text-[10px] font-black text-cyan-200"
-                    >
-                      {id}
-                    </span>
-                  )
-                )}
-              </div>
+                    </p>
+                  )}
+                </div>
+              )
             )}
-          </section>
-        </div>
-      </div>
+
+            <h2 className="mt-6 font-black">
+              IV. ĐÁNH GIÁ VÀ HỒ SƠ DẠY HỌC
+            </h2>
+            <p>
+              {plan.assessment}
+            </p>
+
+            <h2 className="mt-6 font-black">
+              V. GHI CHÚ/ĐIỀU CHỈNH SAU BÀI DẠY
+            </h2>
+            <p>
+              {plan.notes ||
+                "................................................................................................"}
+            </p>
+          </div>
+        </section>
+      )}
     </div>
   );
 }
