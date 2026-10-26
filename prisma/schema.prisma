@@ -69,3 +69,34 @@ model PasswordResetToken {
   @@index([userId])
   @@index([expiresAt])
 }
+
+model AiLessonPlan {
+  id          String   @id @default(cuid())
+  ownerUserId String
+  title       String
+  subject     String   @default("")
+  grade       String   @default("")
+  periods     Int      @default(1)
+  textbook    String   @default("")
+  objectives  String   @default("")
+  contentJson String   @default("{}")
+  status      String   @default("DRAFT")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([ownerUserId, updatedAt])
+}
+
+model AiLessonSource {
+  id          String   @id @default(cuid())
+  ownerUserId String
+  lessonId    String?
+  filename    String
+  mimeType    String
+  sizeBytes   Int
+  // Source bytes are stored in PostgreSQL during MVP only, not in a public URL.
+  data        Bytes
+  createdAt   DateTime @default(now())
+
+  @@index([ownerUserId, lessonId])
+}
