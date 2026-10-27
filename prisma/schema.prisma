@@ -25,6 +25,8 @@ model User {
 
   sessions Session[]
   passwordResetTokens PasswordResetToken[]
+  aiLessonPlans AiLessonPlan[]
+  aiLessonSources AiLessonSource[]
 }
 
 model Session {
@@ -83,6 +85,8 @@ model AiLessonPlan {
   status      String   @default("DRAFT")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  owner       User     @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  sources     AiLessonSource[]
 
   @@index([ownerUserId, updatedAt])
 }
@@ -97,6 +101,8 @@ model AiLessonSource {
   // Source bytes are stored in PostgreSQL during MVP only, not in a public URL.
   data        Bytes
   createdAt   DateTime @default(now())
+  owner       User     @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  lesson      AiLessonPlan? @relation(fields: [lessonId], references: [id], onDelete: SetNull)
 
   @@index([ownerUserId, lessonId])
 }
