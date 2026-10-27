@@ -1,0 +1,32 @@
+name: Generate V13 legacy Prisma baseline (review only)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Generate baseline SQL without a database connection
+        run: |
+          mkdir -p prisma/migrations/20261001_existing_schema_baseline
+          npx prisma migrate diff --from-empty --to-schema-datamodel prisma/baseline-existing-schema.prisma --script --output prisma/migrations/20261001_existing_schema_baseline/migration.sql
+          test -s prisma/migrations/20261001_existing_schema_baseline/migration.sql
+      - name: Upload baseline candidate for review (not deployed)
+        uses: actions/upload-artifact@v4
+        with:
+          name: v13-existing-schema-baseline-candidate
+          path: prisma/migrations/20261001_existing_schema_baseline/migration.sql
+          retention-days: 7
