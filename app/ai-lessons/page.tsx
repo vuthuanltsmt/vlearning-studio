@@ -67,7 +67,11 @@ export default function AiLessonStudio(){
     <p className="mt-1 text-sm text-slate-300">V13.0A · Kho nguồn và quản lý giáo án Cloud · Chưa kích hoạt AI</p></div>
     <button onClick={beginNew} disabled={!authorized||busy} className="flex items-center gap-2 rounded-xl bg-cyan-600 px-4 py-3 font-bold disabled:opacity-40"><Plus size={18}/> Tạo bài dạy</button>
    </header>
-   {authorized===false&&<div role="alert" className="rounded-xl border border-amber-500/40 bg-amber-900/20 p-4">Vui lòng đăng nhập bằng tài khoản giáo viên hoặc quản trị viên để sử dụng.</div>}
+   {authorized===false&&<div role="alert" className="space-y-3 rounded-xl border border-amber-500/40 bg-amber-900/20 p-4">
+    <p className="font-semibold">Bạn chưa đăng nhập hoặc tài khoản chưa có quyền sử dụng AI Lesson Studio.</p>
+    <p className="text-sm text-slate-300">Đăng nhập trên cùng tên miền Preview bằng tài khoản có quyền giáo viên hoặc quản trị viên. Sau đó quay lại trang này và tải lại.</p>
+    <Link href="/projects" className="inline-flex items-center gap-2 rounded-lg bg-cyan-600 px-4 py-2 text-sm font-bold text-white hover:bg-cyan-500">Mở VLearning để đăng nhập <ArrowLeft size={16}/></Link>
+   </div>}
    {authorized===null&&<p>Đang kiểm tra quyền truy cập...</p>}
    {authorized&&<>
     <nav aria-label="Điều hướng AI Lesson Studio" className="flex flex-wrap gap-2">
