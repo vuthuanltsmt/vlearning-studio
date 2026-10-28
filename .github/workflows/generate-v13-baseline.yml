@@ -10,10 +10,15 @@ on:
       - 'tests/**'
       - 'scripts/check-production-database-host.mjs'
       - 'lib/permissions.ts'
+      - 'app/ai-lessons/**'
+      - 'app/api/ai-lessons/**'
+      - 'app/ai-lessons/**'
+      - 'app/api/ai-lessons/**'
       - '.github/workflows/generate-v13-baseline.yml'
   push:
     branches:
       - feature/v13-0a-ai-lesson-foundation
+      - feature/v13-1-ai-notebooklm-compose
     paths:
       - 'prisma/**'
       - 'tests/**'
@@ -49,6 +54,8 @@ jobs:
         run: node --test tests/production-db-host.test.mjs
       - name: Check migration is additive only
         run: node --test tests/production-migration-safety.test.mjs
+      - name: Verify NotebookLM AI draft authorization and flow
+        run: node --test tests/notebooklm-compose.test.mjs
       - name: Validate current Prisma schema
         run: npx prisma validate --schema prisma/schema.prisma
       - name: Validate original Prisma schema
