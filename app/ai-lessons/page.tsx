@@ -75,8 +75,8 @@ export default function AiLessonStudio(){
    <header className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-700/40 bg-[#102f55] p-5">
     <div><Link href="/projects" className="flex items-center gap-2 text-xs text-cyan-300"><ArrowLeft size={15}/> VLearning Studio</Link>
     <h1 className="mt-2 flex items-center gap-2 text-2xl font-black"><Sparkles className="text-cyan-300"/> AI Lesson Studio</h1>
-    <p className="mt-1 text-sm text-slate-300">V13.0A · Kho nguồn và quản lý giáo án Cloud · Chưa kích hoạt AI</p></div>
-    <button onClick={beginNew} disabled={!authorized||busy} className="flex items-center gap-2 rounded-xl bg-cyan-600 px-4 py-3 font-bold disabled:opacity-40"><Plus size={18}/> Tạo bài dạy</button>
+    <p className="mt-1 text-sm text-slate-300">V13.1 · Kho nguồn, nhập NotebookLM và soạn giáo án AI</p></div>
+    <Link href="/ai-lessons/compose" className="rounded-xl border border-cyan-500 px-4 py-3 text-sm font-bold text-cyan-200">Soạn bằng AI / NotebookLM</Link><button onClick={beginNew} disabled={!authorized||busy} className="flex items-center gap-2 rounded-xl bg-cyan-600 px-4 py-3 font-bold disabled:opacity-40"><Plus size={18}/> Tạo bài dạy</button>
    </header>
    {authorized===false&&<div role="alert" className="space-y-3 rounded-xl border border-amber-500/40 bg-amber-900/20 p-4">
     <p className="font-semibold">Bạn chưa đăng nhập hoặc tài khoản chưa có quyền sử dụng AI Lesson Studio.</p>
@@ -119,7 +119,7 @@ export default function AiLessonStudio(){
       <label className="space-y-1 text-sm"><span>Số tiết</span><input type="number" min={1} max={30} value={draft.periods} onChange={e=>setDraft(d=>({...d,periods:Number(e.target.value)}))} className="w-full rounded-lg border border-blue-700 bg-[#061d38] p-3"/></label>
      </div>
      <label className="block space-y-1 text-sm"><span>Yêu cầu cần đạt / ghi chú</span><textarea rows={5} maxLength={15000} value={draft.objectives} onChange={e=>setDraft(d=>({...d,objectives:e.target.value}))} className="w-full rounded-lg border border-blue-700 bg-[#061d38] p-3"/></label>
-     <p className="text-xs text-slate-400">Soạn bằng AI và nhập NotebookLM sẽ được mở trong các phiên bản tiếp theo.</p>
+     <p className="text-xs text-slate-400">Mở mục “Soạn bằng AI / NotebookLM” phía trên để nhập nội dung, biên tập và lưu bản nháp.</p>
      <div className="flex gap-2"><button disabled={busy||!draft.title.trim()} onClick={save} className="flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-3 font-bold disabled:opacity-40"><Save size={17}/> Lưu Cloud</button><button onClick={()=>setTab("overview")} className="rounded-lg border border-blue-700 px-4 py-3">Hủy</button></div>
     </section>}
    </>}
