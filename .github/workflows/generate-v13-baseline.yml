@@ -2,6 +2,12 @@ name: Generate V13 legacy Prisma baseline (review only)
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feature/v13-0a-ai-lesson-foundation
+    paths:
+      - 'prisma/baseline-existing-schema.prisma'
+      - '.github/workflows/generate-v13-baseline.yml'
 
 permissions:
   contents: read
