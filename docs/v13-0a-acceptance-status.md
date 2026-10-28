@@ -12,12 +12,26 @@ Scope: **Neon Preview** `preview/feature/v13-0a-ai-lesson-foundation` and Vercel
 - Vercel Preview deployment `dpl_3Fi3kB6g5qdj4vfMJnKaZfmSppSk` commit `da9cfe3` reported READY.
 - Public `/ai-lessons` returned HTTP 200; `/api/auth/me` returned HTTP 200 with `user:null` when unauthenticated.
 
-## Not yet verified — release blockers
-- Successful TEACHER/ADMIN authenticated API request, create/edit/delete, and persistence after reload.
-- LEARNER and cross-owner HTTP authorization end-to-end.
-- The new GitHub Actions test job completion status.
-- Existing PPTX/SCORM feature regression after any eventual merge.
+## User-verified acceptance on 2026-10-28
+The tester reported **PASS (4/4)** on the current feature Preview:
+1. TEACHER A created `TEST-OWNER-A` and saved it to Cloud.
+2. TEACHER B signed in and could not see A's lesson.
+3. TEACHER A signed back in and the lesson was still present.
+4. LEARNER was blocked from creating or accessing lesson data.
 
-The Vercel deployment is protected and existing tool fetches of authenticated `/api/ai-lessons` did not produce an app API response, so no claim of API end-to-end success can be made.
+This is **user-reported functional acceptance**, not an independently captured authenticated HTTP trace. The tester also previously confirmed Cloud-save/reload success.
 
-**Release gate:** Keep PR #8 unmerged until authenticated Cloud CRUD, role/ownership checks, and regression checks have passed. Never apply baseline CREATE TABLE statements to a database where the legacy tables already exist.
+## Latest automation and deployment evidence
+- GitHub Actions run `40622555234` for commit `9dfa87c`: **completed / success**.
+- Vercel deployment `dpl_6tEstY2eQj5xwMxsBWNRVHVW78V2` for commit `9dfa87c`: **READY**.
+- CI includes role-policy tests and source-level API owner-scope regression checks. Those checks do not substitute for authenticated cross-user HTTP tests.
+
+## Remaining release checks
+- Confirm edit, delete, and file upload/delete through the UI (only create/save/reload and cross-account visibility were explicitly reported).
+- Check ADMIN UI access if that role is part of the release criteria.
+- Run regression checks on existing video, quiz, and SCORM workflows before promotion to Production.
+- Verify the Production migration/rollout plan; the Prisma baseline is historical and should be recorded as applied rather than re-created on a live legacy database.
+
+Vercel Preview SSO protection remains enabled. The user reported end-to-end app behavior above, but the assistant has not independently captured authenticated API responses.
+
+**Release gate:** Keep PR #8 unmerged pending remaining edit/delete/upload, ADMIN if required, and legacy workflow regression checks; plan Production migrations separately. Never apply baseline CREATE TABLE statements to a database where the legacy tables already exist.
