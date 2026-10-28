@@ -18,3 +18,10 @@ Checked on 2026-10-28. This is an operational release blocker, not a completed f
 6. Only after mapping is restored: run migration rollout through a separately authorized release, marking historical baseline **applied**, never executing baseline table DDL on existing Production.
 
 **Never** call Neon restore_snapshot without explicitly reviewing finalize behavior: a prior default restore unexpectedly switched main/default branch. Avoid all branch restore operations until the procedure is revalidated.
+## 2026-10-28 follow-up — verified safe stopping point
+- Rechecked Neon: original branch `br-frosty-surf-b3183drm` remains `main` / default.
+- Rechecked Vercel: shared database variables still target Production, Preview and Development. The previous partially changed `DATABASE_URL` target has been reverted to all three targets; no split has been completed.
+- Attempt to create a Production-only replacement variable was blocked by the connection's safety layer. Do **not** first remove Production from the existing variable without successfully preparing a replacement; that would leave a missing Production setting.
+- Code review: `lib/db.ts` instantiates `new PrismaClient()` using standard runtime environment. This reinforces the requirement to correct the deployment's database environment rather than patch application SQL.
+- Follow-up: use a controlled Vercel configuration change in the Vercel dashboard (or an authorized connection with secret-write permissions) to atomically arrange Production-only variables, verify effective targets and rollout with a separately monitored deployment. Do not print or store connection credentials in repository files.
+- Status: **BLOCKED on secure environment-variable creation**. No production migration, PR merge, deployment, or runtime database writes in this follow-up.
