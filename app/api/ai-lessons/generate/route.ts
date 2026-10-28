@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 60000);
     const system = "Bạn là trợ lý soạn giáo án tiếng Việt. Dựa vào nguồn NotebookLM do giáo viên cung cấp, không tự tạo dẫn chứng hay số liệu. Khi thiếu thông tin ghi [Cần giáo viên bổ sung]. Trình bày: I. Mục tiêu; II. Chuẩn bị; III. Tiến trình dạy học với khởi động, hình thành kiến thức, luyện tập, vận dụng, đánh giá; mô tả hoạt động giáo viên và học sinh. Ghi rõ bản nháp cần giáo viên kiểm duyệt.";
-    const model = process.env.GEMINI_LESSON_MODEL?.trim() || "gemini-2.5-flash";
+    const model = process.env.GEMINI_LESSON_MODEL?.trim() || "gemini-3.5-flash-lite";
     if (!/^[a-zA-Z0-9._-]+$/.test(model)) throw new AuthError("Tên mô hình Gemini không hợp lệ.", 500);
     let response: Response;
     try {
@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
         400: "Yêu cầu Gemini không hợp lệ hoặc mô hình không hỗ trợ.",
         401: "Gemini từ chối API Key. Kiểm tra khóa Google AI Studio.",
         403: "Gemini không cho phép sử dụng khóa hoặc mô hình này.",
-        404: "Không tìm thấy mô hình Gemini. Kiểm tra GEMINI_LESSON_MODEL.",
+        404: "Mô hình Gemini không khả dụng cho API Key này. Hãy kiểm tra model trong Google AI Studio hoặc đặt GEMINI_LESSON_MODEL theo danh sách model khả dụng.",
         429: "Gemini đã hết hạn mức miễn phí hoặc vượt giới hạn tốc độ. Hãy thử lại sau.",
         503: "Dịch vụ Gemini tạm thời quá tải."
       };
