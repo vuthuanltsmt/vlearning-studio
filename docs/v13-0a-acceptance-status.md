@@ -82,3 +82,11 @@ The tester explicitly confirmed **6/6** on disposable Preview test flows: Projec
 - Original Production branch `main` read-only counts after recovery: User 24, Session 14, CloudProject 1, PasswordResetToken 1 (matching prior baseline counts).
 - Vercel Production `https://vlearning-studio.vercel.app/api/auth/me` returned HTTP 200 and unauthenticated `user:null`. This alone does *not* establish that Vercel's active DATABASE_URL points to the expected branch; credential values were not disclosed/checked.
 - **Release blocker remains:** verify the active Production DB connection to original branch without exposing secrets; avoid further restores/branch switching; conduct Prisma baseline migration rehearsals via an isolated connection before making Production changes.
+
+## Production safety follow-up — 2026-10-28
+- Rechecked Neon default: name `main`, ID `br-frosty-surf-b3183drm`, primary/default, ready.
+- Read-only Production query: `neondb`, 24 users, 1 CloudProject, and **no** `_prisma_migrations` table. This confirms Production migration has not been performed.
+- Production HTTP health: `https://vlearning-studio.vercel.app/api/auth/me` returns 200 `{ok:true,user:null}` for an unauthenticated request.
+- Vercel environment metadata shows DB connection keys exist; encrypted values were not revealed by the connector, so the active Production DATABASE_URL **cannot yet be independently proven** to point to the original Neon branch.
+- No Production SQL writes, merge, or deployment were performed in this follow-up.
+- Prioritize independent verification of deployed DB target, then a separate authorized production baseline-resolution and migration plan. Do not mistake health 200 for verified production DB mapping.
