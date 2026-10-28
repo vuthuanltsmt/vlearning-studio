@@ -52,3 +52,16 @@ On a protected **Preview** session using a disposable local project (do not over
 Review of PR #8 changed-filename list shows only new AI Lesson routes/UI, Prisma files, CI/tests/docs and `components/projects/LeftSidebar.tsx` among existing UI files. This limits legacy-code change surface but **does not prove functionality without runtime regression**.
 
 **No legacy regression results have yet been reported.** Require explicit test results before Production merge.
+
+## Final legacy regression — user-reported PASS (2026-10-28)
+The tester explicitly confirmed **6/6** on disposable Preview test flows: Projects, Video, Quiz, SCORM 1.2, Cloud, and Menu. This is acceptance reported by the user, not instrumented browser automation.
+
+## Pre-production safety branch
+- Created new Neon branch `release-safety/v13-0a-preproduction-20261028` (`br-long-dawn-b3qe7ms7`) from Production main `br-frosty-surf-b3183drm` at parent LSN `0/2B6A6F0` (2026-10-28 02:51:09 UTC).
+- Branch reached **ready**, created with **no compute** to avoid idle compute. Production was not written to.
+- A branch at a point in time is not proof that an end-to-end restore has been tested; do not promise verified rollback without a rehearsal.
+- Production still has no `_prisma_migrations` table as of the last read-only check. Baseline must be resolved as applied, not replayed.
+
+## Remaining release gate
+- Validate a recoverable restore path and a safe production migration procedure (including baseline registration), verify current Production configuration is ready for the new Prisma schema, and separately authorize the irreversible production promotion.
+- Keep PR #8 unmerged until completed.
