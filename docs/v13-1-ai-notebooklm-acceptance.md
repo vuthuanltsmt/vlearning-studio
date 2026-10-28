@@ -35,3 +35,9 @@ Feature branch: `feature/v13-1-ai-notebooklm-compose`. Not merged or deployed to
 - [ ] Preview endpoint confirmed not Production before any runtime tests.
 
 Production deployment and merge must remain separate from this feature branch until V13.0A Production release safety gate is resolved.
+
+## Preview deployment verified — 2026-10-28
+- Vercel deployment `dpl_BmUBpf7D7mwEVahmeyH5qmyuZ2YY` is **READY**.
+- Protected Preview `/ai-lessons/compose` returned HTTP 200 HTML; unauthenticated `/api/auth/me` returned HTTP 200 with `user:null` as expected. This verifies routing/availability, **not authenticated editing or AI generation**.
+- The Vercel project currently has **no `OPENAI_API_KEY` variable**. The AI generation endpoint will return a helpful 503 until a server-side key is configured. Never put the API key in GitHub or a client-side `NEXT_PUBLIC_*` variable.
+- Remaining: authenticated teacher test paste/edit/save/reload; owner isolation and LEARNER denial; real AI response after securely configuring key; confirm Preview's database points to the intended branch.
