@@ -7,6 +7,8 @@ on:
       - feature/v13-0a-ai-lesson-foundation
     paths:
       - 'prisma/**'
+      - 'tests/ai-lesson-permissions.test.mjs'
+      - 'lib/permissions.ts'
       - '.github/workflows/generate-v13-baseline.yml'
 
 permissions:
@@ -27,6 +29,8 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Test access role policy
+        run: node --experimental-strip-types --test tests/ai-lesson-permissions.test.mjs
       - name: Validate current Prisma schema
         run: npx prisma validate --schema prisma/schema.prisma
       - name: Validate original Prisma schema
