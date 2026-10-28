@@ -1,4 +1,4 @@
-name: Generate V13 legacy Prisma baseline (review only)
+name: Validate V13 Prisma migrations (no database writes)
 
 on:
   workflow_dispatch:
@@ -6,33 +6,58 @@ on:
     branches:
       - feature/v13-0a-ai-lesson-foundation
     paths:
-      - 'prisma/baseline-existing-schema.prisma'
+      - 'prisma/**'
       - '.github/workflows/generate-v13-baseline.yml'
 
 permissions:
   contents: read
 
 jobs:
-  baseline:
+  validate:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://example:example@localhost:5432/unused
     steps:
-      - name: Checkout PR branch
+      - name: Checkout feature branch
         uses: actions/checkout@v4
-      - name: Install Node.js
+      - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: Generate baseline SQL without a database connection
+      - name: Validate current Prisma schema
+        run: npx prisma validate --schema prisma/schema.prisma
+      - name: Validate original Prisma schema
+        run: npx prisma validate --schema prisma/baseline-existing-schema.prisma
+      - name: Generate independent baseline reference without database
         run: |
-          mkdir -p prisma/migrations/20261001_existing_schema_baseline
-          npx prisma migrate diff --from-empty --to-schema-datamodel prisma/baseline-existing-schema.prisma --script --output prisma/migrations/20261001_existing_schema_baseline/migration.sql
-          test -s prisma/migrations/20261001_existing_schema_baseline/migration.sql
-      - name: Upload baseline candidate for review (not deployed)
+          npx prisma migrate diff --from-empty --to-schema-datamodel prisma/baseline-existing-schema.prisma --script --output baseline-reference.sql
+          test -s baseline-reference.sql
+      - name: Compare committed baseline SQL with generated reference
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          reference=Path("baseline-reference.sql").read_text()
+          baseline=Path("prisma/migrations/20261001_existing_schema_baseline/migration.sql").read_text()
+          for label,script in (("generated",reference),("committed",baseline)):
+              print(label, "CREATE TABLE:", len(re.findall(r'CREATE TABLE ',script)), "CREATE INDEX:", len(re.findall(r'CREATE (?:UNIQUE )?INDEX ',script)), "FOREIGN KEY:", len(re.findall(r'FOREIGN KEY ',script)))
+              assert len(re.findall(r'CREATE TABLE ',script))==4
+              assert len(re.findall(r'CREATE (?:UNIQUE )?INDEX ',script))==9
+              assert len(re.findall(r'FOREIGN KEY ',script))==2
+          tables = lambda s: set(re.findall(r'CREATE TABLE "(\w+)"',s))
+          indexes = lambda s: set(re.findall(r'CREATE (?:UNIQUE )?INDEX "(\w+)"',s))
+          assert tables(reference)==tables(baseline)
+          assert indexes(reference)==indexes(baseline)
+          print("Baseline tables and index names match Prisma-generated reference.")
+          PY
+      - name: Upload reference and committed baseline (review only)
         uses: actions/upload-artifact@v4
         with:
-          name: v13-existing-schema-baseline-candidate
-          path: prisma/migrations/20261001_existing_schema_baseline/migration.sql
+          name: v13-baseline-sql-review
+          path: |
+            baseline-reference.sql
+            prisma/migrations/20261001_existing_schema_baseline/migration.sql
           retention-days: 7
