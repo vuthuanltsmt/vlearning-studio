@@ -90,3 +90,8 @@ The tester explicitly confirmed **6/6** on disposable Preview test flows: Projec
 - Vercel environment metadata shows DB connection keys exist; encrypted values were not revealed by the connector, so the active Production DATABASE_URL **cannot yet be independently proven** to point to the original Neon branch.
 - No Production SQL writes, merge, or deployment were performed in this follow-up.
 - Prioritize independent verification of deployed DB target, then a separate authorized production baseline-resolution and migration plan. Do not mistake health 200 for verified production DB mapping.
+
+## Final CI gate recheck — 2026-10-28
+- Latest workflow for commit `b8d95f7b5933b094eac96016e3292338e158cfbc`: GitHub Actions run **40656350797**, completed **SUCCESS**; all reported job steps passed, including new additive migration safety check.
+- Neon default remains original Production branch `br-frosty-surf-b3183drm`.
+- Vercel `DATABASE_URL` and `DATABASE_URL_UNPOOLED` are still shared across development, preview and production. Correct Production-only DB routing remains blocked by sensitive environment-variable write restrictions. No release/merge or Production migration authorized by this CI result.
