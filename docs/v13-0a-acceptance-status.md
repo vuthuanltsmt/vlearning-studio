@@ -26,8 +26,11 @@ This is **user-reported functional acceptance**, not an independently captured a
 - Vercel deployment `dpl_6tEstY2eQj5xwMxsBWNRVHVW78V2` for commit `9dfa87c`: **READY**.
 - CI includes role-policy tests and source-level API owner-scope regression checks. Those checks do not substitute for authenticated cross-user HTTP tests.
 
+## Additional user acceptance
+- On 2026-10-28, the tester responded **Đạt** to the follow-up acceptance covering lesson edit/delete and source upload/delete. Record this as user-reported PASS, not automated test evidence.
+
 ## Remaining release checks
-- Confirm edit, delete, and file upload/delete through the UI (only create/save/reload and cross-account visibility were explicitly reported).
+- User has additionally reported PASS for the requested follow-up UI acceptance (edit/delete lesson and source upload/delete). Individual operations were not independently instrumented by the assistant.
 - Check ADMIN UI access if that role is part of the release criteria.
 - Run regression checks on existing video, quiz, and SCORM workflows before promotion to Production.
 - Verify the Production migration/rollout plan; the Prisma baseline is historical and should be recorded as applied rather than re-created on a live legacy database.
