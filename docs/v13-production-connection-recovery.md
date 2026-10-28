@@ -32,3 +32,12 @@ Checked on 2026-10-28. This is an operational release blocker, not a completed f
 - Neon branch `main` is original `br-frosty-surf-b3183drm`. Vercel database variables remain jointly scoped to development/preview/production, and the known stored Production connection value references the restore-test endpoint.
 - **Release verdict:** Preview accepted, Production NOT YET ACCEPTED. Do not treat green CI as evidence of production DB mapping or deploy completion.
 - Required final gates: safely prepare distinct Production-only values without breaking existing Preview values, verify effective deployment configuration, redeploy Production in a controlled manner, verify authenticated data, baseline-register and migrate Production, smoke test, then merge or promote only with an explicit rollback checkpoint.
+
+## Operator procedure for the blocked environment-variable change
+1. In Vercel project **vlearning-studio** → Settings → Environment Variables, export/securely retain the current seven database variable values and their target scopes, without copying secrets into tickets or commits.
+2. For each of `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `POSTGRES_PRISMA_URL`, `POSTGRES_URL`, `POSTGRES_URL_NON_POOLING`, `POSTGRES_URL_NO_SSL`, `POSTGRES_HOST`, create a **Production-only** record containing the same validated username, password, database and query options but the **original main branch** Neon endpoint (`ep-autumn-credit-b34152lu`; use `-pooler` only for pooled variables). Ensure the UI does not silently overwrite the shared record.
+3. Once all seven Production-only records exist, change the old shared records to Development+Preview only. Verify both target scopes and safe host identifiers, without displaying credentials.
+4. Redeploy the existing Production application version *without merging PR #8*. Verify authenticated read/write against known user/project data and ensure no unexpected change to Preview. If any check fails, restore the previous scoped variables and previous deployment.
+5. Do not perform Prisma baseline registration, migrations, or PR merge until the database routing check is independently evidenced.
+
+**Tool blocker:** programmatic creation of Production-only sensitive variables was refused by the safety layer. Do not remove Production from the existing shared `DATABASE_URL` first; a previous attempt was rolled back. The current tool session cannot establish the needed atomic scoped configuration change.
