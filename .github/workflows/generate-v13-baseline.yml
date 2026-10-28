@@ -12,8 +12,6 @@ on:
       - 'lib/permissions.ts'
       - 'app/ai-lessons/**'
       - 'app/api/ai-lessons/**'
-      - 'app/ai-lessons/**'
-      - 'app/api/ai-lessons/**'
       - '.github/workflows/generate-v13-baseline.yml'
   push:
     branches:
@@ -24,6 +22,8 @@ on:
       - 'tests/**'
       - 'scripts/check-production-database-host.mjs'
       - 'lib/permissions.ts'
+      - 'app/ai-lessons/**'
+      - 'app/api/ai-lessons/**'
       - '.github/workflows/generate-v13-baseline.yml'
 
 permissions:
