@@ -8,9 +8,18 @@ type Source={id:string;filename:string;sizeBytes:number;createdAt:string;lessonI
 type Tab="overview"|"sources"|"setup";
 const blank={title:"",subject:"",grade:"",periods:1,textbook:"",objectives:""};
 async function call<T>(url:string,options?:RequestInit):Promise<T>{
- const response=await fetch(url,{credentials:"same-origin",cache:"no-store",...options});
- const body=await response.json().catch(()=>({error:"Phản hồi không hợp lệ."}));
- if(!response.ok||!body.ok)throw new Error(body.error||"Yêu cầu thất bại.");
+ let response:Response;
+ try {
+  response=await fetch(url,{credentials:"same-origin",cache:"no-store",redirect:"follow",...options});
+ } catch {
+  throw new Error("Không kết nối được API Cloud. Nếu đang ở bản Preview, hãy đăng nhập Vercel trên cùng tên miền rồi tải lại trang; kiểm tra mạng nếu lỗi vẫn xảy ra.");
+ }
+ const type=response.headers.get("content-type")||"";
+ if(!type.includes("application/json")){
+  throw new Error("API Cloud không trả JSON (có thể bị chuyển đến trang xác thực Vercel Preview). Hãy đăng nhập Vercel trên cùng tên miền và tải lại trang.");
+ }
+ const body=await response.json().catch(()=>({ok:false,error:"Phản hồi JSON không hợp lệ."}));
+ if(!response.ok||!body.ok)throw new Error(body.error||("API Cloud trả lỗi HTTP "+response.status+"."));
  return body.data as T;
 }
 export default function AiLessonStudio(){
@@ -23,14 +32,16 @@ export default function AiLessonStudio(){
  const [error,setError]=useState("");
  const [message,setMessage]=useState("");
  const [authorized,setAuthorized]=useState<boolean|null>(null);
+ const [loaded,setLoaded]=useState(false);
  const reload=useCallback(async()=>{
    const [l,s]=await Promise.all([call<Lesson[]>("/api/ai-lessons"),call<Source[]>("/api/ai-lessons/sources")]);
-   setLessons(l);setSources(s);
+   setLessons(l);setSources(s);setLoaded(true);
  },[]);
  useEffect(()=>{
   let mounted=true;
   (async()=>{try{
     const r=await fetch("/api/auth/me",{credentials:"same-origin",cache:"no-store"});
+    if(!(r.headers.get("content-type")||"").includes("application/json"))throw new Error("Không xác thực được trên Preview. Hãy đăng nhập Vercel trên đúng tên miền rồi tải lại trang.");
     const j=await r.json();
     if(!mounted)return;
     const allowed=!!j.user&&["ADMIN","TEACHER"].includes(j.user.accessRole);
@@ -79,7 +90,7 @@ export default function AiLessonStudio(){
     </nav>
     {error&&<div role="alert" className="rounded-xl border border-red-700 bg-red-950/50 p-3 text-red-200">{error}</div>}
     {message&&<div role="status" className="rounded-xl border border-emerald-700 bg-emerald-950/40 p-3 text-emerald-200">{message}</div>}
-    {tab==="overview"&&<section className="space-y-4">
+    {tab==="overview"&&(!loaded?<div role="status" className="rounded-xl border border-amber-600/50 p-5 text-amber-100">Chưa tải được danh sách giáo án và tài liệu từ Cloud. Dữ liệu chưa được xác minh. Hãy xử lý thông báo kết nối phía trên rồi tải lại trang.</div>:<section className="space-y-4">
      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
       <div className="rounded-xl bg-[#12365b] p-4"><p className="text-xs text-slate-400">Tổng giáo án</p><p className="text-3xl font-black">{lessons.length}</p></div>
       <div className="rounded-xl bg-[#12365b] p-4"><p className="text-xs text-slate-400">Bản nháp</p><p className="text-3xl font-black">{lessons.filter(l=>l.status==="DRAFT").length}</p></div>
@@ -89,7 +100,7 @@ export default function AiLessonStudio(){
       <div><h2 className="font-bold">{l.title}</h2><p className="text-xs text-slate-400">{l.subject||"Chưa chọn môn"} · Lớp {l.grade||"—"} · {l.periods} tiết · Bản nháp</p></div>
       <div className="flex gap-2"><button disabled={busy} onClick={()=>edit(l)} className="rounded-lg bg-blue-700 px-3 py-2 text-sm">Mở / sửa</button><button aria-label={"Xóa "+l.title} disabled={busy} onClick={()=>remove(l.id)} className="rounded-lg border border-red-800 p-2 text-red-300"><Trash2 size={17}/></button></div>
      </article>)}
-    </section>}
+    </section>)}
     {tab==="sources"&&<section className="space-y-4">
       <div className="rounded-xl border border-dashed border-blue-500 bg-[#0c2a4d] p-6 text-center">
        <UploadCloud className="mx-auto mb-2 text-cyan-300" size={32}/><h2 className="font-bold">Thêm tài liệu nguồn</h2>
