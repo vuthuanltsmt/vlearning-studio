@@ -38,3 +38,17 @@ This is **user-reported functional acceptance**, not an independently captured a
 Vercel Preview SSO protection remains enabled. The user reported end-to-end app behavior above, but the assistant has not independently captured authenticated API responses.
 
 **Release gate:** Keep PR #8 unmerged pending remaining edit/delete/upload, ADMIN if required, and legacy workflow regression checks; plan Production migrations separately. Never apply baseline CREATE TABLE statements to a database where the legacy tables already exist.
+
+## Legacy regression test protocol (pending manual execution)
+
+On a protected **Preview** session using a disposable local project (do not overwrite real Cloud projects):
+1. Create/open a project via `/projects` and save it locally; reload and verify the project can be reopened.
+2. Import a small MP4, check play/pause, seek, and editing without console errors.
+3. Add a quiz, edit question/answer, duplicate and delete quiz; preview jump-to-quiz and score/result.
+4. Export SCORM 1.2 and check the ZIP contains the manifest. Import into a SCORM test harness/LMS and verify launch, completion and pass/fail reporting.
+5. Verify existing Cloud project load/save with the existing authorized account; no destructive edits to real content.
+6. Check AI Lesson link appears only for eligible author roles and existing sidebar navigation still functions.
+
+Review of PR #8 changed-filename list shows only new AI Lesson routes/UI, Prisma files, CI/tests/docs and `components/projects/LeftSidebar.tsx` among existing UI files. This limits legacy-code change surface but **does not prove functionality without runtime regression**.
+
+**No legacy regression results have yet been reported.** Require explicit test results before Production merge.
