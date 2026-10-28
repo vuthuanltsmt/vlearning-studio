@@ -1,6 +1,6 @@
 # V13.0A — Neon Preview migration runbook
 
-Status: **Baseline SQL committed as a review candidate; not executed.** DO NOT run against Production.
+Status: **Preview migrations applied and tested**; Production migrations **not applied**. Do not run against Production without the release gate below.
 
 The file `prisma/migrations/20261001_existing_schema_baseline/migration.sql` was drafted from the original Prisma schema and cross-checked for all **13 index names** against the supplied Neon Preview CSV. It has NOT been verified by running Prisma CLI or compared against all live column defaults/types; do not claim fully validated until these checks pass. The GitHub workflow separately generates a Prisma CLI reference SQL artifact for comparison. Do not automatically overwrite the committed baseline from the artifact without reviewing differences.
 
@@ -39,3 +39,12 @@ FROM public._prisma_migrations ORDER BY started_at;
 - Existing PPTX/SCORM functionality remains unchanged.
 
 If the verified Preview URL still uses Neon main or the migration history does not match the review, stop and do not write.
+
+## Production release gate — read-only observation 2026-10-28
+
+- Neon main branch `br-frosty-surf-b3183drm` was inspected **without writes**: 24 users and one CloudProject; neither `_prisma_migrations` nor `AiLessonPlan` exists.
+- Preview branch migration history contains baseline and V13 migrations; this does **not** apply to Production.
+- Before any Production migration, create and verify a restorable backup/restore point and inspect Production schema for equivalence with historical baseline. Confirm Production DATABASE_URL targets main and do not expose secrets.
+- On Production, **record the existing baseline as applied**, never execute its CREATE TABLE statements on already-existing legacy tables. Only then apply the reviewed V13 migration and verify legacy row counts and user-facing flows.
+- Prior to merge, verify legacy video/quiz/SCORM editor and export flows on Preview. A successful `next build` is **not** an end-to-end regression test.
+- Keep PR #8 unmerged until these release gates are complete. Do not infer permission to run Production migration from acceptance of Preview features.
