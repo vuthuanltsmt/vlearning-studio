@@ -74,3 +74,11 @@ The tester explicitly confirmed **6/6** on disposable Preview test flows: Projec
 - Compared schema with Production: differences were the intended V13 new table structures, indexes and FK constraints. Production did not receive DDL.
 - This was a direct SQL DDL rehearsal; no `_prisma_migrations` bookkeeping was created on this rehearsal branch and Prisma `migrate resolve --applied` / `migrate deploy` has **not yet** been rehearsed end-to-end.
 - Database restore from the safety branch has **not** been rehearsed; it must not be called a verified rollback procedure.
+
+## Neon restore drill incident and configuration recovery — 2026-10-28
+- A manual snapshot `snap-muddy-butterfly-b3dubpao` was created from the then-Production root branch `br-frosty-surf-b3183drm`.
+- **Critical:** Restoring the snapshot without explicitly setting `finalize:false` caused Neon to promote the restored branch `br-rapid-haze-b33txskf` as `main/default` and rename the original. This operation was *not* an isolated no-impact restore as expected. Never repeat that pattern for a rehearsal.
+- Recovery completed: changed `br-rapid-haze-b33txskf` name to `restore-test/v13-0a-20261028`, renamed original `br-frosty-surf-b3183drm` to `main`, and verified original `br-frosty-surf-b3183drm` is **primary and default**.
+- Original Production branch `main` read-only counts after recovery: User 24, Session 14, CloudProject 1, PasswordResetToken 1 (matching prior baseline counts).
+- Vercel Production `https://vlearning-studio.vercel.app/api/auth/me` returned HTTP 200 and unauthenticated `user:null`. This alone does *not* establish that Vercel's active DATABASE_URL points to the expected branch; credential values were not disclosed/checked.
+- **Release blocker remains:** verify the active Production DB connection to original branch without exposing secrets; avoid further restores/branch switching; conduct Prisma baseline migration rehearsals via an isolated connection before making Production changes.
