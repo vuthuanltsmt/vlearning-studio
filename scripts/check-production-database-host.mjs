@@ -11,7 +11,7 @@ export function checkDatabaseEndpoint(connectionUri, expectedEndpoint) {
   }
   const expected = expectedEndpoint.toLowerCase();
   // Accept both direct and pooled endpoints for the same Neon compute.
-  const allowed = new Set([expected, expected.replace(/^(ep-[a-z0-9-]+)(\\.c-)/, "$1-pooler$2")]);
+  const allowed = new Set([expected, expected.replace(".c-", "-pooler.c-")]);
   if (!allowed.has(hostname)) {
     return { ok: false, reason: "Database endpoint does not match approved Production endpoint." };
   }
