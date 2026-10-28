@@ -15,7 +15,9 @@ export async function POST(req: NextRequest) {
     if (obj.sourceText.length > 25000 || obj.draftText.length > 25000 || !obj.draftText.trim()) throw new AuthError("Bản nháp phải có nội dung và tối đa 25.000 ký tự.", 400);
     const lesson = await db.aiLessonPlan.findFirst({ where: { id: obj.lessonId, ownerUserId: user.id }, select: { id: true } });
     if (!lesson) throw new AuthError("Không tìm thấy giáo án của bạn.", 404);
-    const contentJson = JSON.stringify({ version: 1, origin: "notebooklm-import", sourceText: obj.sourceText, draftText: obj.draftText, reviewed: false });
+    const sourceText = obj.sourceText.trim();
+    const draftText = obj.draftText.trim();
+    const contentJson = JSON.stringify({ version: 1, origin: "notebooklm-import", sourceText, draftText, reviewed: false });
     await db.aiLessonPlan.updateMany({ where: { id: lesson.id, ownerUserId: user.id }, data: { contentJson, status: "DRAFT" } });
     return NextResponse.json({ ok: true, data: { saved: true } });
   } catch (err) {
