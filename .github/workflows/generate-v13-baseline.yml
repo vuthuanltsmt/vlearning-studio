@@ -2,6 +2,14 @@ name: Validate V13 Prisma migrations (no database writes)
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'prisma/**'
+      - 'tests/**'
+      - 'lib/permissions.ts'
+      - '.github/workflows/generate-v13-baseline.yml'
   push:
     branches:
       - feature/v13-0a-ai-lesson-foundation
@@ -31,6 +39,8 @@ jobs:
         run: npm ci
       - name: Test access role policy
         run: node --experimental-strip-types --test tests/ai-lesson-permissions.test.mjs
+      - name: TypeScript and Next.js production build (no database writes)
+        run: npm run build
       - name: Validate current Prisma schema
         run: npx prisma validate --schema prisma/schema.prisma
       - name: Validate original Prisma schema
