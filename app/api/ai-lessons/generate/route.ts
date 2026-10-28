@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     const sourceText = read("sourceText", 25000);
     const instruction = read("instruction", 2000);
     if (!title || !sourceText) return NextResponse.json({ ok: false, error: "Cần nhập tên bài và nội dung nguồn NotebookLM." }, { status: 400 });
-    const token = process.env.OPENAI_API_KEY;
+    const token = process.env.OPENAI_API_KEY?.trim();
     if (!token) return NextResponse.json({ ok: false, error: "Chưa cấu hình OPENAI_API_KEY phía máy chủ. Bạn vẫn có thể lưu bản nhập từ NotebookLM." }, { status: 503 });
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 40000);
@@ -49,7 +49,20 @@ export async function POST(req: NextRequest) {
     } finally {
       clearTimeout(timeout);
     }
-    if (!response.ok) return NextResponse.json({ ok: false, error: "Dịch vụ AI chưa phản hồi thành công (" + response.status + ")." }, { status: 502 });
+    if (!response.ok) {
+      let code = "";
+      try {
+        const failure = await response.json() as { error?: { code?: unknown; type?: unknown } };
+        const raw = failure.error?.code || failure.error?.type;
+        if (typeof raw === "string") code = raw;
+      } catch { /* Do not forward upstream error body */ }
+      const known = ["invalid_api_key", "incorrect_api_key", "invalid_authentication", "insufficient_quota", "billing_hard_limit_reached", "model_not_found"];
+      const detail = known.includes(code) ? " [" + code + "]" : "";
+      const message = response.status === 401
+        ? "OpenAI từ chối xác thực API (401)" + detail + ". Kiểm tra khóa OpenAI Platform, không dùng khóa dịch vụ khác; cập nhật đúng Preview V13.1 rồi triển khai lại."
+        : "Dịch vụ AI trả HTTP " + response.status + detail + ".";
+      return NextResponse.json({ ok: false, error: message }, { status: 502 });
+    }
     const result = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
     const text = result.choices?.[0]?.message?.content?.trim();
     if (!text) return NextResponse.json({ ok: false, error: "AI trả nội dung trống." }, { status: 502 });
