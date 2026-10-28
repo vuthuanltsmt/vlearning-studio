@@ -15,7 +15,7 @@ on:
       - feature/v13-0a-ai-lesson-foundation
     paths:
       - 'prisma/**'
-      - 'tests/ai-lesson-permissions.test.mjs'
+      - 'tests/**'
       - 'lib/permissions.ts'
       - '.github/workflows/generate-v13-baseline.yml'
 
@@ -41,6 +41,8 @@ jobs:
         run: node --experimental-strip-types --test tests/ai-lesson-permissions.test.mjs
       - name: TypeScript and Next.js production build (no database writes)
         run: npm run build
+      - name: Check AI Lesson API ownership guards
+        run: node --test tests/ai-lesson-route-guards.test.mjs
       - name: Validate current Prisma schema
         run: npx prisma validate --schema prisma/schema.prisma
       - name: Validate original Prisma schema
