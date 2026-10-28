@@ -47,6 +47,8 @@ jobs:
         run: node --test tests/ai-lesson-route-guards.test.mjs
       - name: Validate Neon Production endpoint release gate (synthetic URLs only)
         run: node --test tests/production-db-host.test.mjs
+      - name: Check migration is additive only
+        run: node --test tests/production-migration-safety.test.mjs
       - name: Validate current Prisma schema
         run: npx prisma validate --schema prisma/schema.prisma
       - name: Validate original Prisma schema
