@@ -25,3 +25,10 @@ Checked on 2026-10-28. This is an operational release blocker, not a completed f
 - Code review: `lib/db.ts` instantiates `new PrismaClient()` using standard runtime environment. This reinforces the requirement to correct the deployment's database environment rather than patch application SQL.
 - Follow-up: use a controlled Vercel configuration change in the Vercel dashboard (or an authorized connection with secret-write permissions) to atomically arrange Production-only variables, verify effective targets and rollout with a separately monitored deployment. Do not print or store connection credentials in repository files.
 - Status: **BLOCKED on secure environment-variable creation**. No production migration, PR merge, deployment, or runtime database writes in this follow-up.
+
+## 2026-10-28 CI verification and release disposition
+- GitHub Actions run #40651528162 completed SUCCESS, including role policy tests, Next.js build, API owner guard tests, synthetic Neon endpoint release gate tests, Prisma schema validation and migration reference checks.
+- Preview V13.0A acceptance remains user-reported PASS: cross-user authorization 4/4 and legacy regressions 6/6.
+- Neon branch `main` is original `br-frosty-surf-b3183drm`. Vercel database variables remain jointly scoped to development/preview/production, and the known stored Production connection value references the restore-test endpoint.
+- **Release verdict:** Preview accepted, Production NOT YET ACCEPTED. Do not treat green CI as evidence of production DB mapping or deploy completion.
+- Required final gates: safely prepare distinct Production-only values without breaking existing Preview values, verify effective deployment configuration, redeploy Production in a controlled manner, verify authenticated data, baseline-register and migrate Production, smoke test, then merge or promote only with an explicit rollback checkpoint.
