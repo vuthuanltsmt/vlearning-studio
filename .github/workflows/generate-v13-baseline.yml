@@ -8,6 +8,7 @@ on:
     paths:
       - 'prisma/**'
       - 'tests/**'
+      - 'scripts/check-production-database-host.mjs'
       - 'lib/permissions.ts'
       - '.github/workflows/generate-v13-baseline.yml'
   push:
@@ -16,6 +17,7 @@ on:
     paths:
       - 'prisma/**'
       - 'tests/**'
+      - 'scripts/check-production-database-host.mjs'
       - 'lib/permissions.ts'
       - '.github/workflows/generate-v13-baseline.yml'
 
@@ -43,6 +45,8 @@ jobs:
         run: npm run build
       - name: Check AI Lesson API ownership guards
         run: node --test tests/ai-lesson-route-guards.test.mjs
+      - name: Validate Neon Production endpoint release gate (synthetic URLs only)
+        run: node --test tests/production-db-host.test.mjs
       - name: Validate current Prisma schema
         run: npx prisma validate --schema prisma/schema.prisma
       - name: Validate original Prisma schema
