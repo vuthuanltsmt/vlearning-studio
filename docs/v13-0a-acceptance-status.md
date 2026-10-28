@@ -65,3 +65,12 @@ The tester explicitly confirmed **6/6** on disposable Preview test flows: Projec
 ## Remaining release gate
 - Validate a recoverable restore path and a safe production migration procedure (including baseline registration), verify current Production configuration is ready for the new Prisma schema, and separately authorize the irreversible production promotion.
 - Keep PR #8 unmerged until completed.
+
+## Pre-production migration DDL rehearsal — 2026-10-28
+- Preserved independent safety branch `br-long-dawn-b3qe7ms7`, whose original schema was identical to Production. Baseline counts: User 24, Session 14, CloudProject 1, PasswordResetToken 1.
+- Created a separate rehearsal child branch `br-dawn-bar-b3f7ek3v` (`rehearsal/v13-0a-migration-20261028`) from the safety branch.
+- Executed all **four statements** from committed `prisma/migrations/20261026_v13_ai_lesson_foundation/migration.sql` in a transaction against **rehearsal only**: two CREATE TABLE and two CREATE INDEX. Transaction succeeded.
+- After rehearsal: existing counts **24 / 14 / 1 / 1 unchanged**, new AiLessonPlan and AiLessonSource tables both present and empty.
+- Compared schema with Production: differences were the intended V13 new table structures, indexes and FK constraints. Production did not receive DDL.
+- This was a direct SQL DDL rehearsal; no `_prisma_migrations` bookkeeping was created on this rehearsal branch and Prisma `migrate resolve --applied` / `migrate deploy` has **not yet** been rehearsed end-to-end.
+- Database restore from the safety branch has **not** been rehearsed; it must not be called a verified rollback procedure.
