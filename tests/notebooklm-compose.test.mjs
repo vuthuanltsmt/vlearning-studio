@@ -10,7 +10,8 @@ const ui = readFileSync("app/ai-lessons/compose/page.tsx","utf8");
 test("AI generation is author-only and same-origin",()=>{
   assert.match(generate,/requireSameOrigin\(req\)/);
   assert.match(generate,/requireLessonAuthor\(\)/);
-  assert.match(generate,/OPENAI_API_KEY/);
+  assert.match(generate,/GEMINI_API_KEY/);
+  assert.match(generate,/generativelanguage\\.googleapis\\.com/);
 });
 test("Cloud save/load enforce lesson owner",()=>{
   assert.match(save,/ownerUserId:\s*user\.id/);
