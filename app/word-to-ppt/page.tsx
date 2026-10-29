@@ -2,7 +2,8 @@
 import {useMemo,useState} from "react";
 import Link from "next/link";
 import {ArrowLeft,BookOpen,CheckCircle2,ChevronDown,Download,FileText,MonitorPlay,Plus,ShieldCheck,Trash2,UploadCloud,AlertTriangle} from "lucide-react";
-import {createPptx,readDocx,type SlideContent} from "@/lib/wordToPptx";
+import {readDocx,type SlideContent} from "@/lib/wordToPptx";
+import {createStandardPptx} from "@/lib/wordToPptxStandard";
 import {planLessonSlides,STAGE_NAMES,type PlannedSlide} from "@/lib/lessonSlidePlanner";
 type Mode="lesson"|"basic";
 const phaseLabels=["01 · Tài liệu nguồn","02 · Kế hoạch slide","03 · Kiểm duyệt và xuất PPTX"];
@@ -40,7 +41,7 @@ export default function WordToPptPage(){
   setError("");if(!approved){setError("Vui lòng đánh dấu đã kiểm duyệt nội dung trước khi xuất.");return;}
   if(!slides.length)return;
   setBusy(true);
-  try{const blob=await createPptx(slides),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=(filename.replace(/\.docx$/i,"")||"bai-giang")+"-vlearning.pptx";a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);}
+  try{const blob=await createStandardPptx(slides),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=(filename.replace(/\.docx$/i,"")||"bai-giang")+"-vlearning.pptx";a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);}
   catch(e){setError(e instanceof Error?e.message:"Không tạo được PPTX.");}finally{setBusy(false);}
  }
  return <main className="min-h-screen bg-[#07192e] pb-20 text-slate-50">
