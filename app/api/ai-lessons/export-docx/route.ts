@@ -9,7 +9,7 @@ export async function POST(req:NextRequest){
   const body:unknown=await req.json();
   if(!body||typeof body!=="object"||Array.isArray(body))throw new AuthError("Dữ liệu không hợp lệ.",400);
   const v=body as Record<string,unknown>;
-  if(typeof v.title!=="string"||!v.title.trim()||v.title.length>200||!Array.isArray(v.sections)||v.sections.length>30)throw new AuthError("Giáo án không hợp lệ.",400);
+  if(typeof v.title!=="string"||!v.title.trim()||v.title.length>200||!Array.isArray(v.sections)||v.sections.length>120)throw new AuthError("Thiếu tên giáo án hoặc số lượng mục vượt giới hạn 120. Vui lòng kiểm tra nội dung.",400);
   const sections=v.sections.map((x:unknown)=>{
    if(!x||typeof x!=="object"||Array.isArray(x))throw new AuthError("Mục không hợp lệ.",400);
    const a=x as Record<string,unknown>;
