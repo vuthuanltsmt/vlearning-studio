@@ -16,7 +16,8 @@ export async function POST(req:NextRequest){
    if(typeof a.heading!=="string"||a.heading.length>160||typeof a.content!=="string"||a.content.length>25000)throw new AuthError("Nội dung mục quá dài.",400);
    return {heading:a.heading,content:a.content};
   });
-  if(!sections.some(s=>s.content.trim().length>0))throw new AuthError("Giáo án chưa có nội dung; hãy nạp bản nháp Cloud hoặc nhập nội dung trước khi xuất Word.",400);
+  const substantive=sections.map(s=>s.content).join("\n").replace(/^\s*(?:#{1,6}\s*)?(?:I|II|III|IV|V|VI|VII)[.)]\s+[^\n]*$/gim,"").trim();
+  if(substantive.length<100)throw new AuthError("Giáo án không có đủ nội dung để xuất Word. Hãy chọn bản nháp đầy đủ thay vì bản chỉ có tiêu đề.",400);
   const file=await lessonDocx(v.title,sections);
   return new NextResponse(Buffer.from(file),{headers:{"Content-Type":"application/vnd.openxmlformats-officedocument.wordprocessingml.document","Content-Disposition":"attachment; filename=\"giao-an-v13-2.docx\"","Cache-Control":"no-store"}});
  }catch(e){if(e instanceof AuthError)return NextResponse.json({ok:false,error:e.message},{status:e.status});console.error("lesson docx export",e instanceof Error?e.name:"unknown");return NextResponse.json({ok:false,error:"Không thể xuất Word."},{status:500});}
