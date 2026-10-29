@@ -43,7 +43,14 @@ Production deployment and merge must remain separate from this feature branch un
 - Remaining: authenticated teacher test paste/edit/save/reload; owner isolation and LEARNER denial; real AI response after securely configuring key; confirm Preview's database points to the intended branch.
 
 ## Gemini provider change — 2026-10-28
-- Generate endpoint now uses Google's Gemini generateContent REST API and server-side `GEMINI_API_KEY`, default model `gemini-2.5-flash`. OpenAI API credit is not required for this path.
+- Generate endpoint now uses Google's Gemini generateContent REST API and server-side `GEMINI_API_KEY`, default model `gemini-3.5-flash-lite`. OpenAI API credit is not required for this path.
 - Create the key in Google AI Studio, set only Preview / `feature/v13-1-ai-notebooklm-compose` scope in Vercel, then redeploy this feature branch. Never reveal the key.
 - Free tier has availability/rate limits and may use submitted content for product improvement. Avoid private student records.
 - Runtime generation and Cloud persistence are **not yet accepted**; verify after the secret is configured.
+
+## Functional acceptance — 2026-10-29
+- Preview deployment `dpl_8PPRzwDQPNthnc7pXnhyRfSQMVZC` was independently verified `READY`.
+- User confirmed Gemini lesson composition **runs successfully** with NotebookLM content.
+- User confirmed **Cloud save passes**, including editing the generated draft, saving, page refresh and reloading the saved draft per the agreed five-step test.
+- The NotebookLM → Gemini → Edit → Cloud Save/Reload flow is **functionally accepted on Preview** based on user testing.
+- Independent cross-account isolation tests for V13.1 and Production release remain separate gates; do not merge or deploy to Production based solely on this Preview acceptance.
