@@ -548,14 +548,6 @@ export default function LeftSidebar({
                   Dự án của tôi
                 </span>
               </button>
-              <a
-                href="/ai-lessons"
-                className={`${menuBase} ${menuSpacing} mt-1`}
-                title="AI Lesson Studio"
-              >
-                <Sparkles size={20} className="shrink-0 text-cyan-300" />
-                <span className={labelClass}>AI Lesson Studio</span>
-              </a>
 
 
 
