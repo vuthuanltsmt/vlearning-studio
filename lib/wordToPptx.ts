@@ -72,6 +72,8 @@ export async function createPptx(slides:SlideContent[]):Promise<Blob>{
  '<a:bgFillStyleLst>'+fill("FFFFFF")+fill("E7E6E6")+fill("123B68")+'</a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>';
  z.file("ppt/theme/theme1.xml",header+theme);
 
+ // Rebuild without explicit ZIP directory entries for broader Microsoft Office compatibility.
+ for(const entry of Object.values(z.files)){if(entry.dir)delete z.files[entry.name];}
  const bytes=await z.generateAsync({type:"blob",compression:"DEFLATE"});
  // Verify that the generated OPC package has readable XML parts and all slides.
  const check=await JSZip.loadAsync(await bytes.arrayBuffer());
