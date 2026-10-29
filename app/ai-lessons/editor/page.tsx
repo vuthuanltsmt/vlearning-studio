@@ -1,6 +1,7 @@
 "use client";
 import {useEffect,useState} from "react";
 import Link from "next/link";
+import {parseLessonDraft} from "@/lib/parseLessonDraftV132";
 type Lesson={id:string;title:string};
 type Item={heading:string;content:string};
 const labels=["I. MỤC TIÊU","1. Kiến thức","2. Năng lực","- Năng lực chung","- Năng lực đặc thù","- Năng lực số","3. Phẩm chất","II. THIẾT BỊ VÀ HỌC LIỆU","1. Giáo viên","2. Học sinh","III. TIẾN TRÌNH DẠY HỌC","Hoạt động 1 (Khởi động)","HOẠT ĐỘNG 2: HÌNH THÀNH KIẾN THỨC","Hoạt động 2.1. Nội dung 1","IV. HOẠT ĐỘNG LUYỆN TẬP","V. HOẠT ĐỘNG VẬN DỤNG","BẢNG ĐÁNH GIÁ VÀ CỤ THỂ HÓA NĂNG LỰC SỐ","VI. PHỤ LỤC"];
@@ -12,7 +13,7 @@ export default function LessonEditor(){
  const lesson=lessons.find(x=>x.id===id);
  const substantive=items.map(x=>x.content).join("\n").trim();
  useEffect(()=>{api<Lesson[]>("/api/ai-lessons").then(x=>{setLessons(x);setId(x.find(y=>y.title==="Thủy văn Việt nam")?.id||x[0]?.id||"");}).catch(e=>setMessage(String(e)));},[]);
- useEffect(()=>{if(!id)return;let active=true;setItems(initial());api<{draftText?:string;sourceText?:string}>("/api/ai-lessons/"+encodeURIComponent(id)+"/draft").then(d=>{if(!active)return;setSourceText(d.sourceText||"");const v=initial();const raw=d.draftText||"";if(raw.trim()){const pos=v.findIndex(x=>x.heading.startsWith("Hoạt động 2.1."));v[pos].content=raw;setMessage("Đã nạp nội dung cũ vào Hoạt động 2.1 để tránh mất dữ liệu. Hãy phân bổ, rà soát nội dung theo cấu trúc mới trước khi lưu.");}setItems(v);}).catch(e=>active&&setMessage(String(e)));return()=>{active=false};},[id]);
+ useEffect(()=>{if(!id)return;let active=true;setItems(initial());api<{draftText?:string;sourceText?:string}>("/api/ai-lessons/"+encodeURIComponent(id)+"/draft").then(d=>{if(!active)return;setSourceText(d.sourceText||"");const v=initial();const raw=d.draftText||"";if(raw.trim()){setMessage("Đã phân tích giáo án từ Cloud và phân bổ vào các phần, hoạt động tương ứng. Vui lòng rà soát trước khi lưu hoặc xuất Word.");}setItems(raw.trim()?parseLessonDraft(raw):v);}).catch(e=>active&&setMessage(String(e)));return()=>{active=false};},[id]);
  function edit(i:number,k:keyof Item,v:string){setItems(s=>s.map((x,j)=>i===j?{...x,[k]:v}:x));}
  function addActivity(){setItems(s=>{const count=s.filter(x=>/^Hoạt động 2\.\d+\./.test(x.heading)).length;const at=s.findIndex(x=>x.heading.startsWith("IV. HOẠT ĐỘNG"));return [...s.slice(0,at),...activity("Hoạt động 2."+(count+1)+". Nội dung "+(count+1)),...s.slice(at)];});}
  async function run(action:()=>Promise<void>){setBusy(true);setMessage("");try{await action();}catch(e){setMessage(e instanceof Error?e.message:String(e));}finally{setBusy(false);}}
