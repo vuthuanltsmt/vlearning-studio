@@ -56,6 +56,30 @@ export async function createPptx(slides:SlideContent[]):Promise<Blob>{
  z.file("ppt/slideMasters/_rels/slideMaster1.xml.rels",header+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="'+nsR+'/slideLayout" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="'+nsR+'/theme" Target="../theme/theme1.xml"/></Relationships>');
  z.file("ppt/slideLayouts/slideLayout1.xml",header+'<p:sldLayout xmlns:p="'+nsP+'" xmlns:a="'+nsA+'" xmlns:r="'+nsR+'" type="blank" preserve="1"><p:cSld name="Blank"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>');
  z.file("ppt/slideLayouts/_rels/slideLayout1.xml.rels",header+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="'+nsR+'/slideMaster" Target="../slideMasters/slideMaster1.xml"/></Relationships>');
- z.file("ppt/theme/theme1.xml",header+'<a:theme xmlns:a="'+nsA+'" name="VLearning"><a:themeElements><a:clrScheme name="Office"><a:dk1><a:srgbClr val="000000"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="123B68"/></a:dk2><a:lt2><a:srgbClr val="EEEEEE"/></a:lt2>'+["accent1","accent2","accent3","accent4","accent5","accent6","hlink","folHlink"].map(x=>'<a:'+x+'><a:srgbClr val="4472C4"/></a:'+x+'>').join("")+'</a:clrScheme><a:fontScheme name="Office"><a:majorFont><a:latin typeface="Arial"/></a:majorFont><a:minorFont><a:latin typeface="Arial"/></a:minorFont></a:fontScheme><a:fmtScheme name="Office"><a:fillStyleLst><a:solidFill><a:schemeClr val="accent1"/></a:solidFill></a:fillStyleLst><a:lnStyleLst><a:ln w="9525"><a:solidFill><a:schemeClr val="accent1"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="lt1"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>');
- const bytes=await z.generateAsync({type:"blob",compression:"DEFLATE"});return bytes;
+ const colors=["4472C4","ED7D31","A5A5A5","FFC000","5B9BD5","70AD47"];
+ const fill=(color:string)=>'<a:solidFill><a:srgbClr val="'+color+'"/></a:solidFill>';
+ const ln=(width:number,color:string)=>'<a:ln w="'+width+'">'+fill(color)+'<a:prstDash val="solid"/></a:ln>';
+ const theme='<a:theme xmlns:a="'+nsA+'" name="VLearning"><a:themeElements><a:clrScheme name="VLearning">'+
+ '<a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1>'+
+ '<a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1>'+
+ '<a:dk2><a:srgbClr val="123B68"/></a:dk2><a:lt2><a:srgbClr val="E7E6E6"/></a:lt2>'+
+ ["accent1","accent2","accent3","accent4","accent5","accent6"].map((n,i)=>'<a:'+n+'><a:srgbClr val="'+colors[i]+'"/></a:'+n+'>').join("")+
+ '<a:hlink><a:srgbClr val="0563C1"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink></a:clrScheme>'+
+ '<a:fontScheme name="VLearning"><a:majorFont><a:latin typeface="Arial"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="Arial"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme>'+
+ '<a:fmtScheme name="VLearning"><a:fillStyleLst>'+fill("4472C4")+fill("FFFFFF")+fill("123B68")+'</a:fillStyleLst>'+
+ '<a:lnStyleLst>'+ln(9525,"4472C4")+ln(12700,"4472C4")+ln(19050,"4472C4")+'</a:lnStyleLst>'+
+ '<a:effectStyleLst>'+[0,1,2].map(()=>'<a:effectStyle><a:effectLst/></a:effectStyle>').join("")+'</a:effectStyleLst>'+
+ '<a:bgFillStyleLst>'+fill("FFFFFF")+fill("E7E6E6")+fill("123B68")+'</a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>';
+ z.file("ppt/theme/theme1.xml",header+theme);
+
+ const bytes=await z.generateAsync({type:"blob",compression:"DEFLATE"});
+ // Verify that the generated OPC package has readable XML parts and all slides.
+ const check=await JSZip.loadAsync(await bytes.arrayBuffer());
+ for(const required of ["[Content_Types].xml","_rels/.rels","ppt/presentation.xml","ppt/slideMasters/slideMaster1.xml","ppt/slideLayouts/slideLayout1.xml","ppt/theme/theme1.xml",...slides.map((_,i)=>"ppt/slides/slide"+(i+1)+".xml")]){
+  const part=check.file(required);
+  if(!part)throw Error("PPTX thiếu thành phần "+required);
+  const parsed=new DOMParser().parseFromString(await part.async("string"),"application/xml");
+  if(parsed.getElementsByTagName("parsererror").length)throw Error("Cấu trúc XML lỗi: "+required);
+ }
+ return bytes;
 }
