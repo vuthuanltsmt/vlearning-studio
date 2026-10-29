@@ -3,7 +3,7 @@ import {useMemo,useState} from "react";
 import Link from "next/link";
 import {ArrowLeft,BookOpen,CheckCircle2,ChevronDown,Download,FileText,MonitorPlay,Plus,ShieldCheck,Trash2,UploadCloud,AlertTriangle} from "lucide-react";
 import {readDocx,type SlideContent} from "@/lib/wordToPptx";
-import {createStandardPptx} from "@/lib/wordToPptxStandard";
+import {createStandardPptx,type DesignPreset,type SlideLayout} from "@/lib/wordToPptxStandard";
 import {planLessonSlides,STAGE_NAMES,type PlannedSlide} from "@/lib/lessonSlidePlanner";
 type Mode="lesson"|"basic";
 const phaseLabels=["01 · Tài liệu nguồn","02 · Kế hoạch slide","03 · Kiểm duyệt và xuất PPTX"];
@@ -12,6 +12,8 @@ export default function WordToPptPage(){
  const [slides,setSlides]=useState<PlannedSlide[]>([]);
  const [filename,setFilename]=useState("");
  const [mode,setMode]=useState<Mode>("lesson");
+ const [preset,setPreset]=useState<DesignPreset>("ocean");
+ const [layouts,setLayouts]=useState<Record<number,SlideLayout>>({});
  const [warnings,setWarnings]=useState<string[]>([]);
  const [error,setError]=useState("");
  const [busy,setBusy]=useState(false);
@@ -41,7 +43,7 @@ export default function WordToPptPage(){
   setError("");if(!approved){setError("Vui lòng đánh dấu đã kiểm duyệt nội dung trước khi xuất.");return;}
   if(!slides.length)return;
   setBusy(true);
-  try{const blob=await createStandardPptx(slides),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=(filename.replace(/\.docx$/i,"")||"bai-giang")+"-vlearning.pptx";a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);}
+  try{const blob=await createStandardPptx(slides.map((s,i)=>({...s,layout:layouts[i]||"auto"})),preset),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=(filename.replace(/\.docx$/i,"")||"bai-giang")+"-vlearning.pptx";a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);}
   catch(e){setError(e instanceof Error?e.message:"Không tạo được PPTX.");}finally{setBusy(false);}
  }
  return <main className="min-h-screen bg-[#07192e] pb-20 text-slate-50">
@@ -68,6 +70,7 @@ export default function WordToPptPage(){
    </aside></div>}
    {source.length>0&&phase===1&&<section className="space-y-4">
      <div className="flex flex-wrap items-center justify-between gap-4"><div><h3 className="text-xl font-bold">Kế hoạch trình chiếu</h3><p className="text-sm text-slate-400">{slides.length} slide · {totalBullets} ý chính · Biên tập trực tiếp trước khi xuất</p></div><button onClick={()=>setPhase(2)} className="rounded-xl bg-cyan-500 px-5 py-3 font-bold text-[#07192e] hover:bg-cyan-400">Tiếp tục kiểm duyệt →</button></div>
+     <div className="flex flex-wrap items-center gap-4 rounded-xl border border-cyan-700/40 bg-[#102b48] p-4"><label className="text-sm font-semibold">Mẫu giao diện <select value={preset} onChange={e=>{setPreset(e.target.value as DesignPreset);setApproved(false);}} className="ml-3 rounded-lg border border-slate-500 bg-[#07192e] px-3 py-2"><option value="ocean">Đại dương · Xanh dương</option><option value="forest">Thiên nhiên · Xanh lá</option><option value="sunrise">Sáng tạo · Cam tím</option></select></label><label className="text-sm font-semibold">Bố cục slide hiện tại <select value={layouts[selected]||"auto"} onChange={e=>{setLayouts(x=>({...x,[selected]:e.target.value as SlideLayout}));setApproved(false);}} className="ml-3 rounded-lg border border-slate-500 bg-[#07192e] px-3 py-2"><option value="auto">Tự chọn theo hoạt động</option><option value="cards">Thẻ kiến thức</option><option value="two-column">Hai cột · Học liệu + nhiệm vụ</option><option value="timeline">Quy trình / Timeline</option><option value="focus">Một thông điệp trọng tâm</option></select></label><p className="w-full text-xs text-slate-400">Tùy chọn này được áp dụng khi xuất PPTX. Bản xem trước bên dưới hiện chỉ minh họa nội dung, chưa mô phỏng chính xác bố cục đã chọn.</p></div>
      {warnings.map((w,i)=><div key={i} className="rounded-lg border border-amber-500/30 bg-amber-900/15 px-4 py-3 text-sm text-amber-200">Lưu ý: {w}</div>)}
      <div className="grid gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
        <aside className="max-h-[650px] space-y-2 overflow-y-auto rounded-2xl border border-white/10 bg-[#102b48] p-3">{slides.map((s,i)=><button key={i} onClick={()=>setSelected(i)} className={"w-full rounded-xl border p-3 text-left "+(selected===i?"border-cyan-400 bg-cyan-900/40":"border-white/5 bg-[#081e36] hover:bg-[#163858]")}><span className="text-xs text-cyan-300">{String(i+1).padStart(2,"0")} · {STAGE_NAMES[s.stage]}</span><span className="mt-1 block truncate text-sm font-semibold">{s.title}</span></button>)}</aside>
