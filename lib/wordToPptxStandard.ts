@@ -18,7 +18,7 @@ export async function createStandardPptx(slides:DesignedSlide[],preset:DesignPre
  const c=palettes[preset],W=13.333,H=7.5;
  const text=(slide:ReturnType<typeof pptx.addSlide>,value:string,x:number,y:number,w:number,h:number,size:number,bold=false,color=c.text,align:"left"|"center"="left")=>
   slide.addText(value,{x,y,w,h,fontFace:"Arial",fontSize:size,bold,color,margin:0.06,breakLine:false,fit:"shrink",valign:"middle",align});
- const box=(slide:ReturnType<typeof pptx.addSlide>,x:number,y:number,w:number,h:number,fill:string)=>slide.addShape(pptx.ShapeType.roundRect,{x,y,w,h,rectRadius:0.16,line:{color:fill,transparency:100},fill:{color:fill},radius:0.16});
+ const box=(slide:ReturnType<typeof pptx.addSlide>,x:number,y:number,w:number,h:number,fill:string)=>slide.addShape(pptx.ShapeType.roundRect,{x,y,w,h,rectRadius:0.16,line:{color:fill,transparency:100},fill:{color:fill}});
  slides.forEach((data,i)=>{
   const slide=pptx.addSlide();slide.background={color:"FFFFFF"};
   const bullets=data.bullets.filter(s=>s.trim()).slice(0,6);
