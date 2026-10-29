@@ -15,6 +15,13 @@ export function parseLessonDraft(raw:string):LessonItem[]{
  const ensureAct=(name:string)=>{
   const index=result.findIndex(x=>x.heading===name);
   if(index>=0)return index;
+  const number=name.match(/^Hoạt động 2\.(\d+)\./)?.[1];
+  const existing=number?result.findIndex(x=>new RegExp("^Hoạt động 2\\."+number+"\\.").test(x.heading)):-1;
+  if(existing>=0){
+   // Reuse the blank 2.x activity rather than creating a duplicate empty card.
+   result[existing].heading=name;
+   return existing;
+  }
   const end=result.findIndex(x=>x.heading.startsWith("IV. HOẠT ĐỘNG"));
   result.splice(end,0,...act(name));return end;
  };
