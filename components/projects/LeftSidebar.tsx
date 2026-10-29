@@ -526,7 +526,6 @@ export default function LeftSidebar({
           </div>
         </div>
 
-        <div className="shrink-0 border-t border-[#17385c] px-2 py-2"><a href="/word-to-ppt" className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-cyan-200 hover:bg-white/10" title="Chuyển Word thành PowerPoint"><FileText size={20} className="shrink-0"/><span className={labelClass}>Word → PowerPoint</span></a></div>
         <div className="shrink-0 border-t border-[#17385c]">
           {authorAllowed && (
             <div className="px-2 pt-2">
