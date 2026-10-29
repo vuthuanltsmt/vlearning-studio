@@ -55,7 +55,7 @@ export default function NotebookLmComposePage() {
   return <main className="min-h-screen bg-[#06182f] px-4 py-8 text-slate-100">
     <div className="mx-auto max-w-5xl space-y-5">
       <header className="rounded-xl border border-cyan-800 bg-[#102f55] p-5">
-        <Link href="/ai-lessons" className="text-sm text-cyan-300">← AI Lesson Studio</Link><Link href="/ai-lessons/editor" className="ml-4 text-sm font-bold text-emerald-300">Mở V13.2 · Biên tập / Word / Trắc nghiệm</Link>
+        <Link href="/ai-lessons" className="text-sm text-cyan-300">← AI Lesson Studio</Link><Link href="/ai-lessons/editor" className="ml-4 text-sm font-semibold text-emerald-300">Biên tập V13.2 / Xuất Word / Tạo trắc nghiệm</Link><Link href="/ai-lessons/editor" className="ml-4 text-sm font-bold text-emerald-300">Mở V13.2 · Biên tập / Word / Trắc nghiệm</Link>
         <h1 className="mt-3 text-2xl font-bold">Soạn bài bằng AI · Nhập NotebookLM</h1>
         <p className="mt-2 text-sm text-slate-300">V13.1 — Sao chép phần tổng hợp hoặc ghi chú từ NotebookLM, dán vào đây, sau đó tạo giáo án bằng AI hoặc tự chỉnh sửa. Chưa hỗ trợ đồng bộ trực tiếp tài khoản NotebookLM.</p>
       </header>
