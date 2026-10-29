@@ -17,6 +17,7 @@ on:
     branches:
       - feature/v13-0a-ai-lesson-foundation
       - feature/v13-1-ai-notebooklm-compose
+      - feature/v13-2-ai-lesson-editor
     paths:
       - 'prisma/**'
       - 'tests/**'
