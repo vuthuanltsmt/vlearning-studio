@@ -245,6 +245,7 @@ type EditorStore = {
 
   /* TEACHER NARRATION */
   setPageNarration: (pageId: string, narration: string) => void;
+  setPageNarrationOverlay: (pageId: string, enabled: boolean, start: number, end: number) => void;
 
   /* VIDEO */
 
@@ -763,6 +764,10 @@ export const useEditorStore =
             ...project,
             pages: project.pages.map((page) => page.id === pageId ? {...page, teacherNarration: narration} : page),
           }));
+        },
+
+        setPageNarrationOverlay: (pageId, enabled, start, end) => {
+          commitProject(project => ({...project, pages: project.pages.map(page => page.id === pageId ? {...page, narrationOverlayEnabled: enabled, narrationStart: Math.max(0,start), narrationEnd: Math.max(0,end)} : page)}));
         },
 
         /* =====================================================
