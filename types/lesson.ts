@@ -119,6 +119,9 @@ export type LessonPage = {
 
   // Lời giảng dành cho giáo viên; không đưa vào câu hỏi học sinh.
   teacherNarration?: string;
+  narrationOverlayEnabled?: boolean;
+  narrationStart?: number;
+  narrationEnd?: number;
 
   // Danh sách câu hỏi của riêng trang này
   quizzes: Quiz[];
