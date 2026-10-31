@@ -1,4 +1,5 @@
 import JSZip from "jszip";
+import {getNarrationAudio} from "@/lib/narrationAudioDb";
 
 import {
   getVideo,
@@ -48,6 +49,7 @@ type ExportPage =
   > & {
     videoSrc: string | null;
     slideSrc: string | null;
+    narrationAudioSrc: string | null;
     games: PageGame[];
   };
 
@@ -11872,6 +11874,40 @@ function makePlayerJs() {
     updateFullscreenButton
   );
 
+  /* Voice Narration V1.2: audio is a bundled SCORM resource. */
+  var narrationPlayer = null;
+  var narrationPageId = null;
+  function syncNarration() {
+    var p = course.pages[state.pageIndex];
+    if (!p || !p.narrationAudioSrc) {
+      if(narrationPlayer){narrationPlayer.pause();narrationPlayer=null;}
+      narrationPageId=null;
+      return;
+    }
+    if(narrationPageId!==p.id) {
+      if(narrationPlayer)narrationPlayer.pause();
+      narrationPageId=p.id;
+      narrationPlayer=new Audio(p.narrationAudioSrc);
+      narrationPlayer.preload="auto";
+    }
+    var video=document.getElementById("course-video");
+    if(!video || state.activeQuiz || video.paused || video.ended) {
+      narrationPlayer.pause();
+      return;
+    }
+    var start=Number(p.narrationStart)||0;
+    var offset=video.currentTime-start;
+    if(offset<0 || (Number.isFinite(narrationPlayer.duration)&&offset>=narrationPlayer.duration)) {
+      narrationPlayer.pause();
+      return;
+    }
+    if(Math.abs(narrationPlayer.currentTime-offset)>0.5) {
+      try{narrationPlayer.currentTime=offset;}catch(e){}
+    }
+    if(narrationPlayer.paused) narrationPlayer.play().catch(function(){});
+  }
+  setInterval(syncNarration,200);
+
   restoreScormProgress();
 
   render();
@@ -12023,6 +12059,15 @@ async function buildExportCourse(
       );
     }
 
+    const narrationBlob=await getNarrationAudio(page.id);
+    let narrationAudioSrc:string|null=null;
+    if(narrationBlob){
+      const format=narrationBlob.type.includes("mpeg")?".mp3":narrationBlob.type.includes("wav")?".wav":narrationBlob.type.includes("mp4")?".m4a":narrationBlob.type.includes("ogg")?".ogg":".webm";
+      narrationAudioSrc="media/narration-"+(index+1)+format;
+      zip.file(narrationAudioSrc,narrationBlob,{binary:true,compression:"STORE"});
+      mediaFiles.push(narrationAudioSrc);
+    }
+
     pages.push({
       id:
         page.id,
@@ -12072,6 +12117,8 @@ async function buildExportCourse(
 
       videoSrc,
       slideSrc,
+      narrationAudioSrc,
+      narrationStart:page.narrationStart??0,
     });
   }
 
