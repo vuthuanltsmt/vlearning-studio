@@ -32,6 +32,8 @@ import type {
 type Props = {
   page: LessonPage;
 
+  onNarrationChange: (text: string) => void;
+
   onVideoUpload: (
     file: File
   ) => void;
@@ -55,6 +57,7 @@ type Props = {
 
 export function QuestionPanel({
   page,
+  onNarrationChange,
   onVideoUpload,
   onJump,
   onEdit,
@@ -102,6 +105,20 @@ export function QuestionPanel({
         <CompletionSettingsCard />
 
       </div>
+
+      <section className="border-b border-blue-900 p-5" aria-label="Lời giảng của giáo viên">
+        <h3 className="mb-2 text-base font-bold text-cyan-100">01 · LỜI GIẢNG CỦA GIÁO VIÊN</h3>
+        <p className="mb-3 text-xs leading-relaxed text-blue-100">Viết lời dẫn, phần giải thích và điểm cần nhấn mạnh. Giáo viên vừa xem học liệu vừa đọc lời giảng; sau đó mới thêm câu hỏi tương tác. Nội dung này là ghi chú cho giáo viên, không hiện trong phần câu hỏi của học sinh.</p>
+        <textarea
+          key={page.id}
+          defaultValue={page.teacherNarration ?? ""}
+          onBlur={(event) => { if(event.currentTarget.value !== (page.teacherNarration ?? "")) onNarrationChange(event.currentTarget.value); }}
+          rows={7}
+          placeholder={"Ví dụ: Các em hãy quan sát bản đồ...\nGiáo viên giải thích...\nSau khi hoàn thành phần giảng, đặt câu hỏi ở mốc thời gian phù hợp."}
+          className="w-full resize-y rounded-xl border border-blue-300/30 bg-[#0d2d54] p-3 text-sm leading-relaxed text-white placeholder:text-blue-200/60 focus:border-cyan-300 focus:outline-none"
+        />
+        <p className="mt-2 text-xs text-blue-200">Lưu lời giảng khi rời ô nhập, sau đó sử dụng nút Lưu dự án. Câu hỏi và thời điểm xuất hiện giữ nguyên.</p>
+      </section>
 
       {/* ===================================================
           MEDIA
