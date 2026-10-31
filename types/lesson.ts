@@ -117,6 +117,9 @@ export type LessonPage = {
   // Thời lượng video tính bằng giây
   duration: number;
 
+  // Lời giảng dành cho giáo viên; không đưa vào câu hỏi học sinh.
+  teacherNarration?: string;
+
   // Danh sách câu hỏi của riêng trang này
   quizzes: Quiz[];
 };
