@@ -34,6 +34,7 @@ import {
 import {
   QuestionPanel,
 } from "@/components/editor/QuestionPanel";
+import {NarrationAudioPanel} from "@/components/editor/NarrationAudioPanel";
 
 import {
   QuestionEditor,
@@ -2265,6 +2266,7 @@ export default function EditorPage() {
 
         {/* RIGHT */}
 
+        <div className="flex w-[380px] shrink-0 flex-col overflow-y-auto bg-[#173f73]"><NarrationAudioPanel page={page} currentTime={currentTime} isPlaying={isPlaying} quizActive={!!activeQuiz} videoTime={!!page.videoUrl}/><div className="min-h-0 flex-1 overflow-y-auto">
         <QuestionPanel
           page={
             page
@@ -2287,6 +2289,7 @@ export default function EditorPage() {
             handleDeleteQuiz
           }
         />
+        </div></div>
 
       </div>
 
