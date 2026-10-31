@@ -2140,6 +2140,7 @@ export default function EditorPage() {
             page={
               page
             }
+            currentTime={currentTime}
             videoRef={
               videoRef
             }
@@ -2269,6 +2270,7 @@ export default function EditorPage() {
             page
           }
           onNarrationChange={(value) => editor.setPageNarration(page.id, value)}
+          onNarrationOverlayChange={(enabled,start,end)=>editor.setPageNarrationOverlay(page.id,enabled,start,end)}
           onVideoUpload={
             handleVideoUpload
           }
