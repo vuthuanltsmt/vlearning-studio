@@ -11891,6 +11891,26 @@ function makePlayerJs() {
       narrationPlayer.preload="auto";
     }
     var video=document.getElementById("course-video");
+    var slideControls=document.getElementById("voice-narration-slide-controls");
+    if (!video && !state.activeQuiz) {
+      if(!slideControls){
+        slideControls=document.createElement("div");
+        slideControls.id="voice-narration-slide-controls";
+        slideControls.style.cssText="position:fixed;bottom:12px;left:12px;z-index:100;background:#082b4f;color:#fff;padding:10px;border-radius:10px;box-shadow:0 3px 12px #0008";
+        var label=document.createElement("div");
+        label.textContent="🔊 Thuyết minh trang trình chiếu";
+        label.style.marginBottom="5px";
+        slideControls.appendChild(label);
+        document.body.appendChild(slideControls);
+      }
+      if(narrationPlayer.parentElement!==slideControls){
+        narrationPlayer.controls=true;
+        narrationPlayer.style.maxWidth="250px";
+        slideControls.appendChild(narrationPlayer);
+      }
+      return;
+    }
+    if(slideControls)slideControls.remove();
     if(!video || state.activeQuiz || video.paused || video.ended) {
       narrationPlayer.pause();
       return;
