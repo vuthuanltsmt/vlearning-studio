@@ -11880,6 +11880,7 @@ function makePlayerJs() {
   function syncNarration() {
     var p = course.pages[state.pageIndex];
     if (!p || !p.narrationAudioSrc) {
+      var oldControls=document.getElementById("voice-narration-slide-controls");if(oldControls)oldControls.remove();
       if(narrationPlayer){narrationPlayer.pause();narrationPlayer=null;}
       narrationPageId=null;
       return;
