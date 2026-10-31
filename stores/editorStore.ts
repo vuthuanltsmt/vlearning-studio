@@ -243,6 +243,9 @@ type EditorStore = {
       pageId: string
     ) => void;
 
+  /* TEACHER NARRATION */
+  setPageNarration: (pageId: string, narration: string) => void;
+
   /* VIDEO */
 
   setPageVideo:
@@ -754,6 +757,13 @@ export const useEditorStore =
               })
             );
           },
+
+        setPageNarration: (pageId, narration) => {
+          commitProject((project) => ({
+            ...project,
+            pages: project.pages.map((page) => page.id === pageId ? {...page, teacherNarration: narration} : page),
+          }));
+        },
 
         /* =====================================================
            DUPLICATE PAGE
