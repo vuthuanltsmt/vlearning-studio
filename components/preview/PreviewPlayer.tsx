@@ -573,17 +573,7 @@ export function PreviewPlayer() {
     }).catch(()=>{});
     return ()=>{valid=false;if(objectUrl)URL.revokeObjectURL(objectUrl)};
   },[page?.id]);
-  useEffect(()=>{
-    const audio=narrationAudioRef.current;
-    if(!audio)return;
-    if(!narrationEnabled||activeQuiz||!isPlaying){audio.pause();return}
-    const start=page?.narrationStart??0;
-    if(currentTime<start){audio.pause();audio.currentTime=0;return}
-    const offset=Math.max(0,currentTime-start);
-    if(Number.isFinite(audio.duration)&&offset>=audio.duration){audio.pause();return}
-    if(Math.abs(audio.currentTime-offset)>0.5)audio.currentTime=offset;
-    if(audio.paused)void audio.play().catch(()=>{});
-  },[narrationAudioUrl,currentTime,isPlaying,activeQuiz,narrationEnabled,page?.narrationStart]);
+
 
 
   const [
@@ -621,6 +611,18 @@ export function PreviewPlayer() {
     useState<Quiz | null>(
       null
     );
+
+  useEffect(()=>{
+    const audio=narrationAudioRef.current;
+    if(!audio)return;
+    if(!narrationEnabled||activeQuiz||!isPlaying){audio.pause();return}
+    const start=page?.narrationStart??0;
+    if(currentTime<start){audio.pause();audio.currentTime=0;return}
+    const offset=Math.max(0,currentTime-start);
+    if(Number.isFinite(audio.duration)&&offset>=audio.duration){audio.pause();return}
+    if(Math.abs(audio.currentTime-offset)>0.5)audio.currentTime=offset;
+    if(audio.paused)void audio.play().catch(()=>{});
+  },[narrationAudioUrl,currentTime,isPlaying,activeQuiz,narrationEnabled,page?.narrationStart]);
 
   const [
     selectedAnswer,
