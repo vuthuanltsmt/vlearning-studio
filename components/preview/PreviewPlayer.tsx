@@ -615,14 +615,15 @@ export function PreviewPlayer() {
   useEffect(()=>{
     const audio=narrationAudioRef.current;
     if(!audio)return;
-    if(!narrationEnabled||activeQuiz||!isPlaying){audio.pause();return}
+    if(!narrationEnabled||activeQuiz||(!isPlaying && !!videoUrl)){audio.pause();return}
+    if(!videoUrl)return;
     const start=page?.narrationStart??0;
     if(currentTime<start){audio.pause();audio.currentTime=0;return}
     const offset=Math.max(0,currentTime-start);
     if(Number.isFinite(audio.duration)&&offset>=audio.duration){audio.pause();return}
     if(Math.abs(audio.currentTime-offset)>0.5)audio.currentTime=offset;
     if(audio.paused)void audio.play().catch(()=>{});
-  },[narrationAudioUrl,currentTime,isPlaying,activeQuiz,narrationEnabled,page?.narrationStart]);
+  },[narrationAudioUrl,currentTime,isPlaying,activeQuiz,narrationEnabled,page?.narrationStart,videoUrl]);
 
   const [
     selectedAnswer,
@@ -7300,6 +7301,7 @@ ${logoHtml}
             {narrationAudioUrl && <div className="absolute left-3 top-3 z-10 rounded-xl bg-black/75 p-2 text-xs text-white">
               <audio ref={narrationAudioRef} src={narrationAudioUrl} preload="metadata" />
               <button type="button" onClick={()=>setNarrationEnabled(v=>!v)}>{narrationEnabled?"🔊 Tắt thuyết minh":"🔇 Bật thuyết minh"}</button>
+              {!videoUrl && <button type="button" onClick={()=>{const a=narrationAudioRef.current;if(!a)return;if(a.paused)void a.play().catch(()=>{});else a.pause()}} className="ml-2 underline">▶ Phát / dừng tiếng slide</button>}
             </div>}
             {/* QUIZ OVERLAY */}
 
