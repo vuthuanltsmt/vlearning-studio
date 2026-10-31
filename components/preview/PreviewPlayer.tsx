@@ -46,6 +46,7 @@ import {
 import {
   getSlideImage,
 } from "@/lib/slideImageDb";
+import {getNarrationAudio} from "@/lib/narrationAudioDb";
 
 import {
   DEFAULT_COMPLETION_SETTINGS,
@@ -558,6 +559,32 @@ export function PreviewPlayer() {
     setCurrentTime,
   ] =
     useState(0);
+  const narrationAudioRef = useRef<HTMLAudioElement|null>(null);
+  const [narrationAudioUrl,setNarrationAudioUrl]=useState<string|null>(null);
+  const [narrationEnabled,setNarrationEnabled]=useState(true);
+  useEffect(()=>{
+    if(!page?.id)return;
+    let valid=true;let objectUrl:string|null=null;
+    setNarrationAudioUrl(null);
+    void getNarrationAudio(page.id).then(blob=>{
+      if(!valid||!blob)return;
+      objectUrl=URL.createObjectURL(blob);
+      setNarrationAudioUrl(objectUrl);
+    }).catch(()=>{});
+    return ()=>{valid=false;if(objectUrl)URL.revokeObjectURL(objectUrl)};
+  },[page?.id]);
+  useEffect(()=>{
+    const audio=narrationAudioRef.current;
+    if(!audio)return;
+    if(!narrationEnabled||activeQuiz||!isPlaying){audio.pause();return}
+    const start=page?.narrationStart??0;
+    if(currentTime<start){audio.pause();audio.currentTime=0;return}
+    const offset=Math.max(0,currentTime-start);
+    if(Number.isFinite(audio.duration)&&offset>=audio.duration){audio.pause();return}
+    if(Math.abs(audio.currentTime-offset)>0.5)audio.currentTime=offset;
+    if(audio.paused)void audio.play().catch(()=>{});
+  },[narrationAudioUrl,currentTime,isPlaying,activeQuiz,narrationEnabled,page?.narrationStart]);
+
 
   const [
     duration,
@@ -7268,6 +7295,10 @@ ${logoHtml}
 
             )}
 
+            {narrationAudioUrl && <div className="absolute left-3 top-3 z-10 rounded-xl bg-black/75 p-2 text-xs text-white">
+              <audio ref={narrationAudioRef} src={narrationAudioUrl} preload="metadata" />
+              <button type="button" onClick={()=>setNarrationEnabled(v=>!v)}>{narrationEnabled?"🔊 Tắt thuyết minh":"🔇 Bật thuyết minh"}</button>
+            </div>}
             {/* QUIZ OVERLAY */}
 
             {activeQuiz && (
