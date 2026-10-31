@@ -2251,6 +2251,7 @@ export default function EditorPage() {
           page={
             page
           }
+          onNarrationChange={(value) => editor.setPageNarration(page.id, value)}
           onVideoUpload={
             handleVideoUpload
           }
