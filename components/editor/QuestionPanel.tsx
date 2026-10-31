@@ -33,6 +33,7 @@ type Props = {
   page: LessonPage;
 
   onNarrationChange: (text: string) => void;
+  onNarrationOverlayChange: (enabled: boolean, start: number, end: number) => void;
 
   onVideoUpload: (
     file: File
@@ -58,6 +59,7 @@ type Props = {
 export function QuestionPanel({
   page,
   onNarrationChange,
+  onNarrationOverlayChange,
   onVideoUpload,
   onJump,
   onEdit,
@@ -117,7 +119,20 @@ export function QuestionPanel({
           placeholder={"Ví dụ: Các em hãy quan sát bản đồ...\nGiáo viên giải thích...\nSau khi hoàn thành phần giảng, đặt câu hỏi ở mốc thời gian phù hợp."}
           className="w-full resize-y rounded-xl border border-blue-300/30 bg-[#0d2d54] p-3 text-sm leading-relaxed text-white placeholder:text-blue-200/60 focus:border-cyan-300 focus:outline-none"
         />
-        <p className="mt-2 text-xs text-blue-200">Lưu lời giảng khi rời ô nhập, sau đó sử dụng nút Lưu dự án. Câu hỏi và thời điểm xuất hiện giữ nguyên.</p>
+        <p className="mt-2 text-xs text-blue-200">Lưu lời giảng khi rời ô nhập, sau đó sử dụng nút Lưu dự án.</p>
+        <label className="mt-4 flex items-center gap-3 text-sm font-semibold">
+          <input type="checkbox" checked={!!page.narrationOverlayEnabled} onChange={e=>onNarrationOverlayChange(e.target.checked,page.narrationStart??0,page.narrationEnd??0)} />
+          Lồng lời giảng trên video / slide
+        </label>
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <label className="text-xs text-blue-100">Xuất hiện từ (giây)
+            <input key={page.id+"-start"} type="number" min={0} step={0.5} defaultValue={page.narrationStart??0} onBlur={e=>onNarrationOverlayChange(!!page.narrationOverlayEnabled,Number(e.target.value)||0,page.narrationEnd??0)} className="mt-1 w-full rounded-lg border border-white/20 bg-[#0d2d54] px-3 py-2 text-white"/>
+          </label>
+          <label className="text-xs text-blue-100">Ẩn sau (giây; 0 = hết trang)
+            <input key={page.id+"-end"} type="number" min={0} step={0.5} defaultValue={page.narrationEnd??0} onBlur={e=>onNarrationOverlayChange(!!page.narrationOverlayEnabled,page.narrationStart??0,Number(e.target.value)||0)} className="mt-1 w-full rounded-lg border border-white/20 bg-[#0d2d54] px-3 py-2 text-white"/>
+          </label>
+        </div>
+        <p className="mt-2 text-xs text-blue-200">Video: hiển thị theo thời gian phát. Slide tĩnh: dùng thời gian trên bộ điều khiển trang. Khi có câu hỏi, lời giảng tạm ẩn để không che Quiz. Lớp phủ này chỉ áp dụng trong Editor, không ghi đè video gốc hoặc thay đổi SCORM.</p>
       </section>
 
       {/* ===================================================
