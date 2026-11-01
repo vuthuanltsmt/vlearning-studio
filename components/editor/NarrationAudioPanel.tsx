@@ -32,13 +32,13 @@ export function NarrationAudioPanel({page,currentTime,isPlaying,quizActive,video
          mic.getTracks().forEach(t=>t.stop());
          if(recorder.current===next)recorder.current=null;
          stream.current=null;setRecording(false);
-         if(blob.size)void store(blob);
+         if(blob.size){void store(blob).finally(()=>window.dispatchEvent(new Event("vlearning:record-saved")));}else window.dispatchEvent(new Event("vlearning:record-saved"));
        };
        next.start(1000);setRecording(true);setError("");setStorageStatus("Đang ghi âm cùng video");
      } catch {setError("Không thể ghi âm: hãy cấp quyền micro và nhấn Play lại.");}
    };
    const onPause=()=>{if(recorder.current?.state==="recording"){recorder.current.pause();setRecording(false);setStorageStatus("Đã tạm dừng ghi âm");}};
-   const onFinish=()=>{if(recorder.current && recorder.current.state!=="inactive")recorder.current.stop();};
+   const onFinish=()=>{if(recorder.current && recorder.current.state!=="inactive")recorder.current.stop();else window.dispatchEvent(new Event("vlearning:record-saved"));};
    window.addEventListener("vlearning:record-play",onPlay);
    window.addEventListener("vlearning:record-pause",onPause);
    window.addEventListener("vlearning:record-finish",onFinish);
