@@ -11887,10 +11887,27 @@ function makePlayerJs() {
       return;
     }
     if(narrationPageId!==p.id) {
+      var stale=document.getElementById("voice-narration-unlock");if(stale)stale.remove();
+
       if(narrationPlayer)narrationPlayer.pause();
       narrationPageId=p.id;
       narrationPlayer=new Audio(p.narrationAudioSrc);
       narrationPlayer.preload="auto";
+    }
+    var unlock=document.getElementById("voice-narration-unlock");
+    if(!unlock) {
+      unlock=document.createElement("button");
+      unlock.id="voice-narration-unlock";
+      unlock.type="button";
+      unlock.textContent="🔊 Bật tiếng thuyết minh";
+      unlock.style.cssText="position:fixed;right:12px;bottom:12px;z-index:101;background:#075a91;color:white;border:1px solid #9ed7ff;border-radius:10px;padding:10px 14px;cursor:pointer";
+      unlock.onclick=function(){
+        if(narrationPlayer){
+          narrationPlayer.muted=false;
+          narrationPlayer.play().catch(function(){});
+        }
+      };
+      document.body.appendChild(unlock);
     }
     var video=document.getElementById("course-video");
     var slideControls=document.getElementById("voice-narration-slide-controls");
@@ -11939,8 +11956,20 @@ function makePlayerJs() {
     if(Math.abs(narrationPlayer.currentTime-offset)>0.5) {
       try{narrationPlayer.currentTime=offset;}catch(e){}
     }
-    if(narrationPlayer.paused) narrationPlayer.play().catch(function(){});
+    if(narrationPlayer.paused) narrationPlayer.play().catch(function(){ /* Browser audio unlock button is available below. */ });
   }
+  /* A visible player also permits a browser-required user gesture for audio. */
+  document.addEventListener("play",function(event){
+    if(event.target && event.target.id==="course-video"){
+      syncNarration();
+      if(narrationPlayer && narrationPlayer.paused && !state.activeQuiz){
+        narrationPlayer.play().catch(function(){});
+      }
+    }
+  },true);
+  document.addEventListener("pause",function(event){
+    if(event.target && event.target.id==="course-video" && narrationPlayer)narrationPlayer.pause();
+  },true);
   setInterval(syncNarration,200);
 
   restoreScormProgress();
