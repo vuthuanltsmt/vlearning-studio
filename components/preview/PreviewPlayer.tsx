@@ -561,17 +561,24 @@ export function PreviewPlayer() {
     useState(0);
   const narrationAudioRef = useRef<HTMLAudioElement|null>(null);
   const [narrationAudioUrl,setNarrationAudioUrl]=useState<string|null>(null);
-  // Voice V1.4: narration follows the common media playback state.
+  const [narrationStatus,setNarrationStatus]=useState("");
+  // Load the saved audio whenever this preview becomes active, not only on page change.
   useEffect(()=>{
     if(!page?.id)return;
     let valid=true;let objectUrl:string|null=null;
-    setNarrationAudioUrl(null);
-    void getNarrationAudio(page.id).then(blob=>{
-      if(!valid||!blob)return;
-      objectUrl=URL.createObjectURL(blob);
-      setNarrationAudioUrl(objectUrl);
-    }).catch(()=>{});
-    return ()=>{valid=false;if(objectUrl)URL.revokeObjectURL(objectUrl)};
+    const loadAudio=()=>{
+      void getNarrationAudio(page.id).then(blob=>{
+        if(!valid)return;
+        if(objectUrl)URL.revokeObjectURL(objectUrl);
+        objectUrl=blob?URL.createObjectURL(blob):null;
+        setNarrationAudioUrl(objectUrl);
+        setNarrationStatus(blob?"Đã tải lời thuyết trình":"Chưa có bản ghi âm cho trang này. Hãy lưu ghi âm trước khi Xem trước.");
+      }).catch(()=>{if(valid)setNarrationStatus("Không đọc được bản ghi âm trên trình duyệt hiện tại.");});
+    };
+    loadAudio();
+    window.addEventListener("focus",loadAudio);
+    window.addEventListener("vlearning:record-saved",loadAudio);
+    return ()=>{valid=false;window.removeEventListener("focus",loadAudio);window.removeEventListener("vlearning:record-saved",loadAudio);if(objectUrl)URL.revokeObjectURL(objectUrl)};
   },[page?.id]);
 
 
@@ -621,7 +628,7 @@ export function PreviewPlayer() {
     const offset=Math.max(0,currentTime-start);
     if(Number.isFinite(audio.duration)&&offset>=audio.duration){audio.pause();return}
     if(Math.abs(audio.currentTime-offset)>0.5)audio.currentTime=offset;
-    if(audio.paused)void audio.play().catch(()=>{});
+    if(audio.paused)void audio.play().catch(()=>setNarrationStatus("Không phát được tiếng. Hãy kiểm tra định dạng âm thanh và quyền phát của trình duyệt."));
   },[narrationAudioUrl,currentTime,isPlaying,activeQuiz,page?.narrationStart,videoUrl]);
 
   const [
@@ -2105,7 +2112,7 @@ export function PreviewPlayer() {
         const offset = Math.max(0, video.currentTime - (page?.narrationStart ?? 0));
         if (video.currentTime >= (page?.narrationStart ?? 0) && (!Number.isFinite(audio.duration) || offset < audio.duration)) {
           try { audio.currentTime = offset; } catch {}
-          void audio.play().catch(() => {});
+          void audio.play().catch(() => setNarrationStatus("Không thể phát bản ghi. Kiểm tra lại tệp âm thanh."));
         }
       }
       void video.play().catch(() => { audio?.pause(); setIsPlaying(false); });
@@ -7313,6 +7320,7 @@ ${logoHtml}
             )}
 
             {narrationAudioUrl && <audio ref={narrationAudioRef} src={narrationAudioUrl} preload="metadata" onEnded={() => { if (!videoUrl) setIsPlaying(false); }} />}
+            {narrationStatus && <div role="status" className="absolute bottom-3 left-3 z-10 rounded bg-black/75 px-3 py-1 text-xs text-white">{narrationStatus}</div>}
             {/* QUIZ OVERLAY */}
 
             {activeQuiz && (
