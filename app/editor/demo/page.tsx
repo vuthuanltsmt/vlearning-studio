@@ -2214,6 +2214,9 @@ export default function EditorPage() {
             }
           />
 
+          <div className="border-t border-blue-900 bg-[#07182c] px-4 py-2 text-white">
+            <NarrationAudioPanel page={page} currentTime={currentTime} isPlaying={isPlaying} quizActive={!!activeQuiz} videoTime={!!page.videoUrl} />
+          </div>
           <PlayerControls
             currentTime={
               currentTime
@@ -2254,7 +2257,7 @@ export default function EditorPage() {
 
         {/* RIGHT */}
 
-        <div className="flex w-[380px] shrink-0 flex-col overflow-y-auto bg-[#173f73]"><details className="border-b border-blue-900 text-white"><summary className="cursor-pointer px-4 py-3 text-sm font-semibold">⚙️ Thiết lập âm thanh thuyết minh</summary><NarrationAudioPanel page={page} currentTime={currentTime} isPlaying={isPlaying} quizActive={!!activeQuiz} videoTime={!!page.videoUrl}/></details><div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="flex w-[380px] shrink-0 flex-col overflow-y-auto bg-[#173f73]"><div className="min-h-0 flex-1 overflow-y-auto">
         <QuestionPanel
           page={
             page
