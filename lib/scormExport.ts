@@ -11881,6 +11881,7 @@ function makePlayerJs() {
     var p = course.pages[state.pageIndex];
     if (!p || !p.narrationAudioSrc) {
       var oldControls=document.getElementById("voice-narration-slide-controls");if(oldControls)oldControls.remove();
+      var existingVoiceControl=document.getElementById("voice-narration-video-controls");if(existingVoiceControl)existingVoiceControl.remove();
       if(narrationPlayer){narrationPlayer.pause();narrationPlayer=null;}
       narrationPageId=null;
       return;
@@ -11912,6 +11913,19 @@ function makePlayerJs() {
       return;
     }
     if(slideControls)slideControls.remove();
+    var voiceControl=document.getElementById("voice-narration-video-controls");
+    if(video && !voiceControl){
+      voiceControl=document.createElement("div");
+      voiceControl.id="voice-narration-video-controls";
+      voiceControl.style.cssText="position:fixed;bottom:12px;left:12px;z-index:100;background:#082b4f;color:white;padding:9px;border-radius:10px";
+      var voiceBtn=document.createElement("button");
+      voiceBtn.textContent="🔊 Bật tiếng thuyết minh";
+      voiceBtn.type="button";
+      voiceBtn.onclick=function(){if(narrationPlayer){var v=document.getElementById("course-video");if(v&&!v.paused){var off=Math.max(0,v.currentTime-(Number(p.narrationStart)||0));try{narrationPlayer.currentTime=off}catch(e){};narrationPlayer.play().catch(function(){});}else{narrationPlayer.play().catch(function(){});}}};
+      voiceControl.appendChild(voiceBtn);
+      document.body.appendChild(voiceControl);
+    }
+    if(!video && voiceControl){voiceControl.remove();}
     if(!video || state.activeQuiz || video.paused || video.ended) {
       narrationPlayer.pause();
       return;
@@ -11960,6 +11974,8 @@ async function buildExportCourse(
   const missingVideoPages:
     string[] =
       [];
+  const missingNarrationPages:string[]=[];
+  let narrationAudioCount=0;
 
   const mediaFiles:
     string[] =
@@ -12083,10 +12099,13 @@ async function buildExportCourse(
     const narrationBlob=await getNarrationAudio(page.id);
     let narrationAudioSrc:string|null=null;
     if(narrationBlob){
+      narrationAudioCount++;
       const format=narrationBlob.type.includes("mpeg")?".mp3":narrationBlob.type.includes("wav")?".wav":narrationBlob.type.includes("mp4")?".m4a":narrationBlob.type.includes("ogg")?".ogg":".webm";
       narrationAudioSrc="media/narration-"+(index+1)+format;
       zip.file(narrationAudioSrc,narrationBlob,{binary:true,compression:"STORE"});
       mediaFiles.push(narrationAudioSrc);
+    } else if(page.teacherNarration?.trim()) {
+      missingNarrationPages.push(page.title);
     }
 
     pages.push({
@@ -12171,6 +12190,8 @@ async function buildExportCourse(
     course,
     missingVideoPages,
     mediaFiles,
+    narrationAudioCount,
+    missingNarrationPages,
   };
 }
 
@@ -12200,11 +12221,21 @@ export async function exportCurrentProjectAsScorm(): Promise<ScormExportResult> 
     course,
     missingVideoPages,
     mediaFiles,
+    narrationAudioCount,
+    missingNarrationPages,
   } =
     await buildExportCourse(
       project,
       zip
     );
+
+  if(narrationAudioCount===0 && project.pages.some(p=>p.teacherNarration?.trim())) {
+    throw new Error("Gói SCORM chưa có tệp tiếng thuyết minh. Bản ghi âm lưu theo tên miền Preview. Hãy tải tệp đã sao lưu từ Preview cũ và tải lại tại địa chỉ Preview hiện tại trước khi xuất.");
+  }
+  if(missingNarrationPages.length>0 && narrationAudioCount>0) {
+    const accept=window.confirm("Các trang chưa có tệp tiếng: "+missingNarrationPages.join(", ")+". Tiếp tục xuất SCORM với các trang này không có tiếng?");
+    if(!accept) throw new Error("Đã hủy xuất để bổ sung tiếng thuyết minh.");
+  }
 
   const indexHtml =
     makeIndexHtml();
