@@ -6525,12 +6525,20 @@ function makePlayerJs() {
       state.lastPlaybackTime =
         video.currentTime;
 
+      // User gesture unlocks both media at the same time.
+      if(typeof syncNarration==="function")syncNarration(true);
+      if(narrationPlayer && !state.activeQuiz){
+        var offset=Math.max(0,video.currentTime-(Number(currentPage()?.narrationStart)||0));
+        try{narrationPlayer.currentTime=offset;}catch(error){}
+        narrationPlayer.play().catch(function(){});
+      }
       video.play()
         .catch(
-          function () {}
+          function () {if(narrationPlayer)narrationPlayer.pause();}
         );
     } else {
       video.pause();
+      if(narrationPlayer)narrationPlayer.pause();
     }
   }
 
@@ -11874,7 +11882,7 @@ function makePlayerJs() {
     updateFullscreenButton
   );
 
-  /* Voice Narration V1.3: video clock is the single source of truth. */
+  /* Voice Narration V1.4: single Play/Pause and video clock. */
   var narrationPlayer=null, narrationPageId=null, narrationUnlocked=false;
   function syncNarration(forceSeek) {
     var page=course.pages[state.pageIndex];
@@ -11892,34 +11900,13 @@ function makePlayerJs() {
       narrationPlayer.preload="auto";
       narrationUnlocked=false;
     }
-    var slideControls=document.getElementById("voice-narration-slide-controls");
-    if(!video) {
-      var unlockOld=document.getElementById("voice-narration-unlock");if(unlockOld)unlockOld.remove();
-      if(!slideControls) {
-        slideControls=document.createElement("div");
-        slideControls.id="voice-narration-slide-controls";
-        slideControls.style.cssText="position:fixed;bottom:12px;left:12px;z-index:101;background:#082b4f;color:white;padding:10px;border-radius:10px";
-        slideControls.textContent="🔊 Thuyết minh trang trình chiếu ";
-        document.body.appendChild(slideControls);
-      }
-      if(narrationPlayer.parentElement!==slideControls){narrationPlayer.controls=true;slideControls.appendChild(narrationPlayer);}
-      if(state.activeQuiz)narrationPlayer.pause();
-      return;
-    }
-    if(slideControls)slideControls.remove();
+    /* V1.4: no independent narration controls. Main Play/Pause is the only control. */
+    ["voice-narration-slide-controls","voice-narration-unlock"].forEach(function(id){var old=document.getElementById(id);if(old)old.remove();});
     narrationPlayer.controls=false;
-    var unlock=document.getElementById("voice-narration-unlock");
-    if(!unlock) {
-      unlock=document.createElement("button");
-      unlock.id="voice-narration-unlock";
-      unlock.type="button";unlock.textContent="🔊 Bật tiếng thuyết minh";
-      unlock.style.cssText="position:fixed;right:12px;bottom:12px;z-index:101;background:#075a91;color:white;border:1px solid #9ed7ff;border-radius:10px;padding:10px 14px;cursor:pointer";
-      unlock.onclick=function(){
-        narrationUnlocked=true;
-        syncNarration(true);
-        if(narrationPlayer && !video.paused && !state.activeQuiz) narrationPlayer.play().catch(function(){});
-      };
-      document.body.appendChild(unlock);
+    if(!video){
+      if(state.activeQuiz || !state.started){narrationPlayer.pause();return;}
+      if(narrationPlayer.paused)narrationPlayer.play().catch(function(){});
+      return;
     }
     var start=Number(page.narrationStart)||0;
     var offset=video.currentTime-start;
