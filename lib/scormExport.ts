@@ -12209,6 +12209,17 @@ export async function exportCurrentProjectAsScorm(): Promise<ScormExportResult> 
     );
   }
 
+  // Complete the current microphone recording before reading narration blobs.
+  // A saved event fires only after IndexedDB's transaction completes.
+  if (typeof window !== "undefined") {
+    await new Promise<void>((resolve) => {
+      const done = () => { window.removeEventListener("vlearning:record-saved", done); clearTimeout(timeout); resolve(); };
+      const timeout = window.setTimeout(done, 1800);
+      window.addEventListener("vlearning:record-saved", done, { once: true });
+      window.dispatchEvent(new Event("vlearning:record-finish"));
+    });
+  }
+
   const zip =
     new JSZip();
 
@@ -12224,6 +12235,9 @@ export async function exportCurrentProjectAsScorm(): Promise<ScormExportResult> 
       zip
     );
 
+  if(narrationAudioCount===0 && project.pages.some(p=>p.videoName || p.videoUrl)) {
+    throw new Error("Không tìm thấy file ghi âm cho bất kỳ trang video nào trong trình duyệt hiện tại. Hãy kiểm tra dòng 'Đã lưu bản ghi', sau đó xuất lại SCORM trên cùng địa chỉ Preview. Các Preview có kho lưu âm thanh riêng.");
+  }
   if(narrationAudioCount===0 && project.pages.some(p=>p.teacherNarration?.trim())) {
     throw new Error("Gói SCORM chưa có tệp tiếng thuyết minh. Bản ghi âm lưu theo tên miền Preview. Hãy tải tệp đã sao lưu từ Preview cũ và tải lại tại địa chỉ Preview hiện tại trước khi xuất.");
   }
