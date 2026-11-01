@@ -551,15 +551,19 @@ export default function EditorPage() {
     const video =
       videoRef.current;
 
+    if (activeQuiz) return;
+
+    // Imported PowerPoint slides have no video element: Play records
+    // the teacher's narration for this slide, Pause suspends recording.
     if (!video) {
-      alert(
-        "Trang này chưa có video."
-      );
-
-      return;
-    }
-
-    if (activeQuiz) {
+      if (isPlaying) {
+        window.dispatchEvent(new Event("vlearning:record-pause"));
+        window.dispatchEvent(new Event("vlearning:narration-pause"));
+        setIsPlaying(false);
+      } else {
+        window.dispatchEvent(new Event("vlearning:record-play"));
+        setIsPlaying(true);
+      }
       return;
     }
 
