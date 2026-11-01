@@ -566,10 +566,12 @@ export default function EditorPage() {
     if (video.paused) {
       // Start narration in the same user gesture as the video.
       window.dispatchEvent(new CustomEvent("vlearning:narration-play", { detail: { time: video.currentTime } }));
+      window.dispatchEvent(new Event("vlearning:record-play"));
       void video.play().catch(() => window.dispatchEvent(new Event("vlearning:narration-pause")));
     } else {
       video.pause();
       window.dispatchEvent(new Event("vlearning:narration-pause"));
+      window.dispatchEvent(new Event("vlearning:record-pause"));
     }
   }
 
