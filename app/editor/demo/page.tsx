@@ -564,9 +564,12 @@ export default function EditorPage() {
     }
 
     if (video.paused) {
-      void video.play();
+      // Start narration in the same user gesture as the video.
+      window.dispatchEvent(new CustomEvent("vlearning:narration-play", { detail: { time: video.currentTime } }));
+      void video.play().catch(() => window.dispatchEvent(new Event("vlearning:narration-pause")));
     } else {
       video.pause();
+      window.dispatchEvent(new Event("vlearning:narration-pause"));
     }
   }
 
@@ -2122,21 +2125,6 @@ export default function EditorPage() {
             variant="editor"
           />
 
-          <section className="border-b border-cyan-900/50 bg-[#09233e] px-4 py-3" aria-label="Chế độ giảng bài">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div><p className="text-sm font-bold text-cyan-100">GIẢNG BÀI → CÂU HỎI TƯƠNG TÁC</p><p className="text-xs text-slate-300">Lời giảng dành cho giáo viên; câu hỏi vẫn chạy theo mốc video đã thiết lập.</p></div>
-              <button type="button" onClick={() => setTeacherView(v => !v)} className="rounded-lg border border-cyan-500/60 px-4 py-2 text-sm font-bold text-cyan-100 hover:bg-cyan-900/50" aria-expanded={teacherView}>{teacherView ? "Ẩn lời giảng" : "Xem lời giảng khi dạy"}</button>
-            </div>
-            {teacherView && <div className="mt-3 rounded-xl border border-cyan-400/30 bg-[#0e3155] p-4">
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold text-white">Lời giảng · {page.title}</h3><span className="text-xs text-cyan-200">{page.quizzes.length} câu hỏi trong trang</span></div>
-              <div className="max-h-48 overflow-y-auto whitespace-pre-wrap text-sm leading-7 text-slate-100">{page.teacherNarration?.trim() || "Chưa có lời giảng cho trang này. Nhập tại ô Lời giảng của giáo viên ở thanh bên phải."}</div>
-              <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-white/10 pt-3">
-                <span className="text-xs text-slate-300">Giáo viên có thể đọc lời giảng trong lúc xem học liệu ở bên dưới.</span>
-                <button type="button" disabled={!page.videoUrl || !page.quizzes.length} onClick={() => { const next=[...page.quizzes].sort((a,b)=>a.time-b.time).find(q=>q.time>=currentTime) || [...page.quizzes].sort((a,b)=>a.time-b.time)[0];if(next)jumpToQuiz(next); }} className="rounded-lg bg-cyan-600 px-3 py-2 text-sm font-bold text-white hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-40">Chuyển đến câu hỏi →</button>
-              </div>
-            </div>}
-          </section>
-
           <VideoCanvas
             page={
               page
@@ -2266,7 +2254,7 @@ export default function EditorPage() {
 
         {/* RIGHT */}
 
-        <div className="flex w-[380px] shrink-0 flex-col overflow-y-auto bg-[#173f73]"><NarrationAudioPanel page={page} currentTime={currentTime} isPlaying={isPlaying} quizActive={!!activeQuiz} videoTime={!!page.videoUrl}/><div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="flex w-[380px] shrink-0 flex-col overflow-y-auto bg-[#173f73]"><details className="border-b border-blue-900 text-white"><summary className="cursor-pointer px-4 py-3 text-sm font-semibold">⚙️ Thiết lập âm thanh thuyết minh</summary><NarrationAudioPanel page={page} currentTime={currentTime} isPlaying={isPlaying} quizActive={!!activeQuiz} videoTime={!!page.videoUrl}/></details><div className="min-h-0 flex-1 overflow-y-auto">
         <QuestionPanel
           page={
             page
