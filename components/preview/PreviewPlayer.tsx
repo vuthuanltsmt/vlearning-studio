@@ -561,7 +561,7 @@ export function PreviewPlayer() {
     useState(0);
   const narrationAudioRef = useRef<HTMLAudioElement|null>(null);
   const [narrationAudioUrl,setNarrationAudioUrl]=useState<string|null>(null);
-  const [narrationEnabled,setNarrationEnabled]=useState(true);
+  // Voice V1.4: narration follows the common media playback state.
   useEffect(()=>{
     if(!page?.id)return;
     let valid=true;let objectUrl:string|null=null;
@@ -615,15 +615,14 @@ export function PreviewPlayer() {
   useEffect(()=>{
     const audio=narrationAudioRef.current;
     if(!audio)return;
-    if(!narrationEnabled||activeQuiz||(!isPlaying && !!videoUrl)){audio.pause();return}
-    if(!videoUrl)return;
-    const start=page?.narrationStart??0;
+    if(activeQuiz||!isPlaying){audio.pause();return}
+    const start=videoUrl ? (page?.narrationStart??0) : 0;
     if(currentTime<start){audio.pause();audio.currentTime=0;return}
     const offset=Math.max(0,currentTime-start);
     if(Number.isFinite(audio.duration)&&offset>=audio.duration){audio.pause();return}
     if(Math.abs(audio.currentTime-offset)>0.5)audio.currentTime=offset;
     if(audio.paused)void audio.play().catch(()=>{});
-  },[narrationAudioUrl,currentTime,isPlaying,activeQuiz,narrationEnabled,page?.narrationStart,videoUrl]);
+  },[narrationAudioUrl,currentTime,isPlaying,activeQuiz,page?.narrationStart,videoUrl]);
 
   const [
     selectedAnswer,
@@ -2038,6 +2037,7 @@ export function PreviewPlayer() {
     quiz: Quiz
   ) {
     videoRef.current?.pause();
+    narrationAudioRef.current?.pause();
 
     lastPlaybackTimeRef.current =
       null;
@@ -2074,13 +2074,18 @@ export function PreviewPlayer() {
   ===================================================== */
 
   function togglePlay() {
-    const video =
-      videoRef.current;
-
-    if (
-      !video ||
-      activeQuiz
-    ) {
+    const video = videoRef.current;
+    const audio = narrationAudioRef.current;
+    if (activeQuiz || (!video && !audio)) return;
+    if (!video) {
+      if (!audio) return;
+      if (audio.paused) {
+        setIsPlaying(true);
+        void audio.play().catch(() => setIsPlaying(false));
+      } else {
+        audio.pause();
+        setIsPlaying(false);
+      }
       return;
     }
 
@@ -2095,9 +2100,18 @@ export function PreviewPlayer() {
         ""
       );
 
-      void video.play();
+      // Start both media in one user gesture; video is the playback clock.
+      if (audio) {
+        const offset = Math.max(0, video.currentTime - (page?.narrationStart ?? 0));
+        if (video.currentTime >= (page?.narrationStart ?? 0) && (!Number.isFinite(audio.duration) || offset < audio.duration)) {
+          try { audio.currentTime = offset; } catch {}
+          void audio.play().catch(() => {});
+        }
+      }
+      void video.play().catch(() => { audio?.pause(); setIsPlaying(false); });
     } else {
       video.pause();
+      audio?.pause();
     }
   }
 
@@ -7298,11 +7312,7 @@ ${logoHtml}
 
             )}
 
-            {narrationAudioUrl && <div className="absolute left-3 top-3 z-10 rounded-xl bg-black/75 p-2 text-xs text-white">
-              <audio ref={narrationAudioRef} src={narrationAudioUrl} preload="metadata" />
-              <button type="button" onClick={()=>setNarrationEnabled(v=>!v)}>{narrationEnabled?"🔊 Tắt thuyết minh":"🔇 Bật thuyết minh"}</button>
-              {!videoUrl && <button type="button" onClick={()=>{const a=narrationAudioRef.current;if(!a)return;if(a.paused)void a.play().catch(()=>{});else a.pause()}} className="ml-2 underline">▶ Phát / dừng tiếng slide</button>}
-            </div>}
+            {narrationAudioUrl && <audio ref={narrationAudioRef} src={narrationAudioUrl} preload="metadata" onEnded={() => { if (!videoUrl) setIsPlaying(false); }} />}
             {/* QUIZ OVERLAY */}
 
             {activeQuiz && (
@@ -8456,7 +8466,7 @@ ${logoHtml}
                   togglePlay
                 }
                 disabled={
-                  !videoUrl ||
+                  (!videoUrl && !narrationAudioUrl) ||
                   activeQuiz !==
                     null
                 }
