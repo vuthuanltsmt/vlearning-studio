@@ -6506,10 +6506,21 @@ function makePlayerJs() {
         "course-video"
       );
 
-    if (
-      !video ||
-      state.activeQuiz
-    ) {
+    if (state.activeQuiz) return;
+    if (!video) {
+      if (!currentPage()?.narrationAudioSrc) return;
+      state.started = true;
+      syncNarration(false);
+      if (!narrationPlayer) return;
+      if (narrationPlayer.paused) {
+        narrationPlayer.play().catch(function(){});
+        state.playing = true;
+      } else {
+        narrationPlayer.pause();
+        state.playing = false;
+      }
+      var slidePlay = document.getElementById("play-button");
+      if (slidePlay) slidePlay.textContent = state.playing ? "❚❚" : "▶";
       return;
     }
 
@@ -11197,7 +11208,7 @@ function makePlayerJs() {
 
       '<button id="play-button" class="play-button"' +
       (
-        !page.videoSrc ||
+        (!page.videoSrc && !page.narrationAudioSrc) ||
         state.activeQuiz
           ? " disabled"
           : ""
