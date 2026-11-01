@@ -11928,14 +11928,23 @@ function makePlayerJs() {
       narrationPlayer.pause();
       return;
     }
-    var difference=Math.abs(narrationPlayer.currentTime-offset);
-    if(forceSeek || difference>0.18) {
+    /* Align on seek and large drift. Use gentle rate correction for minor drift
+       to avoid audible jumps and repeated MediaElement seeks. */
+    var drift=narrationPlayer.currentTime-offset;
+    if(forceSeek || Math.abs(drift)>0.75) {
       try{narrationPlayer.currentTime=Math.max(0,offset);}catch(error){}
+      drift=0;
     }
-    narrationPlayer.playbackRate=video.playbackRate;
+    var videoRate=Number(video.playbackRate)||1;
+    var correction=Math.abs(drift)>0.12 ? Math.max(-0.06,Math.min(0.06,-drift*0.12)) : 0;
+    narrationPlayer.playbackRate=Math.max(0.5,Math.min(4,videoRate*(1+correction)));
+    if(video.readyState<2 || video.waiting) {
+      narrationPlayer.pause();
+      return;
+    }
     if(narrationPlayer.paused) narrationPlayer.play().then(function(){narrationUnlocked=true;}).catch(function(){});
   }
-  ["play","pause","seeking","seeked","ratechange","ended","timeupdate"].forEach(function(eventName){
+  ["play","pause","seeking","seeked","ratechange","ended","timeupdate","waiting","playing","stalled"].forEach(function(eventName){
     document.addEventListener(eventName,function(event){
       if(event.target && event.target.id==="course-video")syncNarration(eventName==="seeked"||eventName==="seeking");
     },true);
