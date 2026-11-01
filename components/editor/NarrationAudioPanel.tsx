@@ -21,10 +21,10 @@ export function NarrationAudioPanel({page,currentTime,isPlaying,quizActive,video
  function download(){if(!url)return;const a=document.createElement("a");a.href=url;const ext=audioMime.includes("mpeg")?"mp3":audioMime.includes("wav")?"wav":audioMime.includes("mp4")?"m4a":audioMime.includes("ogg")?"ogg":"webm";a.download="Loi_giang_"+page.id+"."+ext;a.click()}
  async function remove(){audio.current?.pause();await save(page.id,null);if(url)URL.revokeObjectURL(url);setUrl(null);setStorageStatus("Đã xóa bản ghi âm của trang này")}
  return <section className="flex flex-wrap items-center gap-3 text-white" aria-label="Ghi âm thuyết trình bên cạnh trình phát video">
- <h3 className="mb-2 font-bold text-cyan-100">02 · THUYẾT MINH BẰNG GIỌNG NÓI</h3>
+ <h3 className="mb-2 font-bold text-cyan-100">🎙️ GHI ÂM CÙNG NÚT PLAY</h3>
  <p className="mb-3 text-xs leading-5 text-blue-100">Ghi âm hoặc tải âm thanh cho trang hiện tại. Tệp lưu trong trình duyệt trên thiết bị này, không tự đồng bộ lên Cloud hoặc xuất SCORM.</p>
  <p role="status" className="mb-3 text-xs text-cyan-200">{storageStatus}</p>
- <div className="flex flex-wrap gap-2"><button type="button" onClick={()=>void record()} className={"rounded-lg px-3 py-2 text-sm font-semibold "+(recording?"bg-rose-600":"bg-cyan-600")}>{recording?"■ Dừng ghi âm":"● Ghi âm micro"}</button>
+ <div className="flex flex-wrap gap-2"><button type="button" onClick={()=>window.dispatchEvent(new Event("vlearning:record-finish"))} className="rounded-lg bg-cyan-700 px-3 py-2 text-sm font-semibold">💾 Lưu bản ghi</button>
  <label className="cursor-pointer rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold">Tải MP3/WAV/M4A<input type="file" accept="audio/*,.mp3,.wav,.m4a" className="hidden" onChange={e=>{const f=e.target.files?.[0];if(f)void upload(f);e.target.value=""}}/></label></div>
  {url&&<div className="mt-3 space-y-3"><audio ref={audio} src={url} preload="metadata" />
 
