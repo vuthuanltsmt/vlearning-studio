@@ -20,7 +20,7 @@ export function NarrationAudioPanel({page,currentTime,isPlaying,quizActive,video
  async function upload(f:File){if(!f.type.startsWith("audio/")&&!/\.(mp3|wav|m4a|webm|ogg)$/i.test(f.name)){setError("Chỉ nhận file âm thanh MP3, WAV, M4A, WebM hoặc OGG.");return}if(f.size>30*1024*1024){setError("Tệp vượt 30 MB.");return}await store(f)}
  function download(){if(!url)return;const a=document.createElement("a");a.href=url;const ext=audioMime.includes("mpeg")?"mp3":audioMime.includes("wav")?"wav":audioMime.includes("mp4")?"m4a":audioMime.includes("ogg")?"ogg":"webm";a.download="Loi_giang_"+page.id+"."+ext;a.click()}
  async function remove(){audio.current?.pause();await save(page.id,null);if(url)URL.revokeObjectURL(url);setUrl(null);setStorageStatus("Đã xóa bản ghi âm của trang này")}
- return <section className="border-b border-blue-900 p-5 text-white" aria-label="Thuyết minh bằng giọng nói">
+ return <section className="flex flex-wrap items-center gap-3 text-white" aria-label="Ghi âm thuyết trình bên cạnh trình phát video">
  <h3 className="mb-2 font-bold text-cyan-100">02 · THUYẾT MINH BẰNG GIỌNG NÓI</h3>
  <p className="mb-3 text-xs leading-5 text-blue-100">Ghi âm hoặc tải âm thanh cho trang hiện tại. Tệp lưu trong trình duyệt trên thiết bị này, không tự đồng bộ lên Cloud hoặc xuất SCORM.</p>
  <p role="status" className="mb-3 text-xs text-cyan-200">{storageStatus}</p>
