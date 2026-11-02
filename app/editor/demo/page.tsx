@@ -547,33 +547,41 @@ export default function EditorPage() {
      PLAY / PAUSE
   ======================================================= */
 
-  function togglePlay() {
-    const video =
-      videoRef.current;
+  function startMicrophone(): Promise<boolean> {
+    return new Promise(resolve => {
+      window.dispatchEvent(new CustomEvent("vlearning:record-play", {
+        detail: { ready: (ok: boolean) => resolve(ok) },
+      }));
+    });
+  }
 
+  async function togglePlay() {
     if (activeQuiz) return;
-
-    // Imported PowerPoint slides have no video element: Play records
-    // the teacher's narration for this slide, Pause suspends recording.
-    if (!video) {
-      if (isPlaying) {
-        window.dispatchEvent(new Event("vlearning:record-pause"));
-        window.dispatchEvent(new Event("vlearning:narration-pause"));
-        setIsPlaying(false);
-      } else {
-        window.dispatchEvent(new Event("vlearning:record-play"));
-        setIsPlaying(true);
-      }
+    const video = videoRef.current;
+    if (video && !video.paused) {
+      video.pause();
+      window.dispatchEvent(new Event("vlearning:narration-pause"));
+      window.dispatchEvent(new Event("vlearning:record-pause"));
       return;
     }
-
-    if (video.paused) {
-      // Start narration in the same user gesture as the video.
-      window.dispatchEvent(new CustomEvent("vlearning:narration-play", { detail: { time: video.currentTime } }));
-      window.dispatchEvent(new Event("vlearning:record-play"));
-      void video.play().catch(() => window.dispatchEvent(new Event("vlearning:narration-pause")));
-    } else {
-      video.pause();
+    if (!video && isPlaying) {
+      window.dispatchEvent(new Event("vlearning:record-pause"));
+      setIsPlaying(false);
+      return;
+    }
+    // Do not advance video until the microphone is actually recording.
+    const microphoneReady = await startMicrophone();
+    if (!microphoneReady) return;
+    if (!video) {
+      setIsPlaying(true);
+      return;
+    }
+    window.dispatchEvent(new CustomEvent("vlearning:narration-play", {
+      detail: { time: video.currentTime },
+    }));
+    try {
+      await video.play();
+    } catch {
       window.dispatchEvent(new Event("vlearning:narration-pause"));
       window.dispatchEvent(new Event("vlearning:record-pause"));
     }
