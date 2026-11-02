@@ -32,6 +32,9 @@ import type {
 type Props = {
   page: LessonPage;
 
+  onNarrationChange: (text: string) => void;
+  onNarrationOverlayChange: (enabled: boolean, start: number, end: number) => void;
+
   onVideoUpload: (
     file: File
   ) => void;
@@ -55,6 +58,8 @@ type Props = {
 
 export function QuestionPanel({
   page,
+  onNarrationChange,
+  onNarrationOverlayChange,
   onVideoUpload,
   onJump,
   onEdit,
@@ -102,7 +107,6 @@ export function QuestionPanel({
         <CompletionSettingsCard />
 
       </div>
-
       {/* ===================================================
           MEDIA
       =================================================== */}

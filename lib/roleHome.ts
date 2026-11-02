@@ -10,7 +10,7 @@ export function roleHomeFor(
       return "/admin";
 
     case "TEACHER":
-      return "/projects";
+      return "/editor/demo";
 
     case "LEARNER":
     default:

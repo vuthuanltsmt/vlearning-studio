@@ -34,6 +34,7 @@ import {
 import {
   QuestionPanel,
 } from "@/components/editor/QuestionPanel";
+import {NarrationAudioPanel} from "@/components/editor/NarrationAudioPanel";
 
 import {
   QuestionEditor,
@@ -124,6 +125,8 @@ export default function EditorPage() {
     setCurrentTime,
   ] =
     useState(0);
+
+  const [teacherView,setTeacherView] = useState(false);
 
   const [
     isPlaying,
@@ -544,26 +547,43 @@ export default function EditorPage() {
      PLAY / PAUSE
   ======================================================= */
 
-  function togglePlay() {
-    const video =
-      videoRef.current;
+  function startMicrophone(): Promise<boolean> {
+    return new Promise(resolve => {
+      window.dispatchEvent(new CustomEvent("vlearning:record-play", {
+        detail: { ready: (ok: boolean) => resolve(ok) },
+      }));
+    });
+  }
 
-    if (!video) {
-      alert(
-        "Trang này chưa có video."
-      );
-
-      return;
-    }
-
-    if (activeQuiz) {
-      return;
-    }
-
-    if (video.paused) {
-      void video.play();
-    } else {
+  async function togglePlay() {
+    if (activeQuiz) return;
+    const video = videoRef.current;
+    if (video && !video.paused) {
       video.pause();
+      window.dispatchEvent(new Event("vlearning:narration-pause"));
+      window.dispatchEvent(new Event("vlearning:record-pause"));
+      return;
+    }
+    if (!video && isPlaying) {
+      window.dispatchEvent(new Event("vlearning:record-pause"));
+      setIsPlaying(false);
+      return;
+    }
+    // Do not advance video until the microphone is actually recording.
+    const microphoneReady = await startMicrophone();
+    if (!microphoneReady) return;
+    if (!video) {
+      setIsPlaying(true);
+      return;
+    }
+    window.dispatchEvent(new CustomEvent("vlearning:narration-play", {
+      detail: { time: video.currentTime },
+    }));
+    try {
+      await video.play();
+    } catch {
+      window.dispatchEvent(new Event("vlearning:narration-pause"));
+      window.dispatchEvent(new Event("vlearning:record-pause"));
     }
   }
 
@@ -708,13 +728,9 @@ export default function EditorPage() {
       return;
     }
 
-    if (
-      !page.videoUrl
-    ) {
-      alert(
-        "Hãy tải video cho trang này trước khi thêm câu hỏi."
-      );
-
+    // PPTX slide pages can contain quizzes even without a video.
+    if (!page.videoUrl && !page.slideImageName) {
+      alert("Hãy tải video hoặc nhập trang PowerPoint trước khi thêm câu hỏi.");
       return;
     }
 
@@ -1899,15 +1915,8 @@ export default function EditorPage() {
     const video =
       videoRef.current;
 
-    if (!video) {
-      alert(
-        "Trang này chưa có video."
-      );
-
-      return;
-    }
-
-    video.pause();
+    // Slide quizzes are edited and selected without a video timeline.
+    video?.pause();
 
     setAnsweredIds(
       (old) =>
@@ -1940,8 +1949,7 @@ export default function EditorPage() {
       null
     );
 
-    video.currentTime =
-      quiz.time;
+    if (video) video.currentTime = quiz.time;
 
     setCurrentTime(
       quiz.time
@@ -2123,6 +2131,7 @@ export default function EditorPage() {
             page={
               page
             }
+            currentTime={currentTime}
             videoRef={
               videoRef
             }
@@ -2207,6 +2216,9 @@ export default function EditorPage() {
             }
           />
 
+          <div className="border-t border-blue-900 bg-[#07182c] px-4 py-2 text-white">
+            <NarrationAudioPanel page={page} currentTime={currentTime} isPlaying={isPlaying} quizActive={!!activeQuiz} videoTime={!!page.videoUrl} />
+          </div>
           <PlayerControls
             currentTime={
               currentTime
@@ -2247,10 +2259,13 @@ export default function EditorPage() {
 
         {/* RIGHT */}
 
+        <div className="flex w-[380px] shrink-0 flex-col overflow-y-auto bg-[#173f73]"><div className="min-h-0 flex-1 overflow-y-auto">
         <QuestionPanel
           page={
             page
           }
+          onNarrationChange={(value) => editor.setPageNarration(page.id, value)}
+          onNarrationOverlayChange={(enabled,start,end)=>editor.setPageNarrationOverlay(page.id,enabled,start,end)}
           onVideoUpload={
             handleVideoUpload
           }
@@ -2267,6 +2282,7 @@ export default function EditorPage() {
             handleDeleteQuiz
           }
         />
+        </div></div>
 
       </div>
 

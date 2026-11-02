@@ -46,6 +46,7 @@ import {
 import {
   getSlideImage,
 } from "@/lib/slideImageDb";
+import {getNarrationAudio} from "@/lib/narrationAudioDb";
 
 import {
   DEFAULT_COMPLETION_SETTINGS,
@@ -558,6 +559,29 @@ export function PreviewPlayer() {
     setCurrentTime,
   ] =
     useState(0);
+  const narrationAudioRef = useRef<HTMLAudioElement|null>(null);
+  const [narrationAudioUrl,setNarrationAudioUrl]=useState<string|null>(null);
+  const [narrationStatus,setNarrationStatus]=useState("");
+  // Load the saved audio whenever this preview becomes active, not only on page change.
+  useEffect(()=>{
+    if(!page?.id)return;
+    let valid=true;let objectUrl:string|null=null;
+    const loadAudio=()=>{
+      void getNarrationAudio(page.id).then(blob=>{
+        if(!valid)return;
+        if(objectUrl)URL.revokeObjectURL(objectUrl);
+        objectUrl=blob?URL.createObjectURL(blob):null;
+        setNarrationAudioUrl(objectUrl);
+        setNarrationStatus(blob?"Đã tải lời thuyết trình":"Chưa có bản ghi âm cho trang này. Hãy lưu ghi âm trước khi Xem trước.");
+      }).catch(()=>{if(valid)setNarrationStatus("Không đọc được bản ghi âm trên trình duyệt hiện tại.");});
+    };
+    loadAudio();
+    window.addEventListener("focus",loadAudio);
+    window.addEventListener("vlearning:record-saved",loadAudio);
+    return ()=>{valid=false;window.removeEventListener("focus",loadAudio);window.removeEventListener("vlearning:record-saved",loadAudio);if(objectUrl)URL.revokeObjectURL(objectUrl)};
+  },[page?.id]);
+
+
 
   const [
     duration,
@@ -594,6 +618,18 @@ export function PreviewPlayer() {
     useState<Quiz | null>(
       null
     );
+
+  useEffect(()=>{
+    const audio=narrationAudioRef.current;
+    if(!audio)return;
+    if(activeQuiz||!isPlaying){audio.pause();return}
+    const start=videoUrl ? (page?.narrationStart??0) : 0;
+    if(currentTime<start){audio.pause();audio.currentTime=0;return}
+    const offset=Math.max(0,currentTime-start);
+    if(Number.isFinite(audio.duration)&&offset>=audio.duration){audio.pause();return}
+    if(Math.abs(audio.currentTime-offset)>0.5)audio.currentTime=offset;
+    if(audio.paused)void audio.play().catch(()=>setNarrationStatus("Không phát được tiếng. Hãy kiểm tra định dạng âm thanh và quyền phát của trình duyệt."));
+  },[narrationAudioUrl,currentTime,isPlaying,activeQuiz,page?.narrationStart,videoUrl]);
 
   const [
     selectedAnswer,
@@ -2008,6 +2044,7 @@ export function PreviewPlayer() {
     quiz: Quiz
   ) {
     videoRef.current?.pause();
+    narrationAudioRef.current?.pause();
 
     lastPlaybackTimeRef.current =
       null;
@@ -2044,13 +2081,18 @@ export function PreviewPlayer() {
   ===================================================== */
 
   function togglePlay() {
-    const video =
-      videoRef.current;
-
-    if (
-      !video ||
-      activeQuiz
-    ) {
+    const video = videoRef.current;
+    const audio = narrationAudioRef.current;
+    if (activeQuiz || (!video && !audio)) return;
+    if (!video) {
+      if (!audio) return;
+      if (audio.paused) {
+        setIsPlaying(true);
+        void audio.play().catch(() => setIsPlaying(false));
+      } else {
+        audio.pause();
+        setIsPlaying(false);
+      }
       return;
     }
 
@@ -2065,9 +2107,18 @@ export function PreviewPlayer() {
         ""
       );
 
-      void video.play();
+      // Start both media in one user gesture; video is the playback clock.
+      if (audio) {
+        const offset = Math.max(0, video.currentTime - (page?.narrationStart ?? 0));
+        if (video.currentTime >= (page?.narrationStart ?? 0) && (!Number.isFinite(audio.duration) || offset < audio.duration)) {
+          try { audio.currentTime = offset; } catch {}
+          void audio.play().catch(() => setNarrationStatus("Không thể phát bản ghi. Kiểm tra lại tệp âm thanh."));
+        }
+      }
+      void video.play().catch(() => { audio?.pause(); setIsPlaying(false); });
     } else {
       video.pause();
+      audio?.pause();
     }
   }
 
@@ -7268,6 +7319,8 @@ ${logoHtml}
 
             )}
 
+            {narrationAudioUrl && <audio ref={narrationAudioRef} src={narrationAudioUrl} preload="metadata" onEnded={() => { if (!videoUrl) setIsPlaying(false); }} />}
+            {narrationStatus && <div role="status" className="absolute bottom-3 left-3 z-10 rounded bg-black/75 px-3 py-1 text-xs text-white">{narrationStatus}</div>}
             {/* QUIZ OVERLAY */}
 
             {activeQuiz && (
@@ -8421,7 +8474,7 @@ ${logoHtml}
                   togglePlay
                 }
                 disabled={
-                  !videoUrl ||
+                  (!videoUrl && !narrationAudioUrl) ||
                   activeQuiz !==
                     null
                 }

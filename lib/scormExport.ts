@@ -1,4 +1,5 @@
 import JSZip from "jszip";
+import {getNarrationAudio} from "@/lib/narrationAudioDb";
 
 import {
   getVideo,
@@ -48,6 +49,7 @@ type ExportPage =
   > & {
     videoSrc: string | null;
     slideSrc: string | null;
+    narrationAudioSrc: string | null;
     games: PageGame[];
   };
 
@@ -6504,10 +6506,21 @@ function makePlayerJs() {
         "course-video"
       );
 
-    if (
-      !video ||
-      state.activeQuiz
-    ) {
+    if (state.activeQuiz) return;
+    if (!video) {
+      if (!currentPage()?.narrationAudioSrc) return;
+      state.started = true;
+      var shouldPlay = !state.playing;
+      state.playing = shouldPlay;
+      syncNarration(false);
+      if (!narrationPlayer) { state.playing=false; return; }
+      if (shouldPlay) {
+        narrationPlayer.play().catch(function(){state.playing=false;});
+      } else {
+        narrationPlayer.pause();
+      }
+      var slidePlay = document.getElementById("play-button");
+      if (slidePlay) slidePlay.textContent = state.playing ? "❚❚" : "▶";
       return;
     }
 
@@ -6523,12 +6536,20 @@ function makePlayerJs() {
       state.lastPlaybackTime =
         video.currentTime;
 
+      // User gesture unlocks both media at the same time.
+      if(typeof syncNarration==="function")syncNarration(true);
+      if(narrationPlayer && !state.activeQuiz){
+        var offset=Math.max(0,video.currentTime-(Number(currentPage()?.narrationStart)||0));
+        try{narrationPlayer.currentTime=offset;}catch(error){}
+        narrationPlayer.play().catch(function(){});
+      }
       video.play()
         .catch(
-          function () {}
+          function () {if(narrationPlayer)narrationPlayer.pause();}
         );
     } else {
       video.pause();
+      if(narrationPlayer)narrationPlayer.pause();
     }
   }
 
@@ -11187,7 +11208,7 @@ function makePlayerJs() {
 
       '<button id="play-button" class="play-button"' +
       (
-        !page.videoSrc ||
+        (!page.videoSrc && !page.narrationAudioSrc) ||
         state.activeQuiz
           ? " disabled"
           : ""
@@ -11872,6 +11893,62 @@ function makePlayerJs() {
     updateFullscreenButton
   );
 
+  /* Voice Narration V1.4: single Play/Pause and video clock. */
+  var narrationPlayer=null, narrationPageId=null, narrationUnlocked=false;
+  function syncNarration(forceSeek) {
+    var page=course.pages[state.pageIndex];
+    var video=document.getElementById("course-video");
+    if(!page || !page.narrationAudioSrc) {
+      if(narrationPlayer)narrationPlayer.pause();
+      narrationPlayer=null;narrationPageId=null;
+      ["voice-narration-slide-controls","voice-narration-unlock"].forEach(function(id){var el=document.getElementById(id);if(el)el.remove();});
+      return;
+    }
+    if(narrationPageId!==page.id) {
+      if(narrationPlayer)narrationPlayer.pause();
+      narrationPageId=page.id;
+      narrationPlayer=new Audio(page.narrationAudioSrc);
+      narrationPlayer.preload="auto";
+      narrationUnlocked=false;
+    }
+    /* V1.4: no independent narration controls. Main Play/Pause is the only control. */
+    ["voice-narration-slide-controls","voice-narration-unlock"].forEach(function(id){var old=document.getElementById(id);if(old)old.remove();});
+    narrationPlayer.controls=false;
+    if(!video){
+      if(state.activeQuiz || !state.started || !state.playing){narrationPlayer.pause();return;}
+      if(narrationPlayer.paused)narrationPlayer.play().catch(function(){});
+      return;
+    }
+    var start=Number(page.narrationStart)||0;
+    var offset=video.currentTime-start;
+    var valid=offset>=0 && (!Number.isFinite(narrationPlayer.duration)||offset<narrationPlayer.duration);
+    if(!valid || state.activeQuiz || video.paused || video.ended || video.seeking) {
+      narrationPlayer.pause();
+      return;
+    }
+    /* Align on seek and large drift. Use gentle rate correction for minor drift
+       to avoid audible jumps and repeated MediaElement seeks. */
+    var drift=narrationPlayer.currentTime-offset;
+    if(forceSeek || Math.abs(drift)>0.75) {
+      try{narrationPlayer.currentTime=Math.max(0,offset);}catch(error){}
+      drift=0;
+    }
+    var videoRate=Number(video.playbackRate)||1;
+    var correction=Math.abs(drift)>0.12 ? Math.max(-0.06,Math.min(0.06,-drift*0.12)) : 0;
+    narrationPlayer.playbackRate=Math.max(0.5,Math.min(4,videoRate*(1+correction)));
+    if(video.readyState<2 || video.waiting) {
+      narrationPlayer.pause();
+      return;
+    }
+    if(narrationPlayer.paused) narrationPlayer.play().then(function(){narrationUnlocked=true;}).catch(function(){});
+  }
+  ["play","pause","seeking","seeked","ratechange","ended","timeupdate","waiting","playing","stalled"].forEach(function(eventName){
+    document.addEventListener(eventName,function(event){
+      if(event.target && event.target.id==="course-video")syncNarration(eventName==="seeked"||eventName==="seeking");
+    },true);
+  });
+  setInterval(function(){syncNarration(false);},150);
+
   restoreScormProgress();
 
   render();
@@ -11903,6 +11980,8 @@ async function buildExportCourse(
   const missingVideoPages:
     string[] =
       [];
+  const missingNarrationPages:string[]=[];
+  let narrationAudioCount=0;
 
   const mediaFiles:
     string[] =
@@ -12023,6 +12102,19 @@ async function buildExportCourse(
       );
     }
 
+    const narrationBlob=await getNarrationAudio(page.id);
+    let narrationAudioSrc:string|null=null;
+    if(narrationBlob){
+      narrationAudioCount++;
+      const format=narrationBlob.type.includes("mpeg")?".mp3":narrationBlob.type.includes("wav")?".wav":narrationBlob.type.includes("mp4")?".m4a":narrationBlob.type.includes("ogg")?".ogg":".webm";
+      narrationAudioSrc="media/narration-"+(index+1)+format;
+      zip.file(narrationAudioSrc,narrationBlob,{binary:true,compression:"STORE"});
+      mediaFiles.push(narrationAudioSrc);
+    } else if (page.teacherNarration?.trim() || page.slideImageName || page.videoName || page.videoUrl) {
+      // Flag media pages with no audio blob, even if text narration is empty.
+      missingNarrationPages.push(page.title);
+    }
+
     pages.push({
       id:
         page.id,
@@ -12072,6 +12164,8 @@ async function buildExportCourse(
 
       videoSrc,
       slideSrc,
+      narrationAudioSrc,
+      narrationStart:page.narrationStart??0,
     });
   }
 
@@ -12103,6 +12197,8 @@ async function buildExportCourse(
     course,
     missingVideoPages,
     mediaFiles,
+    narrationAudioCount,
+    missingNarrationPages,
   };
 }
 
@@ -12125,6 +12221,17 @@ export async function exportCurrentProjectAsScorm(): Promise<ScormExportResult> 
     );
   }
 
+  // Complete the current microphone recording before reading narration blobs.
+  // A saved event fires only after IndexedDB's transaction completes.
+  if (typeof window !== "undefined") {
+    await new Promise<void>((resolve) => {
+      const done = () => { window.removeEventListener("vlearning:record-saved", done); clearTimeout(timeout); resolve(); };
+      const timeout = window.setTimeout(done, 1800);
+      window.addEventListener("vlearning:record-saved", done, { once: true });
+      window.dispatchEvent(new Event("vlearning:record-finish"));
+    });
+  }
+
   const zip =
     new JSZip();
 
@@ -12132,11 +12239,27 @@ export async function exportCurrentProjectAsScorm(): Promise<ScormExportResult> 
     course,
     missingVideoPages,
     mediaFiles,
+    narrationAudioCount,
+    missingNarrationPages,
   } =
     await buildExportCourse(
       project,
       zip
     );
+
+  if(narrationAudioCount===0 && project.pages.some(p=>p.slideImageName)) {
+    throw new Error("Không thể xuất SCORM có tiếng: không tìm thấy bản ghi âm của các slide PowerPoint trên tên miền hiện tại. Hãy chọn từng slide, kiểm tra 'Đã lưu bản ghi', hoặc tải lại tệp tiếng đã sao lưu, rồi xuất lại.");
+  }
+  if(narrationAudioCount===0 && project.pages.some(p=>p.videoName || p.videoUrl)) {
+    throw new Error("Không tìm thấy file ghi âm cho bất kỳ trang video nào trong trình duyệt hiện tại. Hãy kiểm tra dòng 'Đã lưu bản ghi', sau đó xuất lại SCORM trên cùng địa chỉ Preview. Các Preview có kho lưu âm thanh riêng.");
+  }
+  if(narrationAudioCount===0 && project.pages.some(p=>p.teacherNarration?.trim())) {
+    throw new Error("Gói SCORM chưa có tệp tiếng thuyết minh. Bản ghi âm lưu theo tên miền Preview. Hãy tải tệp đã sao lưu từ Preview cũ và tải lại tại địa chỉ Preview hiện tại trước khi xuất.");
+  }
+  if(missingNarrationPages.length>0 && narrationAudioCount>0) {
+    const accept=window.confirm("Các trang chưa có tệp tiếng: "+missingNarrationPages.join(", ")+". Tiếp tục xuất SCORM với các trang này không có tiếng?");
+    if(!accept) throw new Error("Đã hủy xuất để bổ sung tiếng thuyết minh.");
+  }
 
   const indexHtml =
     makeIndexHtml();

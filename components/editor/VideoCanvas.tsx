@@ -33,6 +33,7 @@ import type {
 
 type Props = {
   page: LessonPage;
+  currentTime: number;
 
   videoRef:
     RefObject<HTMLVideoElement | null>;
@@ -129,6 +130,7 @@ type Props = {
 
 export function VideoCanvas({
   page,
+  currentTime,
   videoRef,
   activeQuiz,
   selectedAnswer,
@@ -389,6 +391,14 @@ export function VideoCanvas({
                   }
                   className="h-full w-full bg-black object-contain"
                 />
+              )}
+
+              {page.narrationOverlayEnabled && !!page.teacherNarration?.trim() && !activeQuiz && currentTime >= (page.narrationStart ?? 0) && (page.narrationEnd == null || page.narrationEnd <= (page.narrationStart ?? 0) || currentTime < page.narrationEnd) && (
+                <div className="pointer-events-none absolute inset-x-4 bottom-4 z-20 flex justify-center">
+                  <div className="max-h-[35%] max-w-[90%] overflow-y-auto whitespace-pre-wrap rounded-xl border border-white/25 bg-slate-950/85 px-5 py-3 text-center text-sm font-medium leading-relaxed text-white shadow-xl sm:text-lg">
+                    {page.teacherNarration}
+                  </div>
+                </div>
               )}
 
               {/* ===========================================
