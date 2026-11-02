@@ -12110,7 +12110,7 @@ async function buildExportCourse(
       narrationAudioSrc="media/narration-"+(index+1)+format;
       zip.file(narrationAudioSrc,narrationBlob,{binary:true,compression:"STORE"});
       mediaFiles.push(narrationAudioSrc);
-    } else if (page.teacherNarration?.trim() || page.slideImageName || page.slideImageUrl || page.videoName || page.videoUrl) {
+    } else if (page.teacherNarration?.trim() || page.slideImageName || page.videoName || page.videoUrl) {
       // Flag media pages with no audio blob, even if text narration is empty.
       missingNarrationPages.push(page.title);
     }
@@ -12247,7 +12247,7 @@ export async function exportCurrentProjectAsScorm(): Promise<ScormExportResult> 
       zip
     );
 
-  if(narrationAudioCount===0 && project.pages.some(p=>p.slideImageName || p.slideImageUrl)) {
+  if(narrationAudioCount===0 && project.pages.some(p=>p.slideImageName)) {
     throw new Error("Không thể xuất SCORM có tiếng: không tìm thấy bản ghi âm của các slide PowerPoint trên tên miền hiện tại. Hãy chọn từng slide, kiểm tra 'Đã lưu bản ghi', hoặc tải lại tệp tiếng đã sao lưu, rồi xuất lại.");
   }
   if(narrationAudioCount===0 && project.pages.some(p=>p.videoName || p.videoUrl)) {
