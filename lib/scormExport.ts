@@ -6510,14 +6510,14 @@ function makePlayerJs() {
     if (!video) {
       if (!currentPage()?.narrationAudioSrc) return;
       state.started = true;
+      var shouldPlay = !state.playing;
+      state.playing = shouldPlay;
       syncNarration(false);
-      if (!narrationPlayer) return;
-      if (narrationPlayer.paused) {
-        narrationPlayer.play().catch(function(){});
-        state.playing = true;
+      if (!narrationPlayer) { state.playing=false; return; }
+      if (shouldPlay) {
+        narrationPlayer.play().catch(function(){state.playing=false;});
       } else {
         narrationPlayer.pause();
-        state.playing = false;
       }
       var slidePlay = document.getElementById("play-button");
       if (slidePlay) slidePlay.textContent = state.playing ? "❚❚" : "▶";
@@ -11915,7 +11915,7 @@ function makePlayerJs() {
     ["voice-narration-slide-controls","voice-narration-unlock"].forEach(function(id){var old=document.getElementById(id);if(old)old.remove();});
     narrationPlayer.controls=false;
     if(!video){
-      if(state.activeQuiz || !state.started){narrationPlayer.pause();return;}
+      if(state.activeQuiz || !state.started || !state.playing){narrationPlayer.pause();return;}
       if(narrationPlayer.paused)narrationPlayer.play().catch(function(){});
       return;
     }
