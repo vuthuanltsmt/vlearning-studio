@@ -45,11 +45,11 @@ export function PlayerControls({
         onClick={
           onTogglePlay
         }
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cyan-500 transition hover:bg-cyan-400"
+        className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-cyan-500 px-4 font-semibold text-slate-950 transition hover:bg-cyan-400"
         title={
           isPlaying
-            ? "Tạm dừng"
-            : "Phát"
+            ? "Tạm dừng video và thuyết minh"
+            : "Phát video và thuyết minh bằng một nút"
         }
       >
         {isPlaying ? (
@@ -61,6 +61,7 @@ export function PlayerControls({
             size={20}
           />
         )}
+        <span className="hidden whitespace-nowrap text-xs sm:inline">{isPlaying ? "Tạm dừng video + tiếng" : "Play video + thuyết minh"}</span>
       </button>
 
       {/* CURRENT TIME */}
