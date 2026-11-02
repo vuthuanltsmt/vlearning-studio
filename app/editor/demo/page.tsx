@@ -728,13 +728,9 @@ export default function EditorPage() {
       return;
     }
 
-    if (
-      !page.videoUrl
-    ) {
-      alert(
-        "Hãy tải video cho trang này trước khi thêm câu hỏi."
-      );
-
+    // PPTX slide pages can contain quizzes even without a video.
+    if (!page.videoUrl && !page.slideImageName) {
+      alert("Hãy tải video hoặc nhập trang PowerPoint trước khi thêm câu hỏi.");
       return;
     }
 
@@ -1919,15 +1915,8 @@ export default function EditorPage() {
     const video =
       videoRef.current;
 
-    if (!video) {
-      alert(
-        "Trang này chưa có video."
-      );
-
-      return;
-    }
-
-    video.pause();
+    // Slide quizzes are edited and selected without a video timeline.
+    video?.pause();
 
     setAnsweredIds(
       (old) =>
@@ -1960,8 +1949,7 @@ export default function EditorPage() {
       null
     );
 
-    video.currentTime =
-      quiz.time;
+    if (video) video.currentTime = quiz.time;
 
     setCurrentTime(
       quiz.time
