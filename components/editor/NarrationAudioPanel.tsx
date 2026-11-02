@@ -18,12 +18,14 @@ export function NarrationAudioPanel({page,currentTime,isPlaying,quizActive,video
  // Bind shared video controls to the microphone recorder.
  useEffect(()=>{
    let active=true;
-   const onPlay=async()=>{
-     if(recorder.current?.state==="paused"){recorder.current.resume();setRecording(true);return;}
-     if(recorder.current?.state==="recording")return;
+   const onPlay=async(event:Event)=>{
+     const respond=(event as CustomEvent<{ready?:(ok:boolean)=>void}>).detail?.ready;
+     const signal=(ok:boolean)=>{respond?.(ok);};
+     if(recorder.current?.state==="paused"){recorder.current.resume();setRecording(true);signal(true);return;}
+     if(recorder.current?.state==="recording"){signal(true);return;}
      try {
        const mic=await navigator.mediaDevices.getUserMedia({audio:true});
-       if(!active){mic.getTracks().forEach(t=>t.stop());return;}
+       if(!active){mic.getTracks().forEach(t=>t.stop());signal(false);return;}
        const next=new MediaRecorder(mic);
        recorder.current=next;stream.current=mic;chunks.current=[];
        next.ondataavailable=e=>{if(e.data.size)chunks.current.push(e.data)};
@@ -34,8 +36,8 @@ export function NarrationAudioPanel({page,currentTime,isPlaying,quizActive,video
          stream.current=null;setRecording(false);
          if(blob.size){void store(blob).finally(()=>window.dispatchEvent(new Event("vlearning:record-saved")));}else window.dispatchEvent(new Event("vlearning:record-saved"));
        };
-       next.start(1000);setRecording(true);setError("");setStorageStatus("Đang ghi âm cùng video");
-     } catch {setError("Không thể ghi âm: hãy cấp quyền micro và nhấn Play lại.");}
+       next.start(1000);setRecording(true);setError("");setStorageStatus("Đang ghi âm cùng video");signal(true);
+     } catch {setError("Không thể ghi âm: hãy cấp quyền micro và nhấn Play lại.");signal(false);}
    };
    const onPause=()=>{if(recorder.current?.state==="recording"){recorder.current.pause();setRecording(false);setStorageStatus("Đã tạm dừng ghi âm");}};
    const onFinish=()=>{if(recorder.current && recorder.current.state!=="inactive")recorder.current.stop();else window.dispatchEvent(new Event("vlearning:record-saved"));};
