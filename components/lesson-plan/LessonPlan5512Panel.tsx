@@ -1,3 +1,4 @@
+import JSZip from "jszip";
 "use client";
 
 import {
@@ -552,198 +553,135 @@ export default function LessonPlan5512Panel({
     }
   }
 
-  function exportWord() {
-    const digitalSummary =
-      selectedDigitalIds.length
-        ? selectedDigitalIds
-            .map(
-              competencyLabel
-            )
-            .join(
-              "; "
-            )
-        : "Chưa lựa chọn";
+  async function exportWord() {
+    // A real Office Open XML .docx document, rather than HTML renamed to .doc.
+    const xml = (value: string) =>
+      value.replace(/&/g, "&amp;").replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+        .replace(/'/g, "&apos;");
 
-    const activityRows =
-      draft.activities
-        .map(
-          (
-            activity,
-            index
-          ) => `
-          <h3>${escapeHtml(
-            activity.title
-          )}</h3>
-          <table>
-            <tr><td><b>a) Mục tiêu</b></td><td>${textToHtml(
-              activity.objective
-            )}</td></tr>
-            <tr><td><b>b) Nội dung</b></td><td>${textToHtml(
-              activity.content
-            )}</td></tr>
-            <tr><td><b>c) Sản phẩm</b></td><td>${textToHtml(
-              activity.product
-            )}</td></tr>
-            <tr><td><b>d) Tổ chức thực hiện</b></td><td>${textToHtml(
-              activity.organization
-            )}</td></tr>
-            <tr><td><b>Năng lực số tích hợp</b></td><td>${
-              activity.digitalIds.length
-                ? activity.digitalIds
-                    .map(
-                      competencyLabel
-                    )
-                    .map(
-                      escapeHtml
-                    )
-                    .join(
-                      "<br/>"
-                    )
-                : "Không chọn"
-            }</td></tr>
-          </table>
-          ${
-            index <
-            draft.activities.length -
-              1
-              ? "<br/>"
-              : ""
-          }
-        `
-        )
-        .join("");
+    const run = (value: string, bold = false) =>
+      "<w:r><w:rPr>" +
+      (bold ? "<w:b/>" : "") +
+      '<w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/>' +
+      '<w:sz w:val="26"/></w:rPr><w:t xml:space="preserve">' +
+      xml(value) + "</w:t></w:r>";
 
-    const html =
-      `<!doctype html>
-      <html>
-      <head>
-        <meta charset="utf-8"/>
-        <style>
-          body{font-family:"Times New Roman",serif;font-size:13pt;line-height:1.35;color:#000}
-          h1{text-align:center;font-size:16pt;margin:10px 0 4px}
-          h2{font-size:14pt;margin:14px 0 6px}
-          h3{font-size:13pt;margin:12px 0 5px}
-          table{width:100%;border-collapse:collapse;margin:5px 0 10px}
-          td{border:1px solid #000;padding:6px;vertical-align:top}
-          td:first-child{width:28%}
-          .meta{text-align:center;margin-bottom:12px}
-        </style>
-      </head>
-      <body>
-        <div>TRƯỜNG: ${escapeHtml(
-          draft.school
-        )}</div>
-        <div>GIÁO VIÊN: ${escapeHtml(
-          draft.teacher
-        )}</div>
-        <h1>KẾ HOẠCH BÀI DẠY</h1>
-        <div class="meta"><b>TÊN BÀI DẠY: ${escapeHtml(
-          draft.lessonTitle
-        )}</b><br/>
-        Môn học/Hoạt động giáo dục: ${escapeHtml(
-          draft.subject
-        )}; Lớp: ${escapeHtml(
-          draft.grade
-        )}<br/>
-        Thời gian thực hiện: ${escapeHtml(
-          draft.periods
-        )} tiết</div>
+    const paragraph = (value: string, bold = false, centered = false) =>
+      '<w:p><w:pPr>' +
+      (centered ? '<w:jc w:val="center"/>' : "") +
+      '<w:spacing w:after="120"/></w:pPr>' +
+      value.split("\n").map((line, index) =>
+        (index ? "<w:r><w:br/></w:r>" : "") + run(line, bold)
+      ).join("") + "</w:p>";
 
-        <h2>I. MỤC TIÊU</h2>
-        <p><b>1. Về kiến thức:</b><br/>${textToHtml(
-          draft.knowledgeObjectives
-        )}</p>
-        <p><b>2. Về năng lực:</b><br/>${textToHtml(
-          draft.competencies
-        )}</p>
-        <p><b>3. Về phẩm chất:</b><br/>${textToHtml(
-          draft.qualities
-        )}</p>
-        <p><b>4. Năng lực số tích hợp:</b><br/>${escapeHtml(
-          digitalSummary
-        )}<br/><i>Mức/bậc dự kiến: Bậc ${escapeHtml(
-          draft.digitalLevel
-        )}</i></p>
+    const cell = (value: string, bold = false) =>
+      '<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/>' +
+      '<w:tcBorders><w:top w:val="single" w:sz="6"/>' +
+      '<w:left w:val="single" w:sz="6"/>' +
+      '<w:bottom w:val="single" w:sz="6"/>' +
+      '<w:right w:val="single" w:sz="6"/></w:tcBorders></w:tcPr>' +
+      paragraph(value, bold) + "</w:tc>";
 
-        <h2>II. THIẾT BỊ DẠY HỌC VÀ HỌC LIỆU</h2>
-        <p>${textToHtml(
-          draft.equipment
-        )}</p>
+    const rows = (pairs: Array<[string, string]>) =>
+      '<w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/>' +
+      '<w:tblBorders><w:top w:val="single"/><w:left w:val="single"/>' +
+      '<w:bottom w:val="single"/><w:right w:val="single"/>' +
+      '<w:insideH w:val="single"/><w:insideV w:val="single"/>' +
+      '</w:tblBorders></w:tblPr><w:tblGrid><w:gridCol w:w="2700"/>' +
+      '<w:gridCol w:w="6660"/></w:tblGrid>' +
+      pairs.map(([label, value]) =>
+        "<w:tr>" + cell(label, true) + cell(value) + "</w:tr>"
+      ).join("") + "</w:tbl>";
 
-        <h2>III. TIẾN TRÌNH DẠY HỌC</h2>
-        ${activityRows}
+    const selected = Array.from(new Set(
+      draft.activities.flatMap((activity) => activity.digitalIds)
+    ));
+    const competencies = selected.length
+      ? selected.map(competencyLabel).join("; ")
+      : "Chưa lựa chọn";
 
-        <h2>IV. HỒ SƠ DẠY HỌC KHÁC (NẾU CÓ)</h2>
-        <p>Phiếu học tập, công cụ đánh giá, học liệu số, sản phẩm học sinh và các minh chứng liên quan.</p>
-      </body>
-      </html>`;
+    const parts: string[] = [
+      paragraph("TRƯỜNG: " + draft.school),
+      paragraph("GIÁO VIÊN: " + draft.teacher),
+      paragraph("KẾ HOẠCH BÀI DẠY", true, true),
+      paragraph("TÊN BÀI DẠY: " + draft.lessonTitle, true, true),
+      paragraph("Môn học/Hoạt động giáo dục: " + draft.subject +
+        "; Lớp: " + draft.grade, false, true),
+      paragraph("Thời gian thực hiện: " + draft.periods + " tiết", false, true),
+      paragraph("I. MỤC TIÊU", true),
+      paragraph("1. Về kiến thức:", true),
+      paragraph(draft.knowledgeObjectives),
+      paragraph("2. Về năng lực:", true),
+      paragraph(draft.competencies),
+      paragraph("3. Về phẩm chất:", true),
+      paragraph(draft.qualities),
+      paragraph("4. Năng lực số tích hợp:", true),
+      paragraph(competencies),
+      paragraph("Mức/bậc dự kiến: Bậc " + draft.digitalLevel),
+      paragraph("II. THIẾT BỊ DẠY HỌC VÀ HỌC LIỆU", true),
+      paragraph(draft.equipment),
+      paragraph("III. TIẾN TRÌNH DẠY HỌC", true),
+    ];
 
-    const blob =
-      new Blob(
-        [
-          "\ufeff",
-          html,
-        ],
-        {
-          type:
-            "application/msword;charset=utf-8",
-        }
-      );
+    for (const activity of draft.activities) {
+      parts.push(paragraph(activity.title, true));
+      parts.push(rows([
+        ["a) Mục tiêu", activity.objective],
+        ["b) Nội dung", activity.content],
+        ["c) Sản phẩm", activity.product],
+        ["d) Tổ chức thực hiện", activity.organization],
+        ["Năng lực số tích hợp", activity.digitalIds.length
+          ? activity.digitalIds.map(competencyLabel).join("\n")
+          : "Không chọn"],
+      ]));
+    }
+    parts.push(paragraph("IV. HỒ SƠ DẠY HỌC KHÁC (NẾU CÓ)", true));
+    parts.push(paragraph(
+      "Phiếu học tập, công cụ đánh giá, học liệu số, sản phẩm học sinh và các minh chứng liên quan."
+    ));
 
-    const url =
-      URL.createObjectURL(
-        blob
-      );
+    const documentXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+      '<w:body>' + parts.join("") +
+      '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/>' +
+      '<w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1417"/>' +
+      '</w:sectPr></w:body></w:document>';
 
-    const anchor =
-      document.createElement(
-        "a"
-      );
-
-    const safeName =
-      (
-        draft.lessonTitle ||
-        "Giao-an-5512"
-      )
-        .normalize(
-          "NFD"
-        )
-        .replace(
-          /[\u0300-\u036f]/g,
-          ""
-        )
-        .replace(
-          /[^a-zA-Z0-9-_]+/g,
-          "-"
-        )
-        .replace(
-          /-+/g,
-          "-"
-        )
-        .replace(
-          /^-|-$/g,
-          ""
-        );
-
-    anchor.href =
-      url;
-    anchor.download =
-      `${safeName || "Giao-an-5512"}.doc`;
-
-    document.body.appendChild(
-      anchor
-    );
-
-    anchor.click();
-    anchor.remove();
-
-    window.setTimeout(
-      () =>
-        URL.revokeObjectURL(
-          url
-        ),
-      1000
-    );
+    try {
+      const zip = new JSZip();
+      zip.file("[Content_Types].xml",
+        '<?xml version="1.0" encoding="UTF-8"?>' +
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+        '<Default Extension="xml" ContentType="application/xml"/>' +
+        '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+        '</Types>');
+      zip.file("_rels/.rels",
+        '<?xml version="1.0" encoding="UTF-8"?>' +
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
+        '</Relationships>');
+      zip.file("word/document.xml", documentXml);
+      const blob = await zip.generateAsync({
+        type: "blob",
+        mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      });
+      const filename = (draft.lessonTitle || "Giao-an-5512")
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9-_]+/g, "-").replace(/-+/g, "-")
+        .replace(/^-|-$/g, "") || "Giao-an-5512";
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename + ".docx";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      window.alert("Không thể xuất tệp Word. Vui lòng thử lại.");
+    }
   }
 
   return (
